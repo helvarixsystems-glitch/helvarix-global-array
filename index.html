@@ -1,0 +1,1036 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Helvarix Array</title>
+  <meta name="theme-color" content="#070A13" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;800&display=swap" rel="stylesheet">
+
+  <style>
+    :root{
+      --bg:#050710;
+      --bg2:#070A13;
+      --panel:rgba(12, 16, 34, .72);
+      --panel2:rgba(12, 16, 34, .5);
+      --stroke:rgba(61, 220, 255, .22);
+      --stroke2:rgba(61, 220, 255, .12);
+      --txt:#EAF2FF;
+      --muted:rgba(234,242,255,.62);
+      --cyan:#27D7FF;
+      --violet:#7B4BFF;
+      --amber:#E0B04B;
+      --good:#21D69B;
+      --warn:#FFCC5C;
+      --bad:#FF5C7A;
+      --shadow: 0 20px 50px rgba(0,0,0,.55);
+      --radius:18px;
+      --radius2:24px;
+      --maxw:1100px;
+      --font: "Montserrat", system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    }
+
+    *{ box-sizing:border-box; }
+    html,body{ height:100%; }
+    body{
+      margin:0;
+      font-family:var(--font);
+      color:var(--txt);
+      background:
+        radial-gradient(1200px 600px at 50% -10%, rgba(123,75,255,.18), transparent 55%),
+        radial-gradient(800px 500px at 20% 20%, rgba(39,215,255,.14), transparent 50%),
+        linear-gradient(180deg, var(--bg), var(--bg2));
+    }
+
+    a{ color:inherit; text-decoration:none; }
+    button, input, select, textarea{ font-family:inherit; }
+
+    .app-shell{
+      min-height:100%;
+      display:flex;
+      flex-direction:column;
+    }
+
+    .topbar{
+      position:sticky;
+      top:0;
+      z-index:10;
+      backdrop-filter: blur(10px);
+      background: linear-gradient(180deg, rgba(5,7,16,.92), rgba(5,7,16,.62));
+      border-bottom:1px solid rgba(61,220,255,.10);
+      padding:14px 14px 12px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+    }
+
+    .brand{ display:flex; gap:12px; align-items:center; }
+    .brandMark{
+      width:42px; height:42px;
+      border-radius:12px;
+      background:
+        radial-gradient(circle at 50% 50%, rgba(39,215,255,.85), rgba(39,215,255,.25) 55%, transparent 60%),
+        linear-gradient(135deg, rgba(39,215,255,.25), rgba(123,75,255,.25));
+      border:1px solid rgba(39,215,255,.28);
+      box-shadow: 0 0 35px rgba(39,215,255,.12);
+    }
+    .brandTitle{ font-weight:800; letter-spacing:.18em; font-size:14px; color:rgba(39,215,255,.92); }
+    .brandSub{ font-weight:600; letter-spacing:.22em; font-size:10px; color:rgba(234,242,255,.55); margin-top:2px; }
+
+    .pill{
+      display:flex; align-items:center; gap:10px;
+      padding:10px 12px;
+      border-radius:999px;
+      background:rgba(12,16,34,.55);
+      border:1px solid rgba(61,220,255,.16);
+      box-shadow: 0 10px 25px rgba(0,0,0,.28);
+      font-size:11px;
+      letter-spacing:.12em;
+      color:rgba(234,242,255,.74);
+      text-transform:uppercase;
+    }
+    .dot{ width:8px; height:8px; border-radius:50%; display:inline-block; }
+    .dot.cyan{ background:var(--cyan); box-shadow:0 0 20px rgba(39,215,255,.35); }
+    .dot.violet{ background:var(--violet); box-shadow:0 0 20px rgba(123,75,255,.25); }
+
+    .view{
+      width:100%;
+      max-width:var(--maxw);
+      margin:0 auto;
+      padding:18px 14px 92px;
+    }
+
+    .sectionTitle{
+      font-size:28px;
+      font-weight:800;
+      letter-spacing:.02em;
+      margin:10px 0 14px;
+    }
+    .subTitle{
+      margin:-6px 0 16px;
+      color:var(--muted);
+      letter-spacing:.08em;
+      text-transform:uppercase;
+      font-size:12px;
+    }
+
+    .grid{
+      display:grid;
+      gap:14px;
+    }
+    .grid.two{ grid-template-columns: 1fr; }
+    @media(min-width:920px){
+      .grid.two{ grid-template-columns: 1.2fr .8fr; }
+    }
+
+    .card{
+      background: linear-gradient(180deg, rgba(12,16,34,.78), rgba(12,16,34,.56));
+      border:1px solid rgba(61,220,255,.18);
+      border-radius:var(--radius2);
+      box-shadow: var(--shadow);
+      padding:16px;
+      position:relative;
+      overflow:hidden;
+    }
+    .card::before{
+      content:"";
+      position:absolute; inset:-80px -80px auto auto;
+      width:180px; height:180px;
+      background: radial-gradient(circle at 50% 50%, rgba(123,75,255,.22), transparent 60%);
+      transform: rotate(20deg);
+      pointer-events:none;
+    }
+    .cardHeader{
+      display:flex; align-items:flex-start; justify-content:space-between; gap:10px;
+      margin-bottom:10px;
+    }
+    .cardTitle{
+      font-weight:800;
+      font-size:16px;
+      letter-spacing:.06em;
+      text-transform:uppercase;
+    }
+    .badge{
+      padding:6px 10px;
+      border-radius:999px;
+      font-size:11px;
+      letter-spacing:.12em;
+      text-transform:uppercase;
+      border:1px solid rgba(61,220,255,.18);
+      background:rgba(7,10,19,.55);
+      color:rgba(234,242,255,.72);
+    }
+    .badge.violet{ border-color:rgba(123,75,255,.30); }
+    .badge.cyan{ border-color:rgba(39,215,255,.30); }
+
+    .row{
+      display:flex; align-items:center; justify-content:space-between; gap:12px;
+      padding:12px 12px;
+      background:rgba(7,10,19,.45);
+      border:1px solid rgba(61,220,255,.12);
+      border-radius:16px;
+    }
+    .row + .row{ margin-top:10px; }
+    .rowLeft{ display:flex; flex-direction:column; gap:4px; }
+    .rowBig{ font-weight:800; font-size:18px; letter-spacing:.04em; }
+    .rowSmall{ color:var(--muted); font-size:12px; letter-spacing:.08em; }
+
+    .progress{
+      height:10px;
+      border-radius:999px;
+      background:rgba(234,242,255,.10);
+      overflow:hidden;
+      border:1px solid rgba(61,220,255,.10);
+    }
+    .progress > span{
+      display:block;
+      height:100%;
+      width:0%;
+      background: linear-gradient(90deg, rgba(39,215,255,.95), rgba(123,75,255,.95));
+    }
+
+    .hr{
+      height:1px;
+      background:rgba(61,220,255,.12);
+      margin:14px 0;
+    }
+
+    .label{
+      font-size:12px;
+      letter-spacing:.14em;
+      text-transform:uppercase;
+      color:rgba(234,242,255,.62);
+      margin:12px 0 8px;
+    }
+
+    .field, select, textarea{
+      width:100%;
+      padding:14px 14px;
+      border-radius:14px;
+      border:1px solid rgba(61,220,255,.16);
+      background:rgba(7,10,19,.55);
+      color:var(--txt);
+      outline:none;
+    }
+    textarea{ min-height:92px; resize:vertical; }
+
+    .tabs{
+      display:flex;
+      gap:10px;
+      margin:12px 0 10px;
+    }
+    .tabBtn{
+      flex:1;
+      text-align:center;
+      padding:12px 10px;
+      border-radius:16px;
+      border:1px solid rgba(61,220,255,.14);
+      background:rgba(7,10,19,.45);
+      color:rgba(234,242,255,.72);
+      cursor:pointer;
+      user-select:none;
+      font-weight:700;
+      letter-spacing:.08em;
+      text-transform:uppercase;
+      font-size:12px;
+    }
+    .tabBtn.active{
+      border-color:rgba(39,215,255,.28);
+      box-shadow:0 0 0 2px rgba(39,215,255,.10) inset;
+      color:rgba(39,215,255,.95);
+    }
+
+    .primary{
+      width:100%;
+      padding:16px 16px;
+      border-radius:16px;
+      border:1px solid rgba(123,75,255,.35);
+      background: linear-gradient(90deg, rgba(123,75,255,.92), rgba(123,75,255,.72));
+      color:white;
+      font-weight:800;
+      letter-spacing:.22em;
+      text-transform:uppercase;
+      cursor:pointer;
+      box-shadow: 0 18px 40px rgba(123,75,255,.25);
+    }
+    .primary:active{ transform: translateY(1px); }
+
+    .secondary{
+      width:100%;
+      padding:14px 14px;
+      border-radius:16px;
+      border:1px solid rgba(61,220,255,.18);
+      background: rgba(7,10,19,.35);
+      color:rgba(234,242,255,.78);
+      font-weight:800;
+      letter-spacing:.18em;
+      text-transform:uppercase;
+      cursor:pointer;
+    }
+
+    .bottomNav{
+      position:fixed;
+      left:0; right:0; bottom:0;
+      display:flex;
+      gap:6px;
+      padding:10px 10px 14px;
+      background: linear-gradient(180deg, rgba(5,7,16,.1), rgba(5,7,16,.92));
+      border-top:1px solid rgba(61,220,255,.10);
+      backdrop-filter: blur(12px);
+      z-index:20;
+    }
+    .navItem{
+      flex:1;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      gap:6px;
+      padding:10px 6px;
+      border-radius:16px;
+      color:rgba(234,242,255,.55);
+    }
+    .navItem .ico{ font-size:18px; line-height:1; }
+    .navItem .lbl{
+      font-size:10px;
+      letter-spacing:.12em;
+      text-transform:uppercase;
+    }
+    .navItem.active{
+      color:rgba(39,215,255,.95);
+      border:1px solid rgba(39,215,255,.18);
+      background: rgba(39,215,255,.06);
+      box-shadow: 0 0 0 2px rgba(39,215,255,.08) inset;
+    }
+
+    .canvasWrap{
+      width:100%;
+      border-radius:var(--radius2);
+      border:1px solid rgba(61,220,255,.18);
+      background: rgba(7,10,19,.42);
+      overflow:hidden;
+    }
+    canvas{ display:block; width:100%; height:auto; }
+
+    .listItem{
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-start;
+      gap:12px;
+      padding:14px 12px;
+      border:1px solid rgba(61,220,255,.12);
+      background: rgba(7,10,19,.45);
+      border-radius:18px;
+    }
+    .listItem + .listItem{ margin-top:10px; }
+    .meta{
+      font-size:11px;
+      color:rgba(234,242,255,.62);
+      letter-spacing:.08em;
+      text-transform:uppercase;
+    }
+    .kpi{
+      text-align:right;
+      font-weight:800;
+      color:rgba(39,215,255,.92);
+    }
+    .kpi small{
+      display:block;
+      color:rgba(234,242,255,.55);
+      font-weight:700;
+      letter-spacing:.10em;
+      text-transform:uppercase;
+      margin-top:4px;
+    }
+
+    .wall{
+      padding:18px;
+      border-radius:var(--radius2);
+      border:1px dashed rgba(123,75,255,.35);
+      background: rgba(123,75,255,.06);
+    }
+  </style>
+</head>
+
+<body>
+  <div id="appShell" class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brandMark" aria-hidden="true"></div>
+        <div class="brandText">
+          <div class="brandTitle">HELVARIX</div>
+          <div class="brandSub">GLOBAL ARRAY</div>
+        </div>
+      </div>
+      <div class="topbarRight">
+        <div class="pill">
+          <span class="dot cyan"></span>
+          <span id="netStatusText">LINK: ESTABLISHED</span>
+        </div>
+      </div>
+    </header>
+
+    <main id="view" class="view"></main>
+
+    <nav class="bottomNav" aria-label="Primary">
+      <a class="navItem" href="#/campaigns" data-route="campaigns" title="Campaigns">
+        <span class="ico">▦</span><span class="lbl">Campaigns</span>
+      </a>
+      <a class="navItem" href="#/nodes" data-route="nodes" title="Nodes">
+        <span class="ico">⌁</span><span class="lbl">Nodes</span>
+      </a>
+      <a class="navItem" href="#/telemetry" data-route="telemetry" title="Telemetry">
+        <span class="ico">◉</span><span class="lbl">Feed</span>
+      </a>
+      <a class="navItem" href="#/submit" data-route="submit" title="Submit">
+        <span class="ico">⌖</span><span class="lbl">Submit</span>
+      </a>
+      <a class="navItem" href="#/leaderboard" data-route="leaderboard" title="Leaderboard">
+        <span class="ico">🏆</span><span class="lbl">Ranks</span>
+      </a>
+      <a class="navItem" href="#/guild" data-route="guild" title="Guild">
+        <span class="ico">⛨</span><span class="lbl">Guild</span>
+      </a>
+      <a class="navItem" href="#/profile" data-route="profile" title="Profile">
+        <span class="ico">⦿</span><span class="lbl">Profile</span>
+      </a>
+    </nav>
+  </div>
+
+  <script>
+    /* Helvarix Base SPA (static, no backend) */
+    const $ = (sel, root=document) => root.querySelector(sel);
+
+    const state = {
+      profile: loadJSON("hvx_profile", {
+        callsign: "Cmdr. Starlight",
+        region: "NA-EAST",
+        rank: "Deep Space Contributor",
+        oi: 24500,
+        ci: 1200,
+        streakDays: 12,
+        submissions: 42,
+        color: "cyan",
+        pattern: "coordinate-grid",
+        equipment: "Advanced Telescope",
+        validatorOptIn: false
+      }),
+      auth: loadJSON("hvx_auth", { guildToken: "" }),
+      telemetry: loadJSON("hvx_telemetry", seedTelemetry()),
+      campaigns: loadJSON("hvx_campaigns", seedCampaigns()),
+      leaderboard: loadJSON("hvx_leaderboard", seedLeaderboard())
+    };
+
+    const routes = {
+      "/campaigns": renderCampaigns,
+      "/nodes": renderNodes,
+      "/telemetry": renderTelemetry,
+      "/submit": renderSubmit,
+      "/leaderboard": renderLeaderboard,
+      "/guild": renderGuild,
+      "/profile": renderProfile
+    };
+
+    init();
+
+    function init(){
+      if (!location.hash) location.hash = "#/campaigns";
+      window.addEventListener("hashchange", render);
+      render();
+    }
+
+    function render(){
+      const path = location.hash.replace("#", "") || "/campaigns";
+      const view = $("#view");
+      const fn = routes[path] || renderNotFound;
+
+      document.querySelectorAll(".navItem").forEach(a => {
+        a.classList.toggle("active", a.getAttribute("href") === `#${path}`);
+      });
+
+      $("#netStatusText").textContent = `LINK: ESTABLISHED • NODES ${randInt(3900, 5200)}`;
+
+      view.innerHTML = "";
+      fn(view);
+    }
+
+    /* ---------- Page: Campaigns (Tab 1) ---------- */
+    function renderCampaigns(root){
+      root.append(
+        h1("Campaigns"),
+        sub("Daily, weekly, and global coordinated objectives.")
+      );
+
+      const daily = state.campaigns.filter(c => c.kind === "daily");
+      const weekly = state.campaigns.filter(c => c.kind === "weekly");
+      const global = state.campaigns.filter(c => c.kind === "global");
+
+      root.append(
+        sectionCard("Active Campaigns", [
+          ...daily.map(campaignCard),
+          ...weekly.map(campaignCard),
+          ...global.map(campaignCard),
+        ])
+      );
+    }
+
+    /* ---------- Page: Nodes visualization (Tab 2) ---------- */
+    function renderNodes(root){
+      root.append(
+        h1("Network Node Visualization"),
+        sub("Live distribution of active contributors (simulated).")
+      );
+
+      const card = div("card");
+      const header = div("cardHeader");
+      header.append(
+        divText("cardTitle", "Helvarix Global Array Nodes"),
+        badge("LIVE")
+      );
+
+      const stats = div("row");
+      stats.append(
+        divCol(
+          divText("rowBig", `ACTIVE NODES: ${randInt(3900, 5200).toLocaleString()}`),
+          divText("rowSmall", `COLLECTING: ${randInt(700, 1100).toLocaleString()}`)
+        ),
+        divText("kpi", `${randInt(55, 68)}%`, "Northern Hemisphere", true)
+      );
+
+      const wrap = div("canvasWrap");
+      const canvas = document.createElement("canvas");
+      canvas.width = 1200;
+      canvas.height = 700;
+      wrap.append(canvas);
+
+      card.append(header, stats, el("div", { className:"hr" }), wrap);
+      root.append(card);
+
+      drawNodes(canvas);
+    }
+
+    /* ---------- Page: Telemetry Feed (Tab 3) ---------- */
+    function renderTelemetry(root){
+      root.append(
+        h1("Community Telemetry Feed"),
+        sub("Obfuscated data stream v4.2 (mock).")
+      );
+
+      const card = div("card");
+      card.append(
+        div("cardHeader",
+          divText("cardTitle", "Recent Submissions"),
+          badge("STREAM: ACTIVE", "cyan")
+        )
+      );
+
+      state.telemetry.slice(0, 12).forEach(item => {
+        const li = div("listItem");
+        const left = divCol(
+          divText("rowBig", item.target),
+          el("div", { className:"meta", textContent: `${item.operator} • ${item.city} • ${item.mode.toUpperCase()} • ${item.timeUtc}` }),
+          el("div", { className:"meta", textContent: `HARDWARE: ${item.hardware}` })
+        );
+        const right = el("div", { className:"kpi" });
+        right.innerHTML = `${item.snr.toFixed(1)} dB<small>SNR</small>`;
+        li.append(left, right);
+        card.append(li);
+      });
+
+      root.append(card);
+    }
+
+    /* ---------- Page: Data Submission (Tab 4) ---------- */
+    function renderSubmit(root){
+      root.append(
+        h1("Data Logging Protocol"),
+        sub("Upload visual, spectral, or radio telemetry (local mock).")
+      );
+
+      const card = div("card");
+      card.append(div("cardHeader",
+        divText("cardTitle", "Submission Console"),
+        badge("TELEMETRY: ACTIVE", "cyan")
+      ));
+
+      const tabs = el("div", { className:"tabs" });
+      const modes = ["visual", "spectral", "radio"];
+      const activeMode = loadJSON("hvx_submit_mode", "visual");
+      modes.forEach(m => {
+        const b = el("button", { className:`tabBtn ${m===activeMode?"active":""}`, textContent:m });
+        b.addEventListener("click", () => {
+          saveJSON("hvx_submit_mode", m);
+          render();
+        });
+        tabs.append(b);
+      });
+
+      const mode = activeMode;
+
+      const target = input("Target Object (e.g., M31, NGC 7000)", "text", "hvx_submit_target");
+      const bortle = select("Sky Quality (Bortle)", "hvx_submit_bortle", [
+        "Class 1 - Pristine",
+        "Class 2 - Dark",
+        "Class 3 - Rural",
+        "Class 4 - Urban/Rural",
+        "Class 5 - Suburban",
+        "Class 6 - Bright Suburban",
+        "Class 7 - Urban",
+        "Class 8 - City",
+        "Class 9 - Inner City"
+      ]);
+
+      const seeing = input("Seeing (arcsec)", "number", "hvx_submit_seeing", "1.5", { step:"0.1", min:"0.3", max:"5.0" });
+      const transparency = slider("Transparency (1–5)", "hvx_submit_transparency", 1, 5, 3);
+      const integ = input("Total Integration (s)", "number", "hvx_submit_integration", "300", { step:"1", min:"1" });
+      const iso = input("Gain / ISO Value", "number", "hvx_submit_iso", "100", { step:"1", min:"1" });
+
+      const hardware = textarea(
+        "Equipment & Software Infrastructure",
+        "hvx_submit_hw",
+        "Specify exact make/model (e.g., telescope/camera/SDR), extra hardware, and software used (e.g., N.I.N.A, PixInsight, GNU Radio)."
+      );
+
+      const commit = el("button", { className:"primary", textContent:"Commit Data To Network" });
+      commit.addEventListener("click", () => {
+        const entry = {
+          id: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random()),
+          operator: state.profile.callsign,
+          city: regionToCity(state.profile.region),
+          mode,
+          target: getLocal("hvx_submit_target") || "UNSPECIFIED TARGET",
+          timeUtc: new Date().toISOString().replace("T"," ").slice(0,16) + " UTC",
+          snr: mode === "radio" ? rand(10, 28) : rand(18, 34),
+          hardware: getLocal("hvx_submit_hw") || state.profile.equipment
+        };
+        state.telemetry.unshift(entry);
+        saveJSON("hvx_telemetry", state.telemetry);
+
+        const addOi = mode === "radio" ? 310 : 450;
+        state.profile.oi += addOi;
+        saveJSON("hvx_profile", state.profile);
+
+        bumpLeaderboard(state.profile.callsign, addOi);
+
+        alert(`Committed. OI +${addOi}. Added to telemetry feed.`);
+        location.hash = "#/telemetry";
+      });
+
+      card.append(
+        tabs,
+        target,
+        bortle,
+        seeing,
+        transparency,
+        integ,
+        iso,
+        hardware,
+        el("div", { className:"hr" }),
+        commit
+      );
+
+      root.append(card);
+    }
+
+    /* ---------- Page: Leaderboard (Tab 5) ---------- */
+    function renderLeaderboard(root){
+      root.append(
+        h1("Global Leaderboard"),
+        sub("Sector rankings by total Observation Index (mock).")
+      );
+
+      const card = div("card");
+      card.append(div("cardHeader",
+        divText("cardTitle", "Global Sector Rankings"),
+        badge("TOTAL OI")
+      ));
+
+      const sorted = [...state.leaderboard].sort((a,b)=>b.oi-a.oi).slice(0,10);
+      sorted.forEach((p, idx) => {
+        const li = div("listItem");
+        const left = divCol(
+          divText("rowBig", `#${String(idx+1).padStart(2,"0")}  ${p.name}`),
+          el("div", { className:"meta", textContent: `${p.title} • ${p.sector}` })
+        );
+        const right = el("div", { className:"kpi" });
+        right.innerHTML = `${p.oi.toLocaleString()}<small>Total OI</small>`;
+        li.append(left, right);
+        card.append(li);
+      });
+
+      root.append(card);
+    }
+
+    /* ---------- Page: Guild (Tab 6, firewall) ---------- */
+    function renderGuild(root){
+      root.append(
+        h1("Guild"),
+        sub("Advanced campaigns with limited slots. Access restricted.")
+      );
+
+      if (!state.auth.guildToken){
+        const card = div("card");
+        card.append(div("cardHeader",
+          divText("cardTitle", "Access Firewall"),
+          badge("RESTRICTED", "violet")
+        ));
+
+        const wall = el("div", { className:"wall" });
+        wall.append(
+          el("div", { className:"label", textContent:"Enter Guild Access Token" }),
+          el("input", { className:"field", placeholder:"e.g., HVX-ALPHA-001", id:"guildTokenInput" }),
+          el("div", { style:"height:10px" }),
+          el("button", { className:"primary", textContent:"Initialize Team" })
+        );
+
+        wall.querySelector("button").addEventListener("click", () => {
+          const token = $("#guildTokenInput").value.trim();
+          if (token.length < 6) return alert("Invalid token.");
+          state.auth.guildToken = token;
+          saveJSON("hvx_auth", state.auth);
+          render();
+        });
+
+        card.append(wall);
+        root.append(card);
+        return;
+      }
+
+      const card = div("card");
+      card.append(
+        div("cardHeader",
+          divText("cardTitle", "Guild Operations"),
+          badge("AUTHORIZED", "cyan")
+        ),
+        el("div", { className:"meta", textContent:`TOKEN: ${mask(state.auth.guildToken)} • SLOTS REMAINING: ${randInt(8, 24)}` }),
+        el("div", { className:"hr" }),
+        guildCampaignCard({
+          title: "Hydrogen Line Mapping Event",
+          desc: "Coordinated H-I 21cm mapping across the galactic plane. Prioritize Perseus arm.",
+          endsIn: "12d",
+          progress: 78.4
+        }),
+        el("div", { style:"height:12px" }),
+        guildCampaignCard({
+          title: "Deep Sky Validation Queue",
+          desc: "Peer review high-SNR submissions; certify metadata integrity.",
+          endsIn: "14h",
+          progress: 52.1
+        }),
+        el("div", { style:"height:12px" }),
+        el("button", { className:"secondary", textContent:"Revoke Access" })
+      );
+
+      card.querySelector(".secondary").addEventListener("click", () => {
+        state.auth.guildToken = "";
+        saveJSON("hvx_auth", state.auth);
+        render();
+      });
+
+      root.append(card);
+    }
+
+    /* ---------- Page: Profile/Customization (Tab 7) ---------- */
+    function renderProfile(root){
+      root.append(
+        h1("Operator Profile"),
+        sub("Customization, settings, rank, and network status.")
+      );
+
+      const card = div("card");
+      card.append(
+        div("cardHeader",
+          divText("cardTitle", "Helvarix Operator Record"),
+          badge(state.profile.rank)
+        )
+      );
+
+      const stats = div("row");
+      stats.append(
+        divCol(
+          divText("rowBig", state.profile.callsign),
+          divText("rowSmall", `REGION: ${state.profile.region} • EQUIPMENT: ${state.profile.equipment}`)
+        ),
+        el("div", { className:"kpi", innerHTML: `${state.profile.oi.toLocaleString()}<small>OI</small>` })
+      );
+
+      const prog = div("card");
+      prog.append(
+        div("cardHeader", divText("cardTitle", "Progression Protocol"), badge("NEXT: NETWORK SPECIALIST", "violet")),
+        el("div", { className:"label", textContent:"Progress to Level 1" }),
+        progressBar(82),
+        el("div", { style:"height:10px" }),
+        el("button", { className:"secondary", textContent:"Certification Audit" })
+      );
+
+      const customize = div("card");
+      customize.append(div("cardHeader", divText("cardTitle", "Operator Visual ID"), badge("CUSTOMIZE")));
+
+      const callsign = el("input", { className:"field", value: state.profile.callsign });
+      const equip = el("input", { className:"field", value: state.profile.equipment });
+
+      const colors = ["cyan","violet","amber","emerald","rose","white"];
+      const colorRow = el("div", { className:"label", textContent:"Color" });
+      const colorGrid = el("div", { className:"grid", style:"grid-template-columns:repeat(3,1fr); gap:10px;" });
+      colors.forEach(c => {
+        const sw = el("button", {
+          className:"tabBtn",
+          textContent: c.toUpperCase(),
+          style: `padding:18px 8px; border-radius:16px;`
+        });
+        sw.classList.toggle("active", state.profile.color === c);
+        sw.addEventListener("click", () => {
+          state.profile.color = c;
+          saveJSON("hvx_profile", state.profile);
+          render();
+        });
+        colorGrid.append(sw);
+      });
+
+      const saveBtn = el("button", { className:"primary", textContent:"Save Profile" });
+      saveBtn.addEventListener("click", () => {
+        state.profile.callsign = callsign.value.trim() || state.profile.callsign;
+        state.profile.equipment = equip.value.trim() || state.profile.equipment;
+        saveJSON("hvx_profile", state.profile);
+        alert("Saved.");
+        render();
+      });
+
+      customize.append(
+        el("div", { className:"label", textContent:"Callsign / Designation" }),
+        callsign,
+        el("div", { className:"label", textContent:"Equipment Index" }),
+        equip,
+        colorRow,
+        colorGrid,
+        el("div", { style:"height:10px" }),
+        saveBtn
+      );
+
+      root.append(card, el("div",{style:"height:12px"}), stats, el("div",{style:"height:12px"}), prog, el("div",{style:"height:12px"}), customize);
+    }
+
+    function renderNotFound(root){
+      root.append(h1("Not Found"), sub("Route does not exist."));
+    }
+
+    /* ---------- UI helpers ---------- */
+    function h1(text){ return el("div", { className:"sectionTitle", textContent:text }); }
+    function sub(text){ return el("div", { className:"subTitle", textContent:text }); }
+    function sectionCard(title, children){
+      const card = div("card");
+      card.append(div("cardHeader", divText("cardTitle", title), badge("ACTIVE", "cyan")));
+      children.forEach(ch => card.append(ch));
+      return card;
+    }
+    function campaignCard(c){
+      const wrap = div("card");
+      wrap.append(
+        div("cardHeader",
+          divText("cardTitle", c.title),
+          badge(c.kind, c.kind==="global"?"violet":"cyan")
+        ),
+        el("div", { className:"meta", textContent: c.subtitle }),
+        el("div", { style:"height:12px" }),
+        progressBar(c.progress),
+        el("div", { style:"height:10px" }),
+        el("div", { className:"rowSmall", textContent: `ENDS IN ${String(c.endsIn).toUpperCase()}` })
+      );
+      return wrap;
+    }
+    function guildCampaignCard(c){
+      const wrap = div("card");
+      wrap.append(
+        div("cardHeader", divText("cardTitle", c.title), badge(`ENDS IN ${c.endsIn}`, "violet")),
+        el("div", { className:"rowSmall", textContent: c.desc }),
+        el("div", { style:"height:12px" }),
+        progressBar(c.progress),
+        el("div", { style:"height:10px" }),
+        el("button", { className:"primary", textContent:"Enroll Protocol" })
+      );
+      wrap.querySelector("button").addEventListener("click", () => alert("Enrolled (mock)."));
+      return wrap;
+    }
+    function progressBar(pct){
+      const wrap = el("div", { className:"progress" });
+      const bar = el("span");
+      bar.style.width = `${clamp(pct,0,100)}%`;
+      wrap.append(bar);
+      return wrap;
+    }
+    function badge(text, tone){
+      return el("div", { className:`badge ${tone||""}`, textContent:text });
+    }
+    function div(cls, ...children){
+      const d = el("div", { className: cls });
+      children.forEach(ch => d.append(ch));
+      return d;
+    }
+    function divText(cls, text){
+      return el("div", { className: cls, textContent: text });
+    }
+    function divCol(...children){
+      const d = el("div", { className:"rowLeft" });
+      children.forEach(ch => d.append(ch));
+      return d;
+    }
+    function input(labelText, type, key, placeholder="", attrs={}){
+      const wrap = document.createElement("div");
+      wrap.append(el("div", { className:"label", textContent: labelText }));
+      const inp = el("input", { className:"field", type, placeholder, value: getLocal(key) || "", ...attrs });
+      inp.addEventListener("input", () => setLocal(key, inp.value));
+      wrap.append(inp);
+      return wrap;
+    }
+    function textarea(labelText, key, placeholder=""){
+      const wrap = document.createElement("div");
+      wrap.append(el("div", { className:"label", textContent: labelText }));
+      const ta = el("textarea", { className:"field", placeholder, value: getLocal(key) || "" });
+      ta.addEventListener("input", () => setLocal(key, ta.value));
+      wrap.append(ta);
+      return wrap;
+    }
+    function select(labelText, key, options){
+      const wrap = document.createElement("div");
+      wrap.append(el("div", { className:"label", textContent: labelText }));
+      const sel = el("select", { className:"field" });
+      const current = getLocal(key) || options[3] || options[0];
+      options.forEach(o => {
+        const opt = el("option", { value:o, textContent:o });
+        if (o === current) opt.selected = true;
+        sel.append(opt);
+      });
+      sel.addEventListener("change", () => setLocal(key, sel.value));
+      wrap.append(sel);
+      return wrap;
+    }
+    function slider(labelText, key, min, max, def){
+      const wrap = document.createElement("div");
+      wrap.append(el("div", { className:"label", textContent: labelText }));
+      const val = Number(getLocal(key) || def);
+      const row = el("div", { className:"row" });
+      const range = el("input", { type:"range", min, max, value:val, style:"width:100%" });
+      const read = el("div", { className:"kpi", textContent: String(val) });
+      range.addEventListener("input", () => {
+        setLocal(key, range.value);
+        read.textContent = String(range.value);
+      });
+      row.append(range, read);
+      wrap.append(row);
+      return wrap;
+    }
+    function el(tag, props={}){
+      const node = document.createElement(tag);
+      Object.assign(node, props);
+      return node;
+    }
+
+    /* ---------- Node visualization ---------- */
+    function drawNodes(canvas){
+      const ctx = canvas.getContext("2d");
+      const w = canvas.width, h = canvas.height;
+
+      ctx.clearRect(0,0,w,h);
+      ctx.fillStyle = "rgba(7,10,19,.35)";
+      ctx.fillRect(0,0,w,h);
+
+      ctx.lineWidth = 1;
+      for (let x=0; x<=w; x+=40){
+        ctx.strokeStyle = x%200===0 ? "rgba(39,215,255,.12)" : "rgba(39,215,255,.05)";
+        ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,h); ctx.stroke();
+      }
+      for (let y=0; y<=h; y+=40){
+        ctx.strokeStyle = y%200===0 ? "rgba(39,215,255,.12)" : "rgba(39,215,255,.05)";
+        ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke();
+      }
+
+      const count = 18;
+      for (let i=0; i<count; i++){
+        const x = rand(60, w-60);
+        const y = rand(60, h-60);
+        const r = rand(4, 10);
+
+        ctx.fillStyle = "rgba(39,215,255,.85)";
+        ctx.shadowColor = "rgba(39,215,255,.35)";
+        ctx.shadowBlur = 18;
+        ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
+
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = "rgba(123,75,255,.22)";
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(x,y,r+10,0,Math.PI*2); ctx.stroke();
+      }
+
+      ctx.fillStyle = "rgba(39,215,255,.65)";
+      ctx.font = "600 12px Montserrat";
+      ctx.fillText("HELVARIX ARRAY • LIVE FEED", 18, 28);
+    }
+
+    /* ---------- Data seeds ---------- */
+    function seedCampaigns(){
+      return [
+        { kind:"daily", title:"Capture Jupiter", subtitle:"Submit high-resolution planetary imaging of the Jovian gas giant.", endsIn:"14h", progress: 64 },
+        { kind:"weekly", title:"Globular Clusters", subtitle:"Identify and image Messier objects M13 or M92.", endsIn:"3d", progress: 38 },
+        { kind:"global", title:"Hydrogen Line Mapping Event", subtitle:"Map H-I 21cm emission across the galactic plane. Prioritize Perseus arm.", endsIn:"12d", progress: 78.4 }
+      ];
+    }
+    function seedTelemetry(){
+      return [
+        { id:"1", operator:"NovaWatcher", city:"London, UK", mode:"visual", target:"Messier 31", timeUtc:"2024-05-20 22:15 UTC", snr: 25.6, hardware:"Orion 8\\\" Astrograph, ZWO ASI294MC Pro" },
+        { id:"2", operator:"SignalHunter", city:"Tokyo, JP", mode:"radio", target:"Solar Burst A1", timeUtc:"2024-05-20 19:42 UTC", snr: 17.0, hardware:"Custom 1.4m Dish, RTL-SDR, GNU Radio" },
+        { id:"3", operator:"AsterLab", city:"Oslo, NO", mode:"visual", target:"NGC 7000", timeUtc:"2024-05-19 03:08 UTC", snr: 29.4, hardware:"80mm APO, ASI533MC, PixInsight" }
+      ];
+    }
+    function seedLeaderboard(){
+      return [
+        { name:"T. Kepler", title:"Array Vanguard", sector:"EU-NORTH", oi:1240500 },
+        { name:"H. Leavitt", title:"Master Observer", sector:"NA-EAST", oi:984320 },
+        { name:"A. Sandage", title:"Master Observer", sector:"ASIA-PAC", oi:850110 },
+        { name:"C. Shoemaker", title:"Network Specialist", sector:"AU-WEST", oi:722000 },
+        { name:"Cmdr. Starlight", title:"Deep Space Contributor", sector:"SELF-LINK", oi:24500 }
+      ];
+    }
+
+    function bumpLeaderboard(name, addOi){
+      const idx = state.leaderboard.findIndex(x => x.name.toLowerCase() === name.toLowerCase());
+      if (idx >= 0) state.leaderboard[idx].oi += addOi;
+      else state.leaderboard.push({ name, title: state.profile.rank, sector:"SELF-LINK", oi:addOi });
+      saveJSON("hvx_leaderboard", state.leaderboard);
+    }
+
+    /* ---------- Storage helpers ---------- */
+    function loadJSON(key, fallback){
+      try{
+        const raw = localStorage.getItem(key);
+        return raw ? JSON.parse(raw) : fallback;
+      }catch{
+        return fallback;
+      }
+    }
+    function saveJSON(key, value){
+      localStorage.setItem(key, JSON.stringify(value));
+    }
+    function getLocal(key){ return localStorage.getItem(key) || ""; }
+    function setLocal(key, val){ localStorage.setItem(key, val); }
+
+    /* ---------- Utils ---------- */
+    function rand(min,max){ return Math.random()*(max-min)+min; }
+    function randInt(min,max){ return Math.floor(rand(min, max+1)); }
+    function clamp(n,a,b){ return Math.max(a, Math.min(b,n)); }
+    function mask(s){ return s.length<=6 ? "••••••" : `${s.slice(0,3)}•••${s.slice(-2)}`; }
+    function regionToCity(region){
+      const map = {
+        "NA-EAST":"New York, US",
+        "NA-WEST":"Los Angeles, US",
+        "EU-NORTH":"Oslo, NO",
+        "EU-WEST":"London, UK",
+        "ASIA-PAC":"Tokyo, JP",
+        "AU-WEST":"Perth, AU"
+      };
+      return map[region] || "SELF-LINK";
+    }
+  </script>
+</body>
+</html>
