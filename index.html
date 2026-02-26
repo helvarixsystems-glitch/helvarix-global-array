@@ -8,7 +8,6 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;800&display=swap" rel="stylesheet">
-
   <style>
     :root{
       --bg:#050710;
@@ -21,8 +20,6 @@
       --muted:rgba(234,242,255,.62);
       --cyan:#27D7FF;
       --violet:#7B4BFF;
-      --amber:#E0B04B;
-      --good:#21D69B;
       --warn:#FFCC5C;
       --bad:#FF5C7A;
       --shadow: 0 20px 50px rgba(0,0,0,.55);
@@ -53,6 +50,7 @@
       border-bottom:1px solid rgba(61,220,255,.10);
       padding:14px 14px 12px;
       display:flex; align-items:center; justify-content:space-between;
+      gap:10px;
     }
     .brand{ display:flex; gap:12px; align-items:center; }
     .brandMark{
@@ -76,10 +74,12 @@
       color:rgba(234,242,255,.74);
       text-transform:uppercase;
       user-select:none;
+      white-space:nowrap;
     }
     .dot{ width:8px; height:8px; border-radius:50%; display:inline-block; }
     .dot.cyan{ background:var(--cyan); box-shadow:0 0 20px rgba(39,215,255,.35); }
     .dot.violet{ background:var(--violet); box-shadow:0 0 20px rgba(123,75,255,.25); }
+    .dot.warn{ background:var(--warn); box-shadow:0 0 20px rgba(255,204,92,.25); }
     .dot.bad{ background:var(--bad); box-shadow:0 0 20px rgba(255,92,122,.25); }
 
     .view{
@@ -88,7 +88,6 @@
       margin:0 auto;
       padding:18px 14px 92px;
     }
-
     .sectionTitle{ font-size:28px; font-weight:800; letter-spacing:.02em; margin:10px 0 14px; }
     .subTitle{ margin:-6px 0 16px; color:var(--muted); letter-spacing:.08em; text-transform:uppercase; font-size:12px; }
 
@@ -185,11 +184,7 @@
       cursor:pointer;
       box-shadow: 0 18px 40px rgba(123,75,255,.25);
     }
-    .primary:disabled{
-      opacity:.55;
-      cursor:not-allowed;
-      box-shadow:none;
-    }
+    .primary:disabled{ opacity:.55; cursor:not-allowed; box-shadow:none; }
     .secondary{
       width:100%;
       padding:14px 14px;
@@ -223,16 +218,11 @@
       border-radius:16px;
     }
     .row + .row{ margin-top:10px; }
-
     .rowLeft{ display:flex; flex-direction:column; gap:4px; }
     .rowBig{ font-weight:800; font-size:18px; letter-spacing:.04em; }
     .rowSmall{ color:var(--muted); font-size:12px; letter-spacing:.08em; }
 
-    .kpi{
-      text-align:right;
-      font-weight:800;
-      color:rgba(39,215,255,.92);
-    }
+    .kpi{ text-align:right; font-weight:800; color:rgba(39,215,255,.92); }
     .kpi small{
       display:block;
       color:rgba(234,242,255,.55);
@@ -304,24 +294,11 @@
       background: rgba(39,215,255,.06);
       box-shadow: 0 0 0 2px rgba(39,215,255,.08) inset;
     }
-
-    .grid{
-      display:grid;
-      gap:14px;
-    }
+    .navItem.locked{ opacity:.55; }
+    .navItem.locked .ico{ filter: grayscale(1); }
+    .grid{ display:grid; gap:14px; }
     .grid.two{ grid-template-columns: 1fr; }
-    @media(min-width:920px){
-      .grid.two{ grid-template-columns: 1.2fr .8fr; }
-    }
-
-    .canvasWrap{
-      width:100%;
-      border-radius:var(--radius2);
-      border:1px solid rgba(61,220,255,.18);
-      background: rgba(7,10,19,.42);
-      overflow:hidden;
-    }
-    canvas{ display:block; width:100%; height:auto; }
+    @media(min-width:920px){ .grid.two{ grid-template-columns: 1.2fr .8fr; } }
 
     .toastWrap{
       position:fixed;
@@ -361,7 +338,6 @@
       padding:2px 6px;
     }
 
-    /* simple modal */
     .modalOverlay{
       position:fixed; inset:0;
       background: rgba(0,0,0,.55);
@@ -412,9 +388,9 @@
           <div class="brandSub">GLOBAL ARRAY</div>
         </div>
       </div>
-      <div class="pill" id="netPill" title="Network status">
-        <span class="dot cyan" id="netDot"></span>
-        <span id="netText">LOCAL MODE</span>
+      <div class="pill" id="statusPill" title="Account / Subscription">
+        <span class="dot warn" id="statusDot"></span>
+        <span id="statusText">SIGN IN REQUIRED</span>
       </div>
     </header>
 
@@ -444,34 +420,32 @@
       <a class="navItem" href="#/campaigns" data-route="campaigns" title="Campaigns">
         <span class="ico">▦</span><span class="lbl">Campaigns</span>
       </a>
-      <a class="navItem" href="#/nodes" data-route="nodes" title="Nodes">
-        <span class="ico">⌁</span><span class="lbl">Nodes</span>
-      </a>
-      <a class="navItem" href="#/telemetry" data-route="telemetry" title="Telemetry">
+      <a class="navItem" href="#/telemetry" data-route="telemetry" title="Feed">
         <span class="ico">◉</span><span class="lbl">Feed</span>
       </a>
       <a class="navItem" href="#/submit" data-route="submit" title="Submit">
         <span class="ico">⌖</span><span class="lbl">Submit</span>
       </a>
-      <a class="navItem" href="#/leaderboard" data-route="leaderboard" title="Leaderboard">
+      <a class="navItem" href="#/leaderboard" data-route="leaderboard" title="Ranks (Paid)">
         <span class="ico">🏆</span><span class="lbl">Ranks</span>
       </a>
-      <a class="navItem" href="#/guild" data-route="guild" title="Guild">
-        <span class="ico">⛨</span><span class="lbl">Guild</span>
+      <a class="navItem" href="#/billing" data-route="billing" title="Billing">
+        <span class="ico">⛨</span><span class="lbl">Billing</span>
       </a>
       <a class="navItem" href="#/profile" data-route="profile" title="Profile">
-        <span class="ico">⦿</span><span class="lbl">Profile</span>
+        <span class="ico">⦿</span><span class="lbl">Account</span>
       </a>
     </nav>
   </div>
 
   <script>
     /******************************************************************
-     * HELVARIX ARRAY — FUNCTIONAL BASE (NO FILLER DISPLAYED)
-     * - Local-first: campaigns, submissions, feed, leaderboard work now
-     * - IndexedDB stores actual uploaded files (images/audio/etc)
-     * - “Global” features are wired through NetworkAdapter so you can
-     *   later plug Firebase/Supabase/your API without rewriting UI.
+     * HELVARIX ARRAY — CLIENT-SIDE BUILD
+     * - Users cannot create campaigns; campaigns load from campaigns.json
+     * - "Account" is local-only: email stored in localStorage
+     * - Paywall is UI-only in client-side mode (no server verification)
+     *   You can link to Stripe Checkout/Payment Links and mark "paid"
+     *   on return, but real enforcement requires backend verification.
      ******************************************************************/
 
     /******************** DOM helpers ********************/
@@ -587,120 +561,210 @@
       });
     }
 
-    /******************** Data Model ********************
-     * profile: operator identity + settings
-     * campaigns: created locally (later sync)
-     * submissions: real records referencing uploaded file IDs
-     ****************************************************/
+    /******************** Config ********************/
+    const PRICING = {
+      monthly: { label: "$15 / month", cents: 1500, days: 31 },
+      annual:  { label: "$150 / year", cents: 15000, days: 365 }
+    };
+
+    // IMPORTANT:
+    // Put your Stripe Payment Link / Checkout URL here.
+    // These can be Stripe "Payment Links" (recommended) that redirect back to your site.
+    const STRIPE_LINKS = {
+      monthly: "REPLACE_WITH_STRIPE_PAYMENT_LINK_MONTHLY",
+      annual:  "REPLACE_WITH_STRIPE_PAYMENT_LINK_ANNUAL"
+    };
+
+    // Where Stripe should redirect after payment.
+    // If you use Stripe Payment Links, set their "After payment" redirect to:
+    //   https://yourdomain.com/#/billing?success=1&plan=monthly
+    //   https://yourdomain.com/#/billing?success=1&plan=annual
+    //
+    // In client-only mode, we will *trust that redirect* and mark them as paid locally.
+
+    /******************** Data Model ********************/
+    const DEFAULT_ACCOUNT = {
+      email: "",
+      createdAt: null
+    };
+
     const DEFAULT_PROFILE = {
       callsign: "",
       region: "",
       equipment: "",
-      guildToken: "",
       allowGeo: false
     };
 
+    const DEFAULT_SUBSCRIPTION = {
+      plan: "free",            // "free" | "monthly" | "annual"
+      active: false,
+      activeUntil: null,       // ISO date
+      lastUpdatedAt: null
+    };
+
     const DB = {
+      account: LS.get("hvx_account", DEFAULT_ACCOUNT),
       profile: LS.get("hvx_profile", DEFAULT_PROFILE),
-      campaigns: LS.get("hvx_campaigns", []),
-      submissions: LS.get("hvx_submissions", []),
-      reviews: LS.get("hvx_reviews", []),
-      presence: LS.get("hvx_presence", { lastPing: 0, lat: null, lon: null })
+      subscription: LS.get("hvx_subscription", DEFAULT_SUBSCRIPTION),
+
+      campaigns: [], // loaded from campaigns.json
+      submissions: LS.get("hvx_submissions", [])
     };
 
     function saveAll(){
+      LS.set("hvx_account", DB.account);
       LS.set("hvx_profile", DB.profile);
-      LS.set("hvx_campaigns", DB.campaigns);
+      LS.set("hvx_subscription", DB.subscription);
       LS.set("hvx_submissions", DB.submissions);
-      LS.set("hvx_reviews", DB.reviews);
-      LS.set("hvx_presence", DB.presence);
     }
 
-    /******************** Network Adapter ********************
-     * Replace these methods when you add backend.
-     * Right now they are local-only and ALWAYS truthful.
-     *******************************************************/
-    const NetworkAdapter = {
-      mode: "local", // "local" | "connected"
-      async pingPresence(pres){
-        // In real mode: send to server (websocket/REST) and receive global presence list.
-        DB.presence = { ...DB.presence, ...pres, lastPing: Date.now() };
-        saveAll();
-        return { ok:true, global: null };
-      },
-      async syncCampaigns(){ return { ok:true, campaigns: DB.campaigns }; },
-      async syncSubmissions(){ return { ok:true, submissions: DB.submissions }; },
-      async publishSubmission(){ return { ok:true }; }
-    };
+    /******************** Auth & Paywall logic ********************/
+    function normalizeEmail(s){ return String(s||"").trim().toLowerCase(); }
+    function isValidEmail(s){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s); }
+
+    function isSignedIn(){
+      return !!DB.account.email && isValidEmail(DB.account.email);
+    }
+
+    function refreshSubscriptionStatus(){
+      const sub = DB.subscription;
+      if (!sub.activeUntil){
+        sub.active = false;
+        if (sub.plan !== "free") sub.plan = "free";
+        return;
+      }
+      const now = Date.now();
+      const until = new Date(sub.activeUntil).getTime();
+      sub.active = until > now;
+      if (!sub.active) sub.plan = "free";
+    }
+
+    function isPaid(){
+      refreshSubscriptionStatus();
+      return DB.subscription.active === true && (DB.subscription.plan === "monthly" || DB.subscription.plan === "annual");
+    }
+
+    // Decide which features are paid.
+    // You can change these gates to whatever you want.
+    const PAYWALLED_ROUTES = new Set([
+      "/leaderboard" // for example: ranks are paid
+    ]);
+
+    function routeRequiresPaid(path){
+      return PAYWALLED_ROUTES.has(path);
+    }
+
+    function updateStatusPill(){
+      const dot = $("#statusDot");
+      const text = $("#statusText");
+
+      if (!isSignedIn()){
+        dot.className = "dot bad";
+        text.textContent = "SIGN IN REQUIRED";
+        return;
+      }
+      if (isPaid()){
+        dot.className = "dot cyan";
+        const until = DB.subscription.activeUntil ? new Date(DB.subscription.activeUntil).toISOString().slice(0,10) : "";
+        text.textContent = `ACTIVE • ${DB.subscription.plan.toUpperCase()} • ${until}`;
+      } else {
+        dot.className = "dot warn";
+        text.textContent = "FREE • UPGRADE";
+      }
+    }
+
+    function updateNavLocks(){
+      const paid = isPaid();
+      $$(".navItem").forEach(a => {
+        const href = a.getAttribute("href") || "";
+        const path = href.startsWith("#") ? href.slice(1) : href;
+        if (routeRequiresPaid(path)){
+          a.classList.toggle("locked", !paid);
+        }
+      });
+    }
 
     /******************** Router ********************/
     const routes = {
       "/campaigns": renderCampaigns,
-      "/nodes": renderNodes,
       "/telemetry": renderTelemetry,
       "/submit": renderSubmit,
       "/leaderboard": renderLeaderboard,
-      "/guild": renderGuild,
+      "/billing": renderBilling,
       "/profile": renderProfile
     };
 
     init();
 
-    function init(){
-      // First-run: push user to Profile to set callsign/region
+    async function init(){
       if (!location.hash) location.hash = "#/campaigns";
+
       window.addEventListener("hashchange", render);
-      bootNetworkPill();
+
+      // Load campaigns from JSON (you control this file)
+      await loadCampaigns();
+      refreshSubscriptionStatus();
+      updateStatusPill();
+      updateNavLocks();
       render();
-
-      // periodic local ping (if geo enabled, we attach coords)
-      setInterval(() => doPresencePing(false), 20_000);
-      doPresencePing(true);
     }
 
-    function bootNetworkPill(){
-      const dot = $("#netDot");
-      const text = $("#netText");
-      if (NetworkAdapter.mode === "local"){
-        dot.className = "dot warn";
-        text.textContent = "LOCAL MODE";
-      } else {
-        dot.className = "dot cyan";
-        text.textContent = "CONNECTED";
+    async function loadCampaigns(){
+      // Try campaigns.json, otherwise fallback to empty.
+      try{
+        const res = await fetch("./campaigns.json", { cache:"no-store" });
+        if (!res.ok) throw new Error("campaigns.json not found");
+        const data = await res.json();
+        if (!Array.isArray(data)) throw new Error("campaigns.json must be an array");
+        // Normalize / validate lightly
+        DB.campaigns = data
+          .filter(c => c && typeof c === "object")
+          .map(c => ({
+            id: c.id || crypto.randomUUID?.() || String(Date.now()) + "_" + Math.random().toString(16).slice(2),
+            kind: c.kind || "daily",
+            title: String(c.title || "Untitled Campaign"),
+            description: String(c.description || ""),
+            mode: c.mode || "any",
+            target: String(c.target || ""),
+            goalSubmissions: Number.isFinite(Number(c.goalSubmissions)) ? Number(c.goalSubmissions) : null,
+            startAt: c.startAt || null,
+            endAt: c.endAt || null,
+            archived: !!c.archived,
+            createdAt: c.createdAt || null
+          }));
+      }catch(err){
+        console.warn(err);
+        DB.campaigns = [];
       }
-    }
-
-    async function doPresencePing(forceGeo){
-      const pres = { lastPing: Date.now() };
-      if (DB.profile.allowGeo && (forceGeo || DB.presence.lat == null)){
-        try{
-          const pos = await getGeo();
-          pres.lat = pos.coords.latitude;
-          pres.lon = pos.coords.longitude;
-        }catch{
-          // geo denied; keep silent
-        }
-      }
-      await NetworkAdapter.pingPresence(pres);
-    }
-
-    function getGeo(){
-      return new Promise((resolve, reject) => {
-        if (!navigator.geolocation) return reject(new Error("Geolocation not supported"));
-        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy:false, timeout:6000, maximumAge: 120000 });
-      });
     }
 
     function render(){
+      // billing success handler (client-side trusted redirect)
+      handleBillingSuccessIfPresent();
+
       const path = location.hash.replace("#","") || "/campaigns";
       const view = $("#view");
-      const fn = routes[path] || renderNotFound;
+      const fn = routes[path.split("?")[0]] || renderNotFound;
 
-      $$(".navItem").forEach(a => a.classList.toggle("active", a.getAttribute("href") === `#${path}`));
+      // Gate: email sign-in required for most actions
+      // Campaign list can be viewed unsigned, but submitting requires sign-in.
+      // Paid routes require paid plan.
+      const cleanPath = path.split("?")[0];
+
+      // highlight nav
+      $$(".navItem").forEach(a => a.classList.toggle("active", a.getAttribute("href") === `#${cleanPath}`));
+
+      // route enforcement
+      if (routeRequiresPaid(cleanPath) && !isPaid()){
+        location.hash = "#/billing";
+        return;
+      }
 
       view.innerHTML = "";
       fn(view);
       saveAll();
+      updateStatusPill();
+      updateNavLocks();
     }
 
     function renderNotFound(root){
@@ -712,19 +776,34 @@
     const clamp = (n,a,b)=>Math.max(a,Math.min(b,n));
     const fmtUTC = (d)=> new Date(d).toISOString().replace("T"," ").slice(0,16) + " UTC";
 
+    function progressBar(pct){
+      const wrap = el("div",{className:"progress"});
+      const bar = el("span");
+      bar.style.width = `${clamp(pct,0,100)}%`;
+      wrap.append(bar);
+      return wrap;
+    }
+
+    function requireSignedIn(){
+      if (!isSignedIn()){
+        showToast("Sign In Required", "Enter your email on the Account tab to continue.");
+        location.hash = "#/profile";
+        return false;
+      }
+      return true;
+    }
+
     function requireProfileReady(){
+      if (!requireSignedIn()) return false;
       if (!DB.profile.callsign || !DB.profile.region){
-        showToast("Setup Required", "Set callsign and region in Profile before submitting or joining campaigns.");
+        showToast("Profile Required", "Set callsign and region on the Account tab to submit.");
+        location.hash = "#/profile";
         return false;
       }
       return true;
     }
 
     function computeOIForSubmission(sub){
-      // simple real rules (tweak later):
-      // - visual: base 200 + (integrationSeconds/10) + (snr*5)
-      // - radio: base 220 + (integrationSeconds/8) + (snr*6)
-      // - spectral: base 240 + (integrationSeconds/9) + (snr*6)
       const integ = Number(sub.integrationSeconds || 0);
       const snr = Number(sub.snrDb || 0);
       const mode = sub.mode;
@@ -736,9 +815,6 @@
     }
 
     function computeCIForSubmission(sub){
-      // Campaign Impact:
-      // - daily/weekly/global each have multipliers depending on if submission matches
-      // - here we compute base CI from quality; campaign matching handled elsewhere
       const snr = Number(sub.snrDb || 0);
       const seeing = Number(sub.seeingArcsec || 0);
       const transparency = Number(sub.transparency || 0);
@@ -749,10 +825,6 @@
     }
 
     function matchesCampaign(c, sub){
-      // A submission matches a campaign if:
-      // - mode matches (or campaign mode == "any")
-      // - target matches if campaign target specified (exact or prefix like "M31")
-      // - window active (now within start/end if set)
       const now = Date.now();
       if (c.startAt && now < new Date(c.startAt).getTime()) return false;
       if (c.endAt && now > new Date(c.endAt).getTime()) return false;
@@ -762,7 +834,6 @@
       const t = (sub.target || "").trim().toLowerCase();
       const ct = (c.target || "").trim().toLowerCase();
       if (ct){
-        // allow comma-separated targets in campaign: "M31, NGC 7000"
         const list = ct.split(",").map(s=>s.trim()).filter(Boolean);
         if (!list.some(x => t === x || t.startsWith(x))) return false;
       }
@@ -770,7 +841,6 @@
     }
 
     function computeCampaignProgress(c){
-      // progress: total matching submissions vs goal
       const goal = Math.max(1, Number(c.goalSubmissions || 1));
       const matching = DB.submissions.filter(s => matchesCampaign(c, s)).length;
       const pct = clamp((matching / goal) * 100, 0, 100);
@@ -778,8 +848,6 @@
     }
 
     function sortedLeaderboard(){
-      // leaderboard derived ONLY from real submissions in DB
-      // Sum OI by callsign; CI likewise
       const map = new Map();
       for (const s of DB.submissions){
         const key = s.operatorCallsign || "UNKNOWN";
@@ -846,691 +914,6 @@
       return { wrap, range };
     }
 
-    function progressBar(pct){
-      const wrap = el("div",{className:"progress"});
-      const bar = el("span");
-      bar.style.width = `${clamp(pct,0,100)}%`;
-      wrap.append(bar);
-      return wrap;
-    }
-
-    /******************** PAGE 1: Campaigns ********************/
-    function renderCampaigns(root){
-      root.append(h1("Campaigns"), sub("Create and run daily/weekly/global campaigns. No filler data."));
-
-      const top = div("grid two");
-
-      // LEFT: operator card + active campaigns
-      const left = el("div");
-
-      left.append(operatorSummaryCard());
-      left.append(campaignsCard());
-
-      // RIGHT: create campaign
-      const right = el("div");
-      right.append(createCampaignCard());
-
-      top.append(left, right);
-      root.append(top);
-    }
-
-    function operatorSummaryCard(){
-      const card = div("card");
-      card.append(div("cardHeader", el("div",{className:"cardTitle",textContent:"Operator Summary"}), badge("LOCAL", "warn")));
-
-      if (!DB.profile.callsign){
-        card.append(empty("No Operator Set",
-          "Open the Profile tab and set your callsign, region, and equipment. Campaign and submission features are locked until that’s set."
-        ));
-        return card;
-      }
-
-      const oiTotal = DB.submissions
-        .filter(s => s.operatorCallsign === DB.profile.callsign)
-        .reduce((a,s)=>a + Number(s.oi||0), 0);
-
-      const ciTotal = DB.submissions
-        .filter(s => s.operatorCallsign === DB.profile.callsign)
-        .reduce((a,s)=>a + Number(s.ci||0), 0);
-
-      const row1 = div("row",
-        div("rowLeft",
-          el("div",{className:"rowBig",textContent:DB.profile.callsign}),
-          el("div",{className:"rowSmall",textContent:`REGION: ${DB.profile.region || "UNSET"} • EQUIPMENT: ${DB.profile.equipment || "UNSET"}`})
-        ),
-        el("div",{className:"kpi", innerHTML:`${oiTotal.toLocaleString()}<small>OI</small>`})
-      );
-
-      const row2 = div("row",
-        div("rowLeft",
-          el("div",{className:"rowBig",textContent:`Campaign Impact`}),
-          el("div",{className:"rowSmall",textContent:`Derived from your verified submissions.`})
-        ),
-        el("div",{className:"kpi", innerHTML:`${ciTotal.toLocaleString()}<small>CI</small>`})
-      );
-
-      card.append(row1, row2);
-      return card;
-    }
-
-    function campaignsCard(){
-      const card = div("card");
-      card.append(div("cardHeader", el("div",{className:"cardTitle",textContent:"Active Campaigns"}), badge("LIVE")));
-
-      if (DB.campaigns.length === 0){
-        card.append(empty("No Campaigns Yet",
-          "Create a campaign on the right. Campaign progress updates only from real submissions that match the campaign rules."
-        ));
-        return card;
-      }
-
-      const active = DB.campaigns
-        .filter(c => !c.archived)
-        .sort((a,b)=> new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
-      if (active.length === 0){
-        card.append(empty("No Active Campaigns",
-          "You have campaigns saved, but they’re archived. Create a new one or unarchive from the campaign manager."
-        ));
-        return card;
-      }
-
-      for (const c of active){
-        const prog = computeCampaignProgress(c);
-
-        const item = div("card");
-        item.append(
-          div("cardHeader",
-            el("div",{className:"cardTitle",textContent:c.title}),
-            badge(c.kind.toUpperCase(), c.kind==="global"?"violet":"cyan")
-          ),
-          el("div",{className:"meta",textContent: campaignMetaLine(c)}),
-          el("div",{style:"height:10px"}),
-          progressBar(prog.pct),
-          el("div",{style:"height:10px"}),
-          el("div",{className:"rowSmall",textContent:`MATCHING SUBMISSIONS: ${prog.matching}/${prog.goal}`}),
-          el("div",{style:"height:10px"}),
-          el("button",{className:"secondary", textContent:"Manage Campaign"})
-        );
-
-        item.querySelector("button").addEventListener("click", () => openCampaignManager(c.id));
-        card.append(item);
-      }
-
-      return card;
-    }
-
-    function campaignMetaLine(c){
-      const parts = [];
-      parts.push(c.mode ? `MODE: ${c.mode.toUpperCase()}` : "MODE: ANY");
-      if (c.target) parts.push(`TARGET: ${c.target}`);
-      if (c.endAt) parts.push(`ENDS: ${fmtUTC(c.endAt)}`);
-      if (c.goalSubmissions) parts.push(`GOAL: ${c.goalSubmissions}`);
-      return parts.join(" • ");
-    }
-
-    function createCampaignCard(){
-      const card = div("card");
-      card.append(div("cardHeader", el("div",{className:"cardTitle",textContent:"Create Campaign"}), badge("ADMIN")));
-
-      const titleF = fieldInput("Campaign Title", { placeholder:"e.g., Capture Jupiter", value:"" });
-      const descF = fieldTextarea("Description", { placeholder:"What should observers submit? Any constraints?" });
-
-      const kindF = fieldSelect("Type", {
-        value:"daily",
-        options:[
-          {value:"daily", label:"Daily"},
-          {value:"weekly", label:"Weekly"},
-          {value:"global", label:"Global"}
-        ]
-      });
-
-      const modeF = fieldSelect("Mode",{
-        value:"visual",
-        options:[
-          {value:"any", label:"Any"},
-          {value:"visual", label:"Visual"},
-          {value:"spectral", label:"Spectral"},
-          {value:"radio", label:"Radio"}
-        ]
-      });
-
-      const targetF = fieldInput("Target Filter (optional)", { placeholder:"e.g., M31 or NGC 7000 or M13, M92" });
-      const goalF = fieldInput("Goal Submissions", { type:"number", placeholder:"e.g., 100000", value:"", attrs:{min:"1", step:"1"} });
-
-      const endF = fieldInput("End Time (UTC, optional)", { type:"datetime-local", value:"" });
-
-      const createBtn = el("button",{className:"primary",textContent:"Create Campaign"});
-      createBtn.addEventListener("click", () => {
-        const title = titleF.input.value.trim();
-        const desc = descF.textarea.value.trim();
-        if (!title){
-          showToast("Missing Field", "Campaign title is required.");
-          return;
-        }
-        const c = {
-          id: uid(),
-          kind: kindF.select.value,
-          title,
-          description: desc,
-          mode: modeF.select.value,
-          target: targetF.input.value.trim(),
-          goalSubmissions: goalF.input.value ? Number(goalF.input.value) : null,
-          startAt: new Date().toISOString(),
-          endAt: endF.input.value ? new Date(endF.input.value).toISOString() : null,
-          createdAt: new Date().toISOString(),
-          archived: false
-        };
-        DB.campaigns.unshift(c);
-        saveAll();
-        showToast("Campaign Created", "Your campaign is now active. Progress will update from matching submissions.");
-        render();
-      });
-
-      card.append(
-        titleF.wrap,
-        descF.wrap,
-        kindF.wrap,
-        modeF.wrap,
-        targetF.wrap,
-        goalF.wrap,
-        endF.wrap,
-        el("div",{className:"help"}, "Targets can be comma-separated. A submission matches if its target equals or starts with any campaign target (case-insensitive)."),
-        el("div",{style:"height:10px"}),
-        createBtn
-      );
-
-      return card;
-    }
-
-    function openCampaignManager(campaignId){
-      const c = DB.campaigns.find(x => x.id === campaignId);
-      if (!c) return;
-
-      const body = el("div");
-
-      const titleF = fieldInput("Campaign Title", { value:c.title });
-      const descF = fieldTextarea("Description", { value:c.description || "" });
-
-      const kindF = fieldSelect("Type",{
-        value:c.kind,
-        options:[
-          {value:"daily", label:"Daily"},
-          {value:"weekly", label:"Weekly"},
-          {value:"global", label:"Global"}
-        ]
-      });
-
-      const modeF = fieldSelect("Mode",{
-        value:c.mode || "any",
-        options:[
-          {value:"any", label:"Any"},
-          {value:"visual", label:"Visual"},
-          {value:"spectral", label:"Spectral"},
-          {value:"radio", label:"Radio"}
-        ]
-      });
-
-      const targetF = fieldInput("Target Filter (optional)", { value:c.target || "" });
-      const goalF = fieldInput("Goal Submissions", { type:"number", value: c.goalSubmissions ? String(c.goalSubmissions) : "", attrs:{min:"1",step:"1"} });
-
-      const endLocal = c.endAt ? toLocalDatetimeValue(c.endAt) : "";
-      const endF = fieldInput("End Time (UTC, optional)", { type:"datetime-local", value:endLocal });
-
-      const prog = computeCampaignProgress(c);
-
-      const progRow = div("row",
-        div("rowLeft",
-          el("div",{className:"rowBig",textContent:`Progress: ${prog.matching}/${prog.goal}`}),
-          el("div",{className:"rowSmall",textContent:`Matches are derived from real submissions only.`})
-        ),
-        el("div",{className:"kpi", innerHTML:`${prog.pct}%<small>COMPLETE</small>`})
-      );
-
-      const saveBtn = el("button",{className:"primary",textContent:"Save Changes"});
-      saveBtn.addEventListener("click", () => {
-        c.title = titleF.input.value.trim() || c.title;
-        c.description = descF.textarea.value.trim();
-        c.kind = kindF.select.value;
-        c.mode = modeF.select.value;
-        c.target = targetF.input.value.trim();
-        c.goalSubmissions = goalF.input.value ? Number(goalF.input.value) : null;
-        c.endAt = endF.input.value ? new Date(endF.input.value).toISOString() : null;
-        saveAll();
-        closeModal();
-        showToast("Saved", "Campaign updated.");
-        render();
-      });
-
-      const archiveBtn = el("button",{className:"secondary",textContent: c.archived ? "Unarchive" : "Archive"});
-      archiveBtn.addEventListener("click", () => {
-        c.archived = !c.archived;
-        saveAll();
-        closeModal();
-        showToast("Updated", c.archived ? "Campaign archived." : "Campaign active again.");
-        render();
-      });
-
-      const delBtn = el("button",{className:"danger",textContent:"Delete Campaign"});
-      delBtn.addEventListener("click", () => {
-        if (!confirm("Delete this campaign? This cannot be undone.")) return;
-        DB.campaigns = DB.campaigns.filter(x => x.id !== c.id);
-        saveAll();
-        closeModal();
-        showToast("Deleted", "Campaign removed.");
-        render();
-      });
-
-      body.append(
-        progRow,
-        el("div",{style:"height:10px"}),
-        progressBar(prog.pct),
-        hr(),
-        titleF.wrap,
-        descF.wrap,
-        kindF.wrap,
-        modeF.wrap,
-        targetF.wrap,
-        goalF.wrap,
-        endF.wrap,
-        el("div",{style:"height:12px"}),
-        saveBtn,
-        el("div",{style:"height:10px"}),
-        archiveBtn,
-        el("div",{style:"height:10px"}),
-        delBtn
-      );
-
-      openModal("Campaign Manager", body);
-    }
-
-    function toLocalDatetimeValue(iso){
-      const d = new Date(iso);
-      const pad = (n)=>String(n).padStart(2,"0");
-      // datetime-local expects local time string; we show local conversion
-      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-    }
-
-    /******************** PAGE 2: Nodes ********************/
-    function renderNodes(root){
-      root.append(h1("Network Node Visualization"), sub("Local visualization now; global requires backend sync."));
-
-      const card = div("card");
-      card.append(div("cardHeader", el("div",{className:"cardTitle",textContent:"Active Nodes"}), badge(NetworkAdapter.mode==="local"?"LOCAL":"LIVE", NetworkAdapter.mode==="local"?"warn":"cyan")));
-
-      // In local mode, we visualize only this device’s presence + optionally imported snapshots.
-      const info = div("row",
-        div("rowLeft",
-          el("div",{className:"rowBig",textContent:"Presence Ping"}),
-          el("div",{className:"rowSmall",textContent: DB.presence.lastPing ? `Last ping: ${fmtUTC(DB.presence.lastPing)}` : "Not pinged yet"})
-        ),
-        el("div",{className:"kpi", innerHTML: `${DB.profile.allowGeo ? "ON" : "OFF"}<small>GEO</small>` })
-      );
-
-      const wrap = div("canvasWrap");
-      const canvas = document.createElement("canvas");
-      canvas.width = 1200; canvas.height = 700;
-      wrap.append(canvas);
-
-      card.append(info, hr(), wrap);
-
-      if (!DB.profile.allowGeo){
-        card.append(el("div",{style:"margin-top:12px"}), empty("Geo is Off",
-          "Turn on geo in Profile to place your node on the map. Global nodes will appear here once a backend is connected."
-        ));
-      }
-
-      root.append(card);
-
-      drawLocalNodes(canvas);
-    }
-
-    function drawLocalNodes(canvas){
-      const ctx = canvas.getContext("2d");
-      const w = canvas.width, h = canvas.height;
-
-      ctx.clearRect(0,0,w,h);
-      ctx.fillStyle = "rgba(7,10,19,.35)";
-      ctx.fillRect(0,0,w,h);
-
-      // grid
-      ctx.lineWidth = 1;
-      for (let x=0; x<=w; x+=40){
-        ctx.strokeStyle = x%200===0 ? "rgba(39,215,255,.12)" : "rgba(39,215,255,.05)";
-        ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,h); ctx.stroke();
-      }
-      for (let y=0; y<=h; y+=40){
-        ctx.strokeStyle = y%200===0 ? "rgba(39,215,255,.12)" : "rgba(39,215,255,.05)";
-        ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke();
-      }
-
-      // label
-      ctx.fillStyle = "rgba(39,215,255,.65)";
-      ctx.font = "600 12px Montserrat";
-      ctx.fillText("HELVARIX ARRAY • LOCAL PRESENCE", 18, 28);
-
-      // If geo: project lon/lat to 2D.
-      // This is a simple equirectangular projection (good enough for UI placeholder).
-      if (DB.profile.allowGeo && DB.presence.lat != null && DB.presence.lon != null){
-        const x = ((DB.presence.lon + 180) / 360) * (w-120) + 60;
-        const y = ((90 - DB.presence.lat) / 180) * (h-120) + 60;
-
-        ctx.fillStyle = "rgba(39,215,255,.90)";
-        ctx.shadowColor = "rgba(39,215,255,.35)";
-        ctx.shadowBlur = 18;
-        ctx.beginPath(); ctx.arc(x,y,8,0,Math.PI*2); ctx.fill();
-        ctx.shadowBlur = 0;
-
-        ctx.strokeStyle = "rgba(123,75,255,.22)";
-        ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.arc(x,y,22,0,Math.PI*2); ctx.stroke();
-
-        ctx.fillStyle = "rgba(234,242,255,.78)";
-        ctx.font = "600 12px Montserrat";
-        ctx.fillText(DB.profile.callsign || "LOCAL NODE", x+14, y-12);
-      } else {
-        ctx.fillStyle = "rgba(234,242,255,.55)";
-        ctx.font = "600 12px Montserrat";
-        ctx.fillText("No geo location available. Enable geo in Profile to place your node.", 18, 54);
-      }
-    }
-
-    /******************** PAGE 3: Telemetry Feed ********************/
-    function renderTelemetry(root){
-      root.append(h1("Telemetry Feed"), sub("Real submissions only. No filler."));
-
-      const card = div("card");
-      card.append(div("cardHeader", el("div",{className:"cardTitle",textContent:"Community Feed"}), badge("STREAM")));
-
-      if (DB.submissions.length === 0){
-        card.append(empty("No Submissions Yet",
-          "Go to Submit and commit a real visual/spectral/radio entry. Your submissions will appear here."
-        ));
-        root.append(card);
-        return;
-      }
-
-      const sorted = [...DB.submissions].sort((a,b)=> new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-      const list = el("div");
-
-      for (const s of sorted.slice(0, 30)){
-        list.append(renderSubmissionListItem(s));
-      }
-
-      card.append(list);
-      root.append(card);
-    }
-
-    function renderSubmissionListItem(s){
-      const li = div("listItem");
-
-      const left = div("rowLeft",
-        el("div",{className:"rowBig",textContent: s.target || "UNSPECIFIED TARGET"}),
-        el("div",{className:"meta",textContent:`${(s.operatorCallsign||"UNKNOWN")} • ${s.operatorRegion||"UNSET"} • ${(s.mode||"").toUpperCase()} • ${fmtUTC(s.createdAt)}`}),
-        el("div",{className:"meta",textContent:`SNR: ${Number(s.snrDb||0).toFixed(1)} dB • OI: ${s.oi} • CI: ${s.ci}`}),
-        s.notes ? el("div",{className:"rowSmall",textContent:s.notes}) : null
-      );
-
-      const right = el("div",{className:"kpi"});
-      right.innerHTML = `${(s.oi||0).toLocaleString()}<small>OI</small>`;
-
-      li.append(left, right);
-      li.addEventListener("click", () => openSubmissionDetails(s.id));
-      return li;
-    }
-
-    async function openSubmissionDetails(subId){
-      const s = DB.submissions.find(x => x.id === subId);
-      if (!s) return;
-
-      const body = el("div");
-
-      const header = div("row",
-        div("rowLeft",
-          el("div",{className:"rowBig",textContent:s.target || "UNSPECIFIED TARGET"}),
-          el("div",{className:"rowSmall",textContent:`${(s.mode||"").toUpperCase()} • ${fmtUTC(s.createdAt)}`})
-        ),
-        el("div",{className:"kpi", innerHTML:`${s.oi}<small>OI</small>`})
-      );
-
-      body.append(header, hr());
-
-      const meta = el("div",{className:"meta",textContent:`OPERATOR: ${s.operatorCallsign||"UNKNOWN"} • REGION: ${s.operatorRegion||"UNSET"}`});
-      body.append(meta, el("div",{style:"height:10px"}));
-
-      // file preview
-      if (s.fileId){
-        const fileRec = await idbGetFile(s.fileId).catch(()=>null);
-        if (fileRec && fileRec.blob){
-          const url = URL.createObjectURL(fileRec.blob);
-          const t = fileRec.type || "";
-          if (t.startsWith("image/")){
-            body.append(el("div",{className:"label",textContent:"Frame Preview"}));
-            body.append(el("img",{src:url, style:"width:100%; border-radius:18px; border:1px solid rgba(61,220,255,.14);"}));
-          } else if (t.startsWith("audio/")){
-            body.append(el("div",{className:"label",textContent:"Audio Preview"}));
-            body.append(el("audio",{controls:true, src:url, style:"width:100%"}));
-          } else {
-            body.append(el("div",{className:"label",textContent:"Attached File"}));
-            body.append(el("a",{href:url, download:fileRec.name || "attachment", className:"secondary", textContent:`Download ${fileRec.name||"file"}`}));
-          }
-          body.append(el("div",{className:"help"}, `FILE: ${fileRec.name || "unknown"} • TYPE: ${fileRec.type || "unknown"} • SIZE: ${Math.round((fileRec.blob.size||0)/1024)} KB`));
-        } else {
-          body.append(empty("Missing File", "The submission references a file that isn't present in IndexedDB (it may have been cleared)."));
-        }
-      } else {
-        body.append(empty("No File Attached", "This submission was stored without a file."));
-      }
-
-      body.append(hr());
-
-      const delBtn = el("button",{className:"danger",textContent:"Delete Submission"});
-      delBtn.addEventListener("click", async () => {
-        if (!confirm("Delete this submission? This will remove it from feed and leaderboard.")) return;
-        const target = DB.submissions.find(x => x.id === subId);
-        DB.submissions = DB.submissions.filter(x => x.id !== subId);
-        saveAll();
-        if (target?.fileId) await idbDeleteFile(target.fileId).catch(()=>{});
-        closeModal();
-        showToast("Deleted", "Submission removed.");
-        render();
-      });
-
-      body.append(delBtn);
-      openModal("Telemetry Entry", body);
-    }
-
-    /******************** PAGE 4: Submit ********************/
-    function renderSubmit(root){
-      root.append(h1("Data Logging Protocol"), sub("Commit real observation telemetry. Stored locally. No filler."));
-
-      const card = div("card");
-      card.append(div("cardHeader", el("div",{className:"cardTitle",textContent:"Submission Console"}), badge("READY")));
-
-      if (!requireProfileReady()){
-        card.append(empty("Profile Required",
-          "Set your callsign and region in Profile to unlock submissions. This prevents anonymous, unverifiable records."
-        ));
-        root.append(card);
-        return;
-      }
-
-      // mode tabs
-      const currentMode = LS.get("hvx_submit_mode", "visual");
-      const tabs = el("div",{className:"tabs"});
-      const modes = ["visual","spectral","radio"];
-      for (const m of modes){
-        const b = el("button",{className:`tabBtn ${m===currentMode?"active":""}`, textContent:m});
-        b.addEventListener("click", () => { LS.set("hvx_submit_mode", m); render(); });
-        tabs.append(b);
-      }
-
-      // fields
-      const targetF = fieldInput("Target Object", { placeholder:"e.g., M31, NGC 7000", value: LS.get("hvx_submit_target","") });
-      targetF.input.addEventListener("input", ()=> LS.set("hvx_submit_target", targetF.input.value));
-
-      const bortleF = fieldSelect("Sky Quality (Bortle)", {
-        value: LS.get("hvx_submit_bortle","class4"),
-        options:[
-          {value:"class1", label:"Class 1 - Pristine"},
-          {value:"class2", label:"Class 2 - Dark"},
-          {value:"class3", label:"Class 3 - Rural"},
-          {value:"class4", label:"Class 4 - Urban/Rural"},
-          {value:"class5", label:"Class 5 - Suburban"},
-          {value:"class6", label:"Class 6 - Bright Suburban"},
-          {value:"class7", label:"Class 7 - Urban"},
-          {value:"class8", label:"Class 8 - City"},
-          {value:"class9", label:"Class 9 - Inner City"}
-        ],
-        onchange:(v)=>LS.set("hvx_submit_bortle", v)
-      });
-
-      const seeingF = fieldInput("Seeing (arcsec)", { type:"number", placeholder:"e.g., 1.5", value: LS.get("hvx_submit_seeing",""), attrs:{step:"0.1", min:"0.3", max:"5.0"} });
-      seeingF.input.addEventListener("input", ()=>LS.set("hvx_submit_seeing", seeingF.input.value));
-
-      const transpF = fieldSlider("Transparency (1–5)", {
-        min:1, max:5,
-        value: Number(LS.get("hvx_submit_transparency", 3)),
-        onchange:(v)=>LS.set("hvx_submit_transparency", v)
-      });
-
-      const integF = fieldInput("Total Integration (seconds)", { type:"number", placeholder:"e.g., 300", value: LS.get("hvx_submit_integration",""), attrs:{step:"1", min:"1"} });
-      integF.input.addEventListener("input", ()=>LS.set("hvx_submit_integration", integF.input.value));
-
-      const gainF = fieldInput("Gain / ISO", { type:"number", placeholder:"e.g., 100", value: LS.get("hvx_submit_gain",""), attrs:{step:"1", min:"1"} });
-      gainF.input.addEventListener("input", ()=>LS.set("hvx_submit_gain", gainF.input.value));
-
-      const snrF = fieldInput("Measured SNR (dB)", { type:"number", placeholder:"e.g., 25.6", value: LS.get("hvx_submit_snr",""), attrs:{step:"0.1", min:"0"} });
-      snrF.input.addEventListener("input", ()=>LS.set("hvx_submit_snr", snrF.input.value));
-
-      const hwF = fieldTextarea("Hardware & Software Stack", { placeholder:"Telescope/camera/SDR + processing tools (PixInsight, GNU Radio, etc.)", value: LS.get("hvx_submit_hw","") });
-      hwF.textarea.addEventListener("input", ()=>LS.set("hvx_submit_hw", hwF.textarea.value));
-
-      const notesF = fieldTextarea("Notes (optional)", { placeholder:"Anything the validators should know (conditions, calibration, anomalies).", value: LS.get("hvx_submit_notes","") });
-      notesF.textarea.addEventListener("input", ()=>LS.set("hvx_submit_notes", notesF.textarea.value));
-
-      // file input
-      const fileWrap = el("div");
-      fileWrap.append(el("div",{className:"label",textContent:"Attach Data File (recommended)"}));
-
-      const fileHelp = el("div",{className:"help",
-        textContent: currentMode==="visual"
-          ? "Attach an image frame (PNG/JPG/TIFF) or a ZIP of your capture output."
-          : currentMode==="radio"
-            ? "Attach audio (WAV) or data export (CSV/JSON)."
-            : "Attach spectrum export (CSV/JSON) or a ZIP bundle."
-      });
-
-      const fileInput = el("input",{ className:"field", type:"file", accept: fileAcceptForMode(currentMode) });
-      fileInput.style.padding = "12px 14px";
-
-      let stagedFile = null;
-      fileInput.addEventListener("change", () => {
-        stagedFile = fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
-        showToast("File Staged", stagedFile ? stagedFile.name : "No file selected.");
-      });
-
-      fileWrap.append(fileInput, fileHelp);
-
-      // commit
-      const commitBtn = el("button",{className:"primary",textContent:"Commit Data To Network"});
-      commitBtn.addEventListener("click", async () => {
-        // validate required
-        const target = targetF.input.value.trim();
-        if (!target){
-          showToast("Missing Field", "Target Object is required.");
-          return;
-        }
-        const integ = Number(integF.input.value || 0);
-        if (!integ || integ < 1){
-          showToast("Missing Field", "Total Integration must be ≥ 1.");
-          return;
-        }
-
-        commitBtn.disabled = true;
-        commitBtn.textContent = "COMMITTING…";
-
-        try{
-          // store file in IDB (optional)
-          let fileId = null;
-          if (stagedFile){
-            fileId = uid();
-            await idbPutFile({
-              id: fileId,
-              name: stagedFile.name,
-              type: stagedFile.type,
-              createdAt: new Date().toISOString(),
-              blob: stagedFile
-            });
-          }
-
-          const subRec = {
-            id: uid(),
-            createdAt: new Date().toISOString(),
-
-            operatorCallsign: DB.profile.callsign,
-            operatorRegion: DB.profile.region,
-
-            mode: currentMode,
-            target,
-
-            bortle: bortleF.select.value,
-            seeingArcsec: seeingF.input.value ? Number(seeingF.input.value) : null,
-            transparency: Number(LS.get("hvx_submit_transparency", 3)),
-            integrationSeconds: integ,
-            gainIso: gainF.input.value ? Number(gainF.input.value) : null,
-            snrDb: snrF.input.value ? Number(snrF.input.value) : 0,
-
-            hardware: hwF.textarea.value.trim() || DB.profile.equipment || "",
-            notes: notesF.textarea.value.trim() || "",
-
-            fileId
-          };
-
-          // derive scoring from real fields
-          subRec.oi = computeOIForSubmission(subRec);
-          subRec.ci = computeCIForSubmission(subRec);
-
-          DB.submissions.unshift(subRec);
-          saveAll();
-
-          // publish hook (real network later)
-          await NetworkAdapter.publishSubmission(subRec);
-
-          // clear staged file
-          stagedFile = null;
-          fileInput.value = "";
-
-          showToast("Committed", `Submission stored. OI +${subRec.oi} (derived from your actual inputs).`);
-          location.hash = "#/telemetry";
-        }catch(err){
-          console.error(err);
-          showToast("Error", err?.message || "Failed to commit submission.");
-        }finally{
-          commitBtn.disabled = false;
-          commitBtn.textContent = "Commit Data To Network";
-        }
-      });
-
-      card.append(
-        tabs,
-        targetF.wrap,
-        bortleF.wrap,
-        seeingF.wrap,
-        transpF.wrap,
-        integF.wrap,
-        gainF.wrap,
-        snrF.wrap,
-        hwF.wrap,
-        notesF.wrap,
-        fileWrap,
-        hr(),
-        commitBtn
-      );
-
-      root.append(card);
-    }
-
     function fileAcceptForMode(mode){
       if (mode==="visual") return "image/*,.tif,.tiff,.fits,.fit,.zip,.json,.csv";
       if (mode==="radio") return "audio/*,.wav,.zip,.json,.csv";
@@ -1538,270 +921,56 @@
       return "*/*";
     }
 
-    /******************** PAGE 5: Leaderboard ********************/
-    function renderLeaderboard(root){
-      root.append(h1("Global Leaderboard"), sub("Computed from real submissions stored here. Plug a backend to make it truly global."));
+    /******************** Billing success handler ********************/
+    function handleBillingSuccessIfPresent(){
+      const hash = location.hash || "";
+      if (!hash.startsWith("#/billing")) return;
+
+      const qIndex = hash.indexOf("?");
+      if (qIndex === -1) return;
+
+      const qs = hash.slice(qIndex + 1);
+      const params = new URLSearchParams(qs);
+
+      const success = params.get("success");
+      const plan = params.get("plan");
+
+      if (success !== "1") return;
+      if (!plan || !(plan in PRICING)) return;
+
+      // Client-side TRUSTED redirect: mark as paid locally
+      const days = PRICING[plan].days;
+      const until = new Date(Date.now() + days * 24*60*60*1000);
+
+      DB.subscription.plan = plan;
+      DB.subscription.active = true;
+      DB.subscription.activeUntil = until.toISOString();
+      DB.subscription.lastUpdatedAt = new Date().toISOString();
+      saveAll();
+
+      // remove query from hash so it doesn't re-trigger
+      location.hash = "#/billing";
+      showToast("Subscription Activated", `Plan: ${plan.toUpperCase()} (local unlock).`);
+    }
+
+    /******************** PAGES ********************/
+
+    // Campaigns (read-only)
+    function renderCampaigns(root){
+      root.append(h1("Campaigns"), sub("Campaigns are generated by the operator."));
 
       const card = div("card");
-      card.append(div("cardHeader", el("div",{className:"cardTitle",textContent:"Rankings"}), badge("DERIVED")));
+      card.append(div("cardHeader",
+        el("div",{className:"cardTitle",textContent:"Active Campaigns"}),
+        badge("READ-ONLY")
+      ));
 
-      const rows = sortedLeaderboard();
-
-      if (rows.length === 0){
-        card.append(empty("No Rankings Yet",
-          "Rankings appear after at least one real submission exists. Go to Submit and commit data."
+      if (!DB.campaigns.length){
+        card.append(empty("No Campaigns Found",
+          "Add a campaigns.json next to index.html. This client will load and display campaigns from that file."
         ));
         root.append(card);
         return;
       }
 
-      rows.slice(0, 25).forEach((r, idx) => {
-        const li = div("listItem",
-          div("rowLeft",
-            el("div",{className:"rowBig",textContent:`#${String(idx+1).padStart(2,"0")}  ${r.callsign}`}),
-            el("div",{className:"meta",textContent:`${r.region || "UNSET"} • SUBMISSIONS: ${r.submissions}`})
-          ),
-          el("div",{className:"kpi", innerHTML:`${Math.round(r.oi).toLocaleString()}<small>TOTAL OI</small>`})
-        );
-        card.append(li);
-      });
-
-      // export/import buttons (to support “community” without backend)
-      const tools = div("card");
-      tools.append(div("cardHeader", el("div",{className:"cardTitle",textContent:"Data Exchange"}), badge("OPTIONAL", "warn")));
-
-      const exportBtn = el("button",{className:"secondary",textContent:"Export Local Data (JSON)"});
-      exportBtn.addEventListener("click", () => exportJSON());
-
-      const importBtn = el("button",{className:"secondary",textContent:"Import Data (JSON)"});
-      importBtn.addEventListener("click", () => importJSON());
-
-      tools.append(
-        el("div",{className:"help"}, "Until you connect a backend, you can still share community datasets by exporting/importing JSON. This is fully functional and uses real submissions."),
-        el("div",{style:"height:10px"}),
-        exportBtn,
-        el("div",{style:"height:10px"}),
-        importBtn
-      );
-
-      root.append(card, tools);
-    }
-
-    function exportJSON(){
-      const payload = {
-        version: 1,
-        exportedAt: new Date().toISOString(),
-        profile: DB.profile,
-        campaigns: DB.campaigns,
-        submissions: DB.submissions
-      };
-      const blob = new Blob([JSON.stringify(payload, null, 2)], { type:"application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = el("a",{ href:url, download:`helvarix_export_${Date.now()}.json` });
-      document.body.append(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-      showToast("Exported", "JSON downloaded. (Files are not included — only metadata.)");
-    }
-
-    function importJSON(){
-      const input = el("input",{ type:"file", accept:"application/json" });
-      input.addEventListener("change", async () => {
-        const f = input.files?.[0];
-        if (!f) return;
-        try{
-          const text = await f.text();
-          const data = JSON.parse(text);
-          if (!data || typeof data !== "object") throw new Error("Invalid JSON");
-          if (!Array.isArray(data.campaigns) || !Array.isArray(data.submissions)) throw new Error("Missing campaigns/submissions arrays");
-
-          // merge (simple): append new records that don't exist by id
-          const existingCampaignIds = new Set(DB.campaigns.map(x=>x.id));
-          const existingSubIds = new Set(DB.submissions.map(x=>x.id));
-
-          for (const c of data.campaigns){
-            if (c?.id && !existingCampaignIds.has(c.id)) DB.campaigns.push(c);
-          }
-          for (const s of data.submissions){
-            if (s?.id && !existingSubIds.has(s.id)) DB.submissions.push(s);
-          }
-
-          saveAll();
-          showToast("Imported", "Campaigns/submissions merged. Note: attached files are not included in imports.");
-          render();
-        }catch(err){
-          console.error(err);
-          showToast("Import Failed", err?.message || "Could not import.");
-        }
-      });
-      input.click();
-    }
-
-    /******************** PAGE 6: Guild (Firewall) ********************/
-    function renderGuild(root){
-      root.append(h1("Guild"), sub("Advanced campaigns. Access controlled by token."));
-
-      const card = div("card");
-      card.append(div("cardHeader", el("div",{className:"cardTitle",textContent:"Firewall"}), badge("RESTRICTED", "violet")));
-
-      if (!DB.profile.guildToken){
-        card.append(empty("Locked",
-          "No guild token set. Open Profile and set a Guild Access Token to unlock this tab. In a real network, tokens would be validated server-side."
-        ));
-        root.append(card);
-        return;
-      }
-
-      card.append(
-        div("row",
-          div("rowLeft",
-            el("div",{className:"rowBig",textContent:"Authorized"}),
-            el("div",{className:"rowSmall",textContent:`TOKEN: ${mask(DB.profile.guildToken)} • LOCAL VALIDATION`})
-          ),
-          el("div",{className:"kpi", innerHTML:`ON<small>ACCESS</small>`})
-        ),
-        hr(),
-        empty("Guild Campaigns",
-          "Guild campaigns become meaningful once a backend enforces limited slots and difficulty tiers. You can still create campaigns from the Campaigns tab and treat them as ‘guild-only’ by convention for now."
-        )
-      );
-
-      root.append(card);
-    }
-
-    function mask(s){ return s.length <= 6 ? "••••••" : `${s.slice(0,3)}•••${s.slice(-2)}`; }
-
-    /******************** PAGE 7: Profile ********************/
-    function renderProfile(root){
-      root.append(h1("Profile & Settings"), sub("Set operator identity. Enable geo. Configure guild access."));
-
-      const card = div("card");
-      card.append(div("cardHeader", el("div",{className:"cardTitle",textContent:"Operator Configuration"}), badge("SETUP")));
-
-      const callsignF = fieldInput("Callsign / Designation", { placeholder:"e.g., Cmdr. Starlight", value: DB.profile.callsign || "" });
-      const regionF = fieldSelect("Region", {
-        value: DB.profile.region || "",
-        options:[
-          {value:"", label:"(Select region)"},
-          {value:"NA-EAST", label:"NA-EAST"},
-          {value:"NA-WEST", label:"NA-WEST"},
-          {value:"EU-NORTH", label:"EU-NORTH"},
-          {value:"EU-WEST", label:"EU-WEST"},
-          {value:"ASIA-PAC", label:"ASIA-PAC"},
-          {value:"AU-WEST", label:"AU-WEST"},
-          {value:"SELF-LINK", label:"SELF-LINK"}
-        ]
-      });
-
-      const equipF = fieldInput("Equipment Index", { placeholder:"e.g., 8\" Astrograph + ASI294MC + PixInsight", value: DB.profile.equipment || "" });
-      const tokenF = fieldInput("Guild Access Token (optional)", { placeholder:"e.g., HVX-ALPHA-001", value: DB.profile.guildToken || "" });
-
-      const geoRow = div("row",
-        div("rowLeft",
-          el("div",{className:"rowBig",textContent:"Geolocation"}),
-          el("div",{className:"rowSmall",textContent:"If enabled, Nodes tab can place your node on the map."})
-        ),
-        el("button",{className:"secondary", style:"width:auto; padding:10px 12px;", textContent: DB.profile.allowGeo ? "Disable" : "Enable" })
-      );
-
-      geoRow.querySelector("button").addEventListener("click", async () => {
-        if (!DB.profile.allowGeo){
-          try{
-            await getGeo(); // request permission
-            DB.profile.allowGeo = true;
-            saveAll();
-            showToast("Geo Enabled", "Your node can now be placed on the map.");
-            await doPresencePing(true);
-            render();
-          }catch{
-            showToast("Geo Denied", "Permission denied or unavailable.");
-          }
-        } else {
-          DB.profile.allowGeo = false;
-          DB.presence.lat = null;
-          DB.presence.lon = null;
-          saveAll();
-          showToast("Geo Disabled", "Node placement disabled.");
-          render();
-        }
-      });
-
-      const saveBtn = el("button",{className:"primary",textContent:"Save Profile"});
-      saveBtn.addEventListener("click", async () => {
-        DB.profile.callsign = callsignF.input.value.trim();
-        DB.profile.region = regionF.select.value;
-        DB.profile.equipment = equipF.input.value.trim();
-        DB.profile.guildToken = tokenF.input.value.trim();
-
-        saveAll();
-        showToast("Saved", "Profile updated.");
-        await doPresencePing(true);
-        render();
-      });
-
-      const resetBtn = el("button",{className:"danger",textContent:"Factory Reset (Local Data)"});
-      resetBtn.addEventListener("click", async () => {
-        if (!confirm("This will erase ALL local campaigns, submissions, and profile settings on this browser/device. Continue?")) return;
-
-        // clear structured
-        localStorage.removeItem("hvx_profile");
-        localStorage.removeItem("hvx_campaigns");
-        localStorage.removeItem("hvx_submissions");
-        localStorage.removeItem("hvx_reviews");
-        localStorage.removeItem("hvx_presence");
-        localStorage.removeItem("hvx_submit_mode");
-        localStorage.removeItem("hvx_submit_target");
-        localStorage.removeItem("hvx_submit_bortle");
-        localStorage.removeItem("hvx_submit_seeing");
-        localStorage.removeItem("hvx_submit_transparency");
-        localStorage.removeItem("hvx_submit_integration");
-        localStorage.removeItem("hvx_submit_gain");
-        localStorage.removeItem("hvx_submit_snr");
-        localStorage.removeItem("hvx_submit_hw");
-        localStorage.removeItem("hvx_submit_notes");
-
-        // clear in-memory
-        DB.profile = { ...DEFAULT_PROFILE };
-        DB.campaigns = [];
-        DB.submissions = [];
-        DB.reviews = [];
-        DB.presence = { lastPing: 0, lat: null, lon: null };
-
-        // clear IDB files
-        await clearAllFiles();
-
-        saveAll();
-        showToast("Reset", "Local data erased.");
-        location.hash = "#/campaigns";
-        render();
-      });
-
-      card.append(
-        callsignF.wrap,
-        regionF.wrap,
-        equipF.wrap,
-        tokenF.wrap,
-        el("div",{style:"height:12px"}),
-        geoRow,
-        el("div",{style:"height:12px"}),
-        saveBtn,
-        el("div",{style:"height:10px"}),
-        resetBtn
-      );
-
-      root.append(card);
-    }
-
-    async function clearAllFiles(){
-      // deletes entire DB by deleting database
-      await new Promise((resolve) => {
-        const req = indexedDB.deleteDatabase(IDB_NAME);
-        req.onsuccess = () => resolve(true);
-        req.onerror = () => resolve(true);
-        req.onblocked = () => resolve(true);
-      });
-    }
-  </script>
-</body>
-</html>
+      const active = DB.campaigns.filter(c => !c.archived
