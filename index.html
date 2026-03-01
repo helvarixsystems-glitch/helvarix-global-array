@@ -85,7 +85,6 @@
     }
     .dot{ width:8px; height:8px; border-radius:50%; display:inline-block; }
     .dot.cyan{ background:var(--cyan); box-shadow:0 0 20px rgba(39,215,255,.35); }
-    .dot.violet{ background:var(--violet); box-shadow:0 0 20px rgba(123,75,255,.25); }
     .dot.warn{ background:var(--warn); box-shadow:0 0 20px rgba(255,204,92,.25); }
     .dot.bad{ background:var(--bad); box-shadow:0 0 20px rgba(255,92,122,.25); }
 
@@ -101,7 +100,7 @@
     .card{
       background: linear-gradient(180deg, rgba(12,16,34,.78), rgba(12,16,34,.56));
       border:1px solid rgba(61,220,255,.18);
-      border-radius:var(--radius2);
+      border-radius:24px;
       box-shadow: var(--shadow);
       padding:16px;
       position:relative;
@@ -130,7 +129,6 @@
     .badge.violet{ border-color:rgba(123,75,255,.30); }
     .badge.cyan{ border-color:rgba(39,215,255,.30); }
     .badge.warn{ border-color:rgba(255,204,92,.35); color:rgba(255,204,92,.92); }
-    .badge.bad{ border-color:rgba(255,92,122,.35); color:rgba(255,92,122,.92); }
 
     .hr{ height:1px; background:rgba(61,220,255,.12); margin:14px 0; }
 
@@ -141,7 +139,7 @@
       color:rgba(234,242,255,.62);
       margin:12px 0 8px;
     }
-    .field, select, textarea{
+    .field{
       width:100%;
       padding:14px 14px;
       border-radius:14px;
@@ -150,13 +148,7 @@
       color:var(--txt);
       outline:none;
     }
-    textarea{ min-height:92px; resize:vertical; }
-    .help{
-      margin-top:8px;
-      color:rgba(234,242,255,.55);
-      font-size:12px;
-      line-height:1.35;
-    }
+    textarea.field{ min-height:92px; resize:vertical; }
 
     .tabs{ display:flex; gap:10px; margin:12px 0 10px; }
     .tabBtn{
@@ -218,42 +210,6 @@
       cursor:pointer;
     }
 
-    .row{
-      display:flex; align-items:center; justify-content:space-between; gap:12px;
-      padding:12px 12px;
-      background:rgba(7,10,19,.45);
-      border:1px solid rgba(61,220,255,.12);
-      border-radius:16px;
-    }
-    .row + .row{ margin-top:10px; }
-    .rowLeft{ display:flex; flex-direction:column; gap:4px; }
-    .rowBig{ font-weight:800; font-size:18px; letter-spacing:.04em; }
-    .rowSmall{ color:var(--muted); font-size:12px; letter-spacing:.08em; }
-
-    .kpi{ text-align:right; font-weight:800; color:rgba(39,215,255,.92); }
-    .kpi small{
-      display:block;
-      color:rgba(234,242,255,.55);
-      font-weight:700;
-      letter-spacing:.10em;
-      text-transform:uppercase;
-      margin-top:4px;
-    }
-
-    .progress{
-      height:10px;
-      border-radius:999px;
-      background:rgba(234,242,255,.10);
-      overflow:hidden;
-      border:1px solid rgba(61,220,255,.10);
-    }
-    .progress > span{
-      display:block;
-      height:100%;
-      width:0%;
-      background: linear-gradient(90deg, rgba(39,215,255,.95), rgba(123,75,255,.95));
-    }
-
     .listItem{
       display:flex;
       justify-content:space-between;
@@ -266,7 +222,15 @@
     }
     .listItem + .listItem{ margin-top:10px; }
     .meta{ font-size:11px; color:rgba(234,242,255,.62); letter-spacing:.08em; text-transform:uppercase; }
-
+    .kpi{ text-align:right; font-weight:800; color:rgba(39,215,255,.92); }
+    .kpi small{
+      display:block;
+      color:rgba(234,242,255,.55);
+      font-weight:700;
+      letter-spacing:.10em;
+      text-transform:uppercase;
+      margin-top:4px;
+    }
     .empty{
       padding:16px;
       border-radius:18px;
@@ -394,7 +358,6 @@
         </div>
       </div>
 
-      <!-- status pill also acts as quick account access -->
       <div class="pill" id="statusPill" title="Account / Subscription">
         <span class="dot warn" id="statusDot"></span>
         <span id="statusText">CONNECTING…</span>
@@ -424,22 +387,22 @@
     </div>
 
     <nav class="bottomNav" aria-label="Primary">
-      <a class="navItem" href="#/campaigns" data-route="campaigns" title="Campaigns">
+      <a class="navItem" href="#/campaigns" title="Campaigns">
         <span class="ico">▦</span><span class="lbl">Campaigns</span>
       </a>
-      <a class="navItem" href="#/telemetry" data-route="telemetry" title="Feed">
+      <a class="navItem" href="#/telemetry" title="Feed">
         <span class="ico">◉</span><span class="lbl">Feed</span>
       </a>
-      <a class="navItem" href="#/submit" data-route="submit" title="Submit">
+      <a class="navItem" href="#/submit" title="Submit">
         <span class="ico">⌖</span><span class="lbl">Submit</span>
       </a>
-      <a class="navItem" href="#/leaderboard" data-route="leaderboard" title="Ranks (Paid)">
+      <a class="navItem" href="#/leaderboard" title="Ranks (Paid)">
         <span class="ico">🏆</span><span class="lbl">Ranks</span>
       </a>
-      <a class="navItem" href="#/billing" data-route="billing" title="Billing">
+      <a class="navItem" href="#/billing" title="Billing">
         <span class="ico">⛨</span><span class="lbl">Billing</span>
       </a>
-      <a class="navItem" href="#/profile" data-route="profile" title="Account">
+      <a class="navItem" href="#/profile" title="Account">
         <span class="ico">⦿</span><span class="lbl">Account</span>
       </a>
     </nav>
@@ -447,49 +410,45 @@
 
   <script>
     /******************************************************************
-     * HELVARIX GLOBAL ARRAY — PRODUCTION-FACING FRONTEND (SINGLE FILE)
+     * HELVARIX GLOBAL ARRAY — SINGLE-FILE FRONTEND
      *
-     * No mock data:
-     * - Campaigns: GET from /api/campaigns
-     * - Telemetry: GET/POST to /api/telemetry
-     * - Leaderboard: GET from /api/leaderboard
-     * - Subscription: GET from /api/billing/subscription
-     *
-     * Auth:
-     * - Supabase email/password (real accounts)
-     *
-     * Paywall:
-     * - Stripe checkout is initiated via backend endpoint.
-     * - Access checks are enforced via subscription status from backend.
+     * Real data expects your backend routes:
+     *   GET  /api/campaigns?status=active
+     *   GET  /api/telemetry?limit=25
+     *   POST /api/telemetry
+     *   GET  /api/leaderboard?scope=global
+     *   GET  /api/billing/subscription
+     *   POST /api/stripe/create-checkout-session
+     *   POST /api/stripe/create-portal-session
+     *   GET  /api/me
+     *   POST /api/profile
      ******************************************************************/
 
-    /******************** CONFIG YOU MUST SET ********************/
-    // Supabase project settings (Project URL + anon public key)
+    /******************** CONFIG (SET THESE) ********************/
     const SUPABASE_URL = "REPLACE_WITH_SUPABASE_URL";
     const SUPABASE_ANON_KEY = "REPLACE_WITH_SUPABASE_ANON_KEY";
 
-    // Backend base path
-    // If you use Cloudflare Pages Functions, /api/* can be hosted on the same domain.
+    // same-domain backend (Cloudflare Pages Functions, etc.)
     const API_BASE = "";
 
-    // Pricing labels (UI only). Real billing is enforced by /api/billing/subscription
     const PLANS = {
       monthly: { label: "$15 / month" },
       yearly:  { label: "$150 / year" }
     };
 
-    // Which routes require active membership:
     const PAYWALLED_ROUTES = new Set([
       "/submit",
       "/leaderboard"
     ]);
 
-    /******************** INIT SUPABASE ********************/
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    /******************** INIT SUPABASE (DECLARED ONCE) ********************/
+    // IMPORTANT: we name the client "sb" to avoid "supabase already declared" collisions.
+    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     /******************** DOM helpers ********************/
     const $ = (sel, root=document) => root.querySelector(sel);
     const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+
     function el(tag, props={}, ...children){
       const node = document.createElement(tag);
       Object.assign(node, props);
@@ -514,6 +473,7 @@
     let toastTimer = null;
 
     toastClose.addEventListener("click", hideToast);
+
     function showToast(title, msg, ms=2800){
       toastTitle.textContent = title;
       toastMsg.textContent = msg;
@@ -544,9 +504,9 @@
       modalBody.innerHTML = "";
     }
 
-    /******************** API client (real data only) ********************/
+    /******************** API client ********************/
     async function getAccessToken(){
-      const { data } = await supabase.auth.getSession();
+      const { data } = await sb.auth.getSession();
       return data.session?.access_token || null;
     }
 
@@ -556,13 +516,9 @@
       headers.set("Content-Type", "application/json");
       if (token) headers.set("Authorization", `Bearer ${token}`);
 
-      const res = await fetch(API_BASE + path, {
-        ...options,
-        headers
-      });
-
-      // Attempt to parse JSON; if none, throw a useful error
+      const res = await fetch(API_BASE + path, { ...options, headers });
       const text = await res.text();
+
       let payload = null;
       try { payload = text ? JSON.parse(text) : null; } catch { payload = null; }
 
@@ -579,24 +535,18 @@
     /******************** App state ********************/
     const STATE = {
       user: null,
-      profile: null,           // from backend
-      subscription: null,      // from backend
-      campaigns: [],           // from backend
-      telemetry: [],           // from backend
-      leaderboard: []          // from backend
+      profile: null,
+      subscription: null,
+      campaigns: [],
+      telemetry: [],
+      leaderboard: []
     };
 
     function isSignedIn(){ return !!STATE.user; }
-    function isPaid(){
-      // expects backend shape like: { active: true/false, plan: "monthly"|"yearly"|null, current_period_end: ISO string }
-      return !!STATE.subscription?.active;
-    }
+    function isPaid(){ return !!STATE.subscription?.active; }
+    function routeRequiresPaid(path){ return PAYWALLED_ROUTES.has(path); }
 
-    function routeRequiresPaid(path){
-      return PAYWALLED_ROUTES.has(path);
-    }
-
-    /******************** UI status pill + nav locks ********************/
+    /******************** Status pill + nav locks ********************/
     const statusPill = $("#statusPill");
     statusPill.addEventListener("click", () => { location.hash = "#/profile"; });
 
@@ -642,7 +592,7 @@
       });
     }
 
-    /******************** Router ********************/
+    /******************** Router (async-safe) ********************/
     const routes = {
       "/campaigns": renderCampaigns,
       "/telemetry": renderTelemetry,
@@ -652,19 +602,17 @@
       "/profile": renderProfile
     };
 
-    window.addEventListener("hashchange", render);
+    window.addEventListener("hashchange", () => { render(); });
 
     boot();
 
     async function boot(){
       if (!location.hash) location.hash = "#/campaigns";
 
-      // Load session
-      const { data } = await supabase.auth.getSession();
+      const { data } = await sb.auth.getSession();
       STATE.user = data.session?.user || null;
 
-      // Listen for auth changes
-      supabase.auth.onAuthStateChange(async (_event, session) => {
+      sb.auth.onAuthStateChange(async (_event, session) => {
         STATE.user = session?.user || null;
         STATE.profile = null;
         STATE.subscription = null;
@@ -672,32 +620,27 @@
         STATE.telemetry = [];
         STATE.leaderboard = [];
         await hydrateCore();
-        render();
+        await render();
       });
 
       await hydrateCore();
-      render();
+      await render();
     }
 
     async function hydrateCore(){
       updateStatusPill();
       updateNavLocks();
 
-      if (!isSignedIn()){
-        // Not signed in => nothing to fetch
-        return;
-      }
+      if (!isSignedIn()) return;
 
-      // Fetch subscription + profile (backend is source of truth)
       try{
         const [subRes, meRes] = await Promise.all([
           api("/api/billing/subscription", { method: "GET" }),
           api("/api/me", { method: "GET" })
         ]);
-        STATE.subscription = subRes; // {active, plan, current_period_end, ...}
+        STATE.subscription = subRes;
         STATE.profile = meRes?.profile || null;
-      } catch(e){
-        // if backend isn't wired yet, keep UX understandable
+      }catch(e){
         STATE.subscription = { active:false, plan:null, current_period_end:null };
         showToast("Backend Not Ready", "Subscription/profile endpoints not responding yet.");
       }
@@ -706,14 +649,14 @@
       updateNavLocks();
     }
 
-    function render(){
+    async function render(){
       const pathFull = (location.hash || "#/campaigns").replace("#","") || "/campaigns";
       const path = pathFull.split("?")[0];
 
       // highlight nav
       $$(".navItem").forEach(a => a.classList.toggle("active", a.getAttribute("href") === `#${path}`));
 
-      // enforce sign-in on key routes (submit/leaderboard/billing/profile need auth)
+      // enforce sign-in on protected routes
       if (!isSignedIn() && (path === "/submit" || path === "/leaderboard" || path === "/billing" || path === "/profile")){
         location.hash = "#/profile";
         return;
@@ -728,7 +671,9 @@
       const view = $("#view");
       const fn = routes[path] || renderNotFound;
       view.innerHTML = "";
-      fn(view);
+
+      // IMPORTANT: await async pages so errors are predictable
+      await fn(view);
 
       updateStatusPill();
       updateNavLocks();
@@ -738,11 +683,12 @@
       root.append(h1("Not Found"), sub("Route does not exist."));
     }
 
-    /******************** Shared components ********************/
+    /******************** Shared UI helpers ********************/
     function progressBar(pct){
       const wrap = el("div",{className:"progress"});
       const bar = el("span");
-      bar.style.width = `${Math.max(0, Math.min(100, Number(pct)||0))}%`;
+      const p = Math.max(0, Math.min(100, Number(pct)||0));
+      bar.style.width = `${p}%`;
       wrap.append(bar);
       return wrap;
     }
@@ -785,9 +731,8 @@
 
     /******************** PAGES ********************/
 
-    // 1) Campaigns (read-only, loaded from backend)
     async function renderCampaigns(root){
-     root.append(h1("Campaigns"), sub("Campaigns are generated by the operator."));
+      root.append(h1("Campaigns"), sub("Campaigns are generated by the operator."));
 
       const card = div("card");
       card.append(div("cardHeader",
@@ -796,11 +741,9 @@
       ));
 
       const body = div("");
+      body.append(empty("Loading", "Fetching campaign directives…"));
       card.append(body);
       root.append(card);
-
-      // load real campaigns
-      body.append(empty("Loading", "Fetching campaign directives…"));
 
       try{
         const res = await api("/api/campaigns?status=active", { method:"GET" });
@@ -808,7 +751,6 @@
         STATE.campaigns = campaigns;
 
         body.innerHTML = "";
-
         if (!campaigns.length){
           body.append(empty("No Active Campaigns", "No active missions are currently published."));
           return;
@@ -816,32 +758,27 @@
 
         for (const c of campaigns){
           const title = String(c.title || "Untitled Campaign");
-          const kind = String(c.kind || "campaign").toUpperCase(); // DAILY/WEEKLY/GLOBAL
+          const kind = String(c.kind || "campaign").toUpperCase();
           const desc = String(c.description || "");
-          const endsIn = c.ends_in ? String(c.ends_in) : ""; // backend can provide computed string
+          const endsIn = c.ends_in ? String(c.ends_in) : "";
           const progressPct = (typeof c.progress_pct === "number") ? c.progress_pct : null;
-          const progressText = c.progress_text ? String(c.progress_text) : ""; // e.g. "78,432 / 100,000 submissions"
+          const progressText = c.progress_text ? String(c.progress_text) : "";
 
           const item = div("card");
           item.append(div("cardHeader",
             el("div",{className:"cardTitle",textContent:title}),
             badge(kind, kind==="GLOBAL" ? "violet" : "cyan")
           ));
-          if (endsIn){
-            item.append(el("div",{className:"meta",textContent:`ENDS IN ${endsIn}`}));
-          }
-          if (desc){
-            item.append(el("div",{style:"color:rgba(234,242,255,.78); font-size:13px; line-height:1.45; margin-top:10px;"}, desc));
-          }
+
+          if (endsIn) item.append(el("div",{className:"meta",textContent:`ENDS IN ${endsIn}`}));
+          if (desc) item.append(el("div",{style:"color:rgba(234,242,255,.78); font-size:13px; line-height:1.45; margin-top:10px;"}, desc));
+
           if (progressText || progressPct !== null){
             item.append(hr());
-            if (progressText){
-              item.append(el("div",{className:"meta",textContent:progressText}));
-            }
-            if (progressPct !== null){
-              item.append(progressBar(progressPct));
-            }
+            if (progressText) item.append(el("div",{className:"meta",textContent:progressText}));
+            if (progressPct !== null) item.append(progressBar(progressPct));
           }
+
           root.append(item);
         }
       }catch(e){
@@ -851,7 +788,6 @@
       }
     }
 
-    // 2) Telemetry feed (real feed)
     async function renderTelemetry(root){
       root.append(h1("Community Telemetry Feed"), sub("Obfuscated Data Stream"));
 
@@ -860,11 +796,11 @@
         el("div",{className:"cardTitle",textContent:"Live Feed"}),
         badge("NETWORK")
       ));
+
       const body = div("");
+      body.append(empty("Loading", "Retrieving latest submissions…"));
       card.append(body);
       root.append(card);
-
-      body.append(empty("Loading", "Retrieving latest submissions…"));
 
       try{
         const res = await api("/api/telemetry?limit=25", { method:"GET" });
@@ -878,7 +814,6 @@
         }
 
         for (const t of rows){
-          // No mock: just display what backend provides
           const operator = String(t.operator_callsign || "—");
           const region = String(t.operator_region || "");
           const target = String(t.target || "—");
@@ -893,8 +828,11 @@
           left.append(el("div",{className:"meta",textContent:`${operator}${region ? " • "+region : ""}${ts ? " • "+ts : ""}`}));
           li.append(left);
 
-          const right = div("", badge(mode || "TELEMETRY", mode==="RADIO" ? "warn" : "cyan"));
-          if (snr) right.append(el("div",{style:"margin-top:8px; text-align:right;", className:"meta", textContent:`SNR: ${snr}`}));
+          const right = div("");
+          right.append(badge(mode || "TELEMETRY", mode==="RADIO" ? "warn" : "cyan"));
+          if (snr){
+            right.append(el("div",{style:"margin-top:8px; text-align:right;", className:"meta", textContent:`SNR: ${snr}`}));
+          }
           right.append(el("div",{style:"margin-top:6px; text-align:right;", className:"meta", textContent:`STATUS: ${status}`}));
           li.append(right);
 
@@ -907,7 +845,6 @@
       }
     }
 
-    // 3) Submit (paid + signed in)
     async function renderSubmit(root){
       root.append(h1("Data Logging Protocol"), sub("Telemetry Stream: Active"));
 
@@ -917,12 +854,11 @@
         badge("PROTOCOL", "violet")
       ));
 
-      // mode tabs
       const modeRow = div("tabs");
       const modes = ["visual","spectral","radio"];
       let currentMode = "visual";
-
       const modeBtns = {};
+
       for (const m of modes){
         const b = el("button",{className:"tabBtn"+(m==="visual"?" active":""), type:"button", textContent:m});
         b.addEventListener("click", ()=>{
@@ -936,7 +872,6 @@
       }
       card.append(modeRow);
 
-      // fields
       let target = "";
       let bortle = "4";
       let equipment = "";
@@ -968,7 +903,6 @@
         oninput:(v)=>equipment=v
       });
 
-      // optional but useful
       const fSNR = fieldInput("Signal-to-Noise Ratio (dB)", { placeholder:"e.g. 17.0", oninput:(v)=>snrDb=v, attrs:{ inputMode:"decimal" }});
       const fSeeing = fieldInput("Seeing (arcsec)", { placeholder:"e.g. 1.5", oninput:(v)=>seeingArcsec=v, attrs:{ inputMode:"decimal" }});
       const fTrans = fieldSelect("Transparency (1-5)", {
@@ -985,7 +919,7 @@
       const fInt = fieldInput("Total Integration (s)", { placeholder:"e.g. 300", oninput:(v)=>integrationSeconds=v, attrs:{ inputMode:"numeric" }});
 
       const fNotes = fieldTextarea("Encrypted Frame Data (Optional)", {
-        placeholder:"If your pipeline produces an encrypted payload reference, paste it here (or submit as file via your uploader later).",
+        placeholder:"If your pipeline produces an encrypted payload reference, paste it here.",
         oninput:(v)=>notes=v
       });
 
@@ -999,13 +933,11 @@
         fTrans.wrap,
         fInt.wrap,
         hr(),
-        fNotes.wrap,
-        el("div",{className:"help"}, "Verified telemetry metadata requires precise documentation. Submissions enter PENDING state until peer validation.")
+        fNotes.wrap
       );
 
       const btn = el("button",{className:"primary", textContent:"COMMIT DATA TO NETWORK", type:"button"});
       btn.addEventListener("click", async ()=>{
-        // hard validation (no mock)
         if (!target.trim()){
           showToast("Target Required", "Enter a target object (e.g. M31).");
           return;
@@ -1045,7 +977,6 @@
       root.append(card);
     }
 
-    // 4) Leaderboard (paid, real only)
     async function renderLeaderboard(root){
       root.append(h1("Global Sector Rankings"), sub("Reputation economy reflects validated telemetry."));
 
@@ -1054,11 +985,11 @@
         el("div",{className:"cardTitle",textContent:"Rankings"}),
         badge("PAID", "violet")
       ));
+
       const body = div("");
+      body.append(empty("Loading", "Aggregating network reputation metrics…"));
       card.append(body);
       root.append(card);
-
-      body.append(empty("Loading", "Aggregating network reputation metrics…"));
 
       try{
         const res = await api("/api/leaderboard?scope=global", { method:"GET" });
@@ -1098,8 +1029,7 @@
       }
     }
 
-    // 5) Billing (sign-in required; upgrades via backend Stripe session)
-    function renderBilling(root){
+    async function renderBilling(root){
       root.append(h1("Spectre Pro Tier"), sub("Operational participation requires membership."));
 
       const card = div("card");
@@ -1108,13 +1038,13 @@
         badge(isPaid() ? "ACTIVE" : "UPGRADE", isPaid() ? "cyan" : "warn")
       ));
 
-      const copy = el("div",{style:"color:rgba(234,242,255,.78); font-size:13px; line-height:1.5; margin-top:8px;"},
-        "Advanced analytical precision, predictive simulation, and priority certification. ",
-        "Elevate your observation strategy without compromising network integrity."
+      card.append(
+        el("div",{style:"color:rgba(234,242,255,.78); font-size:13px; line-height:1.5; margin-top:8px;"},
+          "Membership is enforced server-side via Stripe subscription checks."
+        ),
+        hr()
       );
-      card.append(copy, hr());
 
-      // Show current subscription status (real)
       if (STATE.subscription){
         const s = STATE.subscription;
         const line = el("div",{className:"meta", style:"margin-bottom:10px;"});
@@ -1135,12 +1065,6 @@
 
       async function startCheckout(plan){
         try{
-          if (!isSignedIn()){
-            showToast("Sign In Required", "Create an account to enroll.");
-            location.hash = "#/profile";
-            return;
-          }
-          // Backend creates Stripe checkout session; returns { url }
           const res = await api("/api/stripe/create-checkout-session", {
             method:"POST",
             body: JSON.stringify({ plan })
@@ -1152,11 +1076,13 @@
         }
       }
 
-      // If active, show a manage link (optional backend can return portal url)
       const manageBtn = el("button",{className:"secondary", type:"button", textContent:"MANAGE SUBSCRIPTION"});
       manageBtn.addEventListener("click", async ()=>{
         try{
-          const res = await api("/api/stripe/create-portal-session", { method:"POST", body: JSON.stringify({}) });
+          const res = await api("/api/stripe/create-portal-session", {
+            method:"POST",
+            body: JSON.stringify({})
+          });
           if (!res?.url) throw new Error("Portal session missing URL.");
           window.location.href = res.url;
         }catch(e){
@@ -1165,19 +1091,15 @@
       });
 
       card.append(btnMonthly, btnYearly);
-
-      if (isPaid()){
-        card.append(hr(), manageBtn);
-      }
+      if (isPaid()) card.append(hr(), manageBtn);
 
       root.append(card);
     }
 
-    // 6) Profile / Account (Supabase email auth + profile saved via backend)
-    function renderProfile(root){
+    async function renderProfile(root){
       root.append(h1("Account"), sub("Identity layer: member credentials and operator profile."));
 
-      // If not signed in: show sign up / sign in
+      // SIGNED OUT
       if (!isSignedIn()){
         const card = div("card");
         card.append(div("cardHeader",
@@ -1197,7 +1119,7 @@
         btnIn.addEventListener("click", async ()=>{
           try{
             btnIn.disabled = true; btnUp.disabled = true;
-            const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+            const { error } = await sb.auth.signInWithPassword({ email: email.trim(), password });
             if (error) throw error;
             showToast("Signed In", "Welcome to Helvarix.");
           }catch(e){
@@ -1210,7 +1132,7 @@
         btnUp.addEventListener("click", async ()=>{
           try{
             btnIn.disabled = true; btnUp.disabled = true;
-            const { error } = await supabase.auth.signUp({ email: email.trim(), password });
+            const { error } = await sb.auth.signUp({ email: email.trim(), password });
             if (error) throw error;
             showToast("Account Created", "Check your email if confirmation is enabled.");
           }catch(e){
@@ -1222,19 +1144,10 @@
 
         card.append(fE.wrap, fP.wrap, hr(), btnIn, btnUp);
         root.append(card);
-
-        // explain briefly
-        root.append(div("card",
-          div("cardHeader", el("div",{className:"cardTitle",textContent:"Notes"}), badge("INFO")),
-          el("div",{style:"color:rgba(234,242,255,.74); font-size:13px; line-height:1.5;"},
-            "This platform requires an account before operational access. ",
-            "Membership gates are enforced server-side via Stripe subscription checks."
-          )
-        ));
         return;
       }
 
-      // Signed in: show profile editor + sign out
+      // SIGNED IN
       const card = div("card");
       card.append(div("cardHeader",
         el("div",{className:"cardTitle",textContent:"Operator Profile"}),
@@ -1280,7 +1193,7 @@
       });
 
       outBtn.addEventListener("click", async ()=>{
-        await supabase.auth.signOut();
+        await sb.auth.signOut();
       });
 
       card.append(fC.wrap, fR.wrap, fEQ.wrap, hr(), saveBtn, outBtn);
