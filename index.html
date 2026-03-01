@@ -894,8 +894,8 @@
           li.append(left);
 
           const right = div("", badge(mode || "TELEMETRY", mode==="RADIO" ? "warn" : "cyan"));
-          if (snr) right.append(el("div",{style:"margin-top:8px; textAlign:"right", className:"meta", textContent:`SNR: ${snr}`}));
-          right.append(el("div",{style:"margin-top:6px; textAlign:"right", className:"meta", textContent:`STATUS: ${status}`}));
+          if (snr) right.append(el("div",{style:"margin-top:8px; text-align:right;", className:"meta", textContent:`SNR: ${snr}`}));
+          right.append(el("div",{style:"margin-top:6px; text-align:right;", className:"meta", textContent:`STATUS: ${status}`}));
           li.append(right);
 
           body.append(li);
