@@ -3,11 +3,16 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Helvarix Array</title>
+  <title>Helvarix Global Array</title>
   <meta name="theme-color" content="#070A13" />
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;800&display=swap" rel="stylesheet">
+
+  <!-- Supabase JS (Auth) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
   <style>
     :root{
       --bg:#050710;
@@ -41,6 +46,7 @@
     }
     a{ color:inherit; text-decoration:none; }
     button, input, select, textarea{ font-family:inherit; }
+
     .app-shell{ min-height:100%; display:flex; flex-direction:column; }
 
     .topbar{
@@ -75,6 +81,7 @@
       text-transform:uppercase;
       user-select:none;
       white-space:nowrap;
+      cursor:pointer;
     }
     .dot{ width:8px; height:8px; border-radius:50%; display:inline-block; }
     .dot.cyan{ background:var(--cyan); box-shadow:0 0 20px rgba(39,215,255,.35); }
@@ -123,6 +130,7 @@
     .badge.violet{ border-color:rgba(123,75,255,.30); }
     .badge.cyan{ border-color:rgba(39,215,255,.30); }
     .badge.warn{ border-color:rgba(255,204,92,.35); color:rgba(255,204,92,.92); }
+    .badge.bad{ border-color:rgba(255,92,122,.35); color:rgba(255,92,122,.92); }
 
     .hr{ height:1px; background:rgba(61,220,255,.12); margin:14px 0; }
 
@@ -258,6 +266,7 @@
     }
     .listItem + .listItem{ margin-top:10px; }
     .meta{ font-size:11px; color:rgba(234,242,255,.62); letter-spacing:.08em; text-transform:uppercase; }
+
     .empty{
       padding:16px;
       border-radius:18px;
@@ -295,10 +304,6 @@
       box-shadow: 0 0 0 2px rgba(39,215,255,.08) inset;
     }
     .navItem.locked{ opacity:.55; }
-    .navItem.locked .ico{ filter: grayscale(1); }
-    .grid{ display:grid; gap:14px; }
-    .grid.two{ grid-template-columns: 1fr; }
-    @media(min-width:920px){ .grid.two{ grid-template-columns: 1.2fr .8fr; } }
 
     .toastWrap{
       position:fixed;
@@ -388,9 +393,11 @@
           <div class="brandSub">GLOBAL ARRAY</div>
         </div>
       </div>
+
+      <!-- status pill also acts as quick account access -->
       <div class="pill" id="statusPill" title="Account / Subscription">
         <span class="dot warn" id="statusDot"></span>
-        <span id="statusText">SIGN IN REQUIRED</span>
+        <span id="statusText">CONNECTING…</span>
       </div>
     </header>
 
@@ -432,7 +439,7 @@
       <a class="navItem" href="#/billing" data-route="billing" title="Billing">
         <span class="ico">⛨</span><span class="lbl">Billing</span>
       </a>
-      <a class="navItem" href="#/profile" data-route="profile" title="Profile">
+      <a class="navItem" href="#/profile" data-route="profile" title="Account">
         <span class="ico">⦿</span><span class="lbl">Account</span>
       </a>
     </nav>
@@ -440,13 +447,45 @@
 
   <script>
     /******************************************************************
-     * HELVARIX ARRAY — CLIENT-SIDE BUILD
-     * - Users cannot create campaigns; campaigns load from campaigns.json
-     * - "Account" is local-only: email stored in localStorage
-     * - Paywall is UI-only in client-side mode (no server verification)
-     *   You can link to Stripe Checkout/Payment Links and mark "paid"
-     *   on return, but real enforcement requires backend verification.
+     * HELVARIX GLOBAL ARRAY — PRODUCTION-FACING FRONTEND (SINGLE FILE)
+     *
+     * No mock data:
+     * - Campaigns: GET from /api/campaigns
+     * - Telemetry: GET/POST to /api/telemetry
+     * - Leaderboard: GET from /api/leaderboard
+     * - Subscription: GET from /api/billing/subscription
+     *
+     * Auth:
+     * - Supabase email/password (real accounts)
+     *
+     * Paywall:
+     * - Stripe checkout is initiated via backend endpoint.
+     * - Access checks are enforced via subscription status from backend.
      ******************************************************************/
+
+    /******************** CONFIG YOU MUST SET ********************/
+    // Supabase project settings (Project URL + anon public key)
+    const SUPABASE_URL = "REPLACE_WITH_SUPABASE_URL";
+    const SUPABASE_ANON_KEY = "REPLACE_WITH_SUPABASE_ANON_KEY";
+
+    // Backend base path
+    // If you use Cloudflare Pages Functions, /api/* can be hosted on the same domain.
+    const API_BASE = "";
+
+    // Pricing labels (UI only). Real billing is enforced by /api/billing/subscription
+    const PLANS = {
+      monthly: { label: "$15 / month" },
+      yearly:  { label: "$150 / year" }
+    };
+
+    // Which routes require active membership:
+    const PAYWALLED_ROUTES = new Set([
+      "/submit",
+      "/leaderboard"
+    ]);
+
+    /******************** INIT SUPABASE ********************/
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     /******************** DOM helpers ********************/
     const $ = (sel, root=document) => root.querySelector(sel);
@@ -475,7 +514,7 @@
     let toastTimer = null;
 
     toastClose.addEventListener("click", hideToast);
-    function showToast(title, msg, ms=2600){
+    function showToast(title, msg, ms=2800){
       toastTitle.textContent = title;
       toastMsg.textContent = msg;
       toastEl.classList.add("show");
@@ -505,154 +544,61 @@
       modalBody.innerHTML = "";
     }
 
-    /******************** Storage (structured) ********************/
-    const LS = {
-      get(key, fallback){
-        try{
-          const raw = localStorage.getItem(key);
-          return raw ? JSON.parse(raw) : fallback;
-        }catch{ return fallback; }
-      },
-      set(key, val){ localStorage.setItem(key, JSON.stringify(val)); }
-    };
+    /******************** API client (real data only) ********************/
+    async function getAccessToken(){
+      const { data } = await supabase.auth.getSession();
+      return data.session?.access_token || null;
+    }
 
-    /******************** IndexedDB (files) ********************/
-    const IDB_NAME = "helvarix_files";
-    const IDB_STORE = "files";
+    async function api(path, options={}){
+      const token = await getAccessToken();
+      const headers = new Headers(options.headers || {});
+      headers.set("Content-Type", "application/json");
+      if (token) headers.set("Authorization", `Bearer ${token}`);
 
-    function idbOpen(){
-      return new Promise((resolve, reject) => {
-        const req = indexedDB.open(IDB_NAME, 1);
-        req.onupgradeneeded = () => {
-          const db = req.result;
-          if (!db.objectStoreNames.contains(IDB_STORE)){
-            db.createObjectStore(IDB_STORE, { keyPath: "id" });
-          }
-        };
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => reject(req.error);
+      const res = await fetch(API_BASE + path, {
+        ...options,
+        headers
       });
-    }
-    async function idbPutFile(record){
-      const db = await idbOpen();
-      return new Promise((resolve, reject) => {
-        const tx = db.transaction(IDB_STORE, "readwrite");
-        tx.objectStore(IDB_STORE).put(record);
-        tx.oncomplete = () => { db.close(); resolve(true); };
-        tx.onerror = () => { const err = tx.error; db.close(); reject(err); };
-      });
-    }
-    async function idbGetFile(id){
-      const db = await idbOpen();
-      return new Promise((resolve, reject) => {
-        const tx = db.transaction(IDB_STORE, "readonly");
-        const req = tx.objectStore(IDB_STORE).get(id);
-        req.onsuccess = () => { const v = req.result || null; db.close(); resolve(v); };
-        req.onerror = () => { const err = req.error; db.close(); reject(err); };
-      });
-    }
-    async function idbDeleteFile(id){
-      const db = await idbOpen();
-      return new Promise((resolve, reject) => {
-        const tx = db.transaction(IDB_STORE, "readwrite");
-        tx.objectStore(IDB_STORE).delete(id);
-        tx.oncomplete = () => { db.close(); resolve(true); };
-        tx.onerror = () => { const err = tx.error; db.close(); reject(err); };
-      });
-    }
 
-    /******************** Config ********************/
-    const PRICING = {
-      monthly: { label: "$15 / month", cents: 1500, days: 31 },
-      annual:  { label: "$150 / year", cents: 15000, days: 365 }
-    };
+      // Attempt to parse JSON; if none, throw a useful error
+      const text = await res.text();
+      let payload = null;
+      try { payload = text ? JSON.parse(text) : null; } catch { payload = null; }
 
-    // IMPORTANT:
-    // Put your Stripe Payment Link / Checkout URL here.
-    // These can be Stripe "Payment Links" (recommended) that redirect back to your site.
-    const STRIPE_LINKS = {
-      monthly: "REPLACE_WITH_STRIPE_PAYMENT_LINK_MONTHLY",
-      annual:  "REPLACE_WITH_STRIPE_PAYMENT_LINK_ANNUAL"
-    };
-
-    // Where Stripe should redirect after payment.
-    // If you use Stripe Payment Links, set their "After payment" redirect to:
-    //   https://yourdomain.com/#/billing?success=1&plan=monthly
-    //   https://yourdomain.com/#/billing?success=1&plan=annual
-    //
-    // In client-only mode, we will *trust that redirect* and mark them as paid locally.
-
-    /******************** Data Model ********************/
-    const DEFAULT_ACCOUNT = {
-      email: "",
-      createdAt: null
-    };
-
-    const DEFAULT_PROFILE = {
-      callsign: "",
-      region: "",
-      equipment: "",
-      allowGeo: false
-    };
-
-    const DEFAULT_SUBSCRIPTION = {
-      plan: "free",            // "free" | "monthly" | "annual"
-      active: false,
-      activeUntil: null,       // ISO date
-      lastUpdatedAt: null
-    };
-
-    const DB = {
-      account: LS.get("hvx_account", DEFAULT_ACCOUNT),
-      profile: LS.get("hvx_profile", DEFAULT_PROFILE),
-      subscription: LS.get("hvx_subscription", DEFAULT_SUBSCRIPTION),
-
-      campaigns: [], // loaded from campaigns.json
-      submissions: LS.get("hvx_submissions", [])
-    };
-
-    function saveAll(){
-      LS.set("hvx_account", DB.account);
-      LS.set("hvx_profile", DB.profile);
-      LS.set("hvx_subscription", DB.subscription);
-      LS.set("hvx_submissions", DB.submissions);
-    }
-
-    /******************** Auth & Paywall logic ********************/
-    function normalizeEmail(s){ return String(s||"").trim().toLowerCase(); }
-    function isValidEmail(s){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s); }
-
-    function isSignedIn(){
-      return !!DB.account.email && isValidEmail(DB.account.email);
-    }
-
-    function refreshSubscriptionStatus(){
-      const sub = DB.subscription;
-      if (!sub.activeUntil){
-        sub.active = false;
-        if (sub.plan !== "free") sub.plan = "free";
-        return;
+      if (!res.ok){
+        const msg = payload?.error || payload?.message || `Request failed (${res.status})`;
+        const err = new Error(msg);
+        err.status = res.status;
+        err.payload = payload;
+        throw err;
       }
-      const now = Date.now();
-      const until = new Date(sub.activeUntil).getTime();
-      sub.active = until > now;
-      if (!sub.active) sub.plan = "free";
+      return payload;
     }
 
+    /******************** App state ********************/
+    const STATE = {
+      user: null,
+      profile: null,           // from backend
+      subscription: null,      // from backend
+      campaigns: [],           // from backend
+      telemetry: [],           // from backend
+      leaderboard: []          // from backend
+    };
+
+    function isSignedIn(){ return !!STATE.user; }
     function isPaid(){
-      refreshSubscriptionStatus();
-      return DB.subscription.active === true && (DB.subscription.plan === "monthly" || DB.subscription.plan === "annual");
+      // expects backend shape like: { active: true/false, plan: "monthly"|"yearly"|null, current_period_end: ISO string }
+      return !!STATE.subscription?.active;
     }
-
-    // Decide which features are paid.
-    // You can change these gates to whatever you want.
-    const PAYWALLED_ROUTES = new Set([
-      "/leaderboard" // for example: ranks are paid
-    ]);
 
     function routeRequiresPaid(path){
       return PAYWALLED_ROUTES.has(path);
     }
+
+    /******************** UI status pill + nav locks ********************/
+    const statusPill = $("#statusPill");
+    statusPill.addEventListener("click", () => { location.hash = "#/profile"; });
 
     function updateStatusPill(){
       const dot = $("#statusDot");
@@ -663,10 +609,20 @@
         text.textContent = "SIGN IN REQUIRED";
         return;
       }
+
+      if (STATE.subscription === null){
+        dot.className = "dot warn";
+        text.textContent = "CHECKING ACCESS…";
+        return;
+      }
+
       if (isPaid()){
         dot.className = "dot cyan";
-        const until = DB.subscription.activeUntil ? new Date(DB.subscription.activeUntil).toISOString().slice(0,10) : "";
-        text.textContent = `ACTIVE • ${DB.subscription.plan.toUpperCase()} • ${until}`;
+        const plan = (STATE.subscription.plan || "ACTIVE").toString().toUpperCase();
+        const until = STATE.subscription.current_period_end
+          ? new Date(STATE.subscription.current_period_end).toISOString().slice(0,10)
+          : "";
+        text.textContent = until ? `ACTIVE • ${plan} • ${until}` : `ACTIVE • ${plan}`;
       } else {
         dot.className = "dot warn";
         text.textContent = "FREE • UPGRADE";
@@ -680,6 +636,8 @@
         const path = href.startsWith("#") ? href.slice(1) : href;
         if (routeRequiresPaid(path)){
           a.classList.toggle("locked", !paid);
+        } else {
+          a.classList.remove("locked");
         }
       });
     }
@@ -694,75 +652,84 @@
       "/profile": renderProfile
     };
 
-    init();
+    window.addEventListener("hashchange", render);
 
-    async function init(){
+    boot();
+
+    async function boot(){
       if (!location.hash) location.hash = "#/campaigns";
 
-      window.addEventListener("hashchange", render);
+      // Load session
+      const { data } = await supabase.auth.getSession();
+      STATE.user = data.session?.user || null;
 
-      // Load campaigns from JSON (you control this file)
-      await loadCampaigns();
-      refreshSubscriptionStatus();
-      updateStatusPill();
-      updateNavLocks();
+      // Listen for auth changes
+      supabase.auth.onAuthStateChange(async (_event, session) => {
+        STATE.user = session?.user || null;
+        STATE.profile = null;
+        STATE.subscription = null;
+        STATE.campaigns = [];
+        STATE.telemetry = [];
+        STATE.leaderboard = [];
+        await hydrateCore();
+        render();
+      });
+
+      await hydrateCore();
       render();
     }
 
-    async function loadCampaigns(){
-      // Try campaigns.json, otherwise fallback to empty.
-      try{
-        const res = await fetch("./campaigns.json", { cache:"no-store" });
-        if (!res.ok) throw new Error("campaigns.json not found");
-        const data = await res.json();
-        if (!Array.isArray(data)) throw new Error("campaigns.json must be an array");
-        // Normalize / validate lightly
-        DB.campaigns = data
-          .filter(c => c && typeof c === "object")
-          .map(c => ({
-            id: c.id || crypto.randomUUID?.() || String(Date.now()) + "_" + Math.random().toString(16).slice(2),
-            kind: c.kind || "daily",
-            title: String(c.title || "Untitled Campaign"),
-            description: String(c.description || ""),
-            mode: c.mode || "any",
-            target: String(c.target || ""),
-            goalSubmissions: Number.isFinite(Number(c.goalSubmissions)) ? Number(c.goalSubmissions) : null,
-            startAt: c.startAt || null,
-            endAt: c.endAt || null,
-            archived: !!c.archived,
-            createdAt: c.createdAt || null
-          }));
-      }catch(err){
-        console.warn(err);
-        DB.campaigns = [];
+    async function hydrateCore(){
+      updateStatusPill();
+      updateNavLocks();
+
+      if (!isSignedIn()){
+        // Not signed in => nothing to fetch
+        return;
       }
+
+      // Fetch subscription + profile (backend is source of truth)
+      try{
+        const [subRes, meRes] = await Promise.all([
+          api("/api/billing/subscription", { method: "GET" }),
+          api("/api/me", { method: "GET" })
+        ]);
+        STATE.subscription = subRes; // {active, plan, current_period_end, ...}
+        STATE.profile = meRes?.profile || null;
+      } catch(e){
+        // if backend isn't wired yet, keep UX understandable
+        STATE.subscription = { active:false, plan:null, current_period_end:null };
+        showToast("Backend Not Ready", "Subscription/profile endpoints not responding yet.");
+      }
+
+      updateStatusPill();
+      updateNavLocks();
     }
 
     function render(){
-      // billing success handler (client-side trusted redirect)
-      handleBillingSuccessIfPresent();
-
-      const path = location.hash.replace("#","") || "/campaigns";
-      const view = $("#view");
-      const fn = routes[path.split("?")[0]] || renderNotFound;
-
-      // Gate: email sign-in required for most actions
-      // Campaign list can be viewed unsigned, but submitting requires sign-in.
-      // Paid routes require paid plan.
-      const cleanPath = path.split("?")[0];
+      const pathFull = (location.hash || "#/campaigns").replace("#","") || "/campaigns";
+      const path = pathFull.split("?")[0];
 
       // highlight nav
-      $$(".navItem").forEach(a => a.classList.toggle("active", a.getAttribute("href") === `#${cleanPath}`));
+      $$(".navItem").forEach(a => a.classList.toggle("active", a.getAttribute("href") === `#${path}`));
 
-      // route enforcement
-      if (routeRequiresPaid(cleanPath) && !isPaid()){
+      // enforce sign-in on key routes (submit/leaderboard/billing/profile need auth)
+      if (!isSignedIn() && (path === "/submit" || path === "/leaderboard" || path === "/billing" || path === "/profile")){
+        location.hash = "#/profile";
+        return;
+      }
+
+      // enforce paywall
+      if (routeRequiresPaid(path) && !isPaid()){
         location.hash = "#/billing";
         return;
       }
 
+      const view = $("#view");
+      const fn = routes[path] || renderNotFound;
       view.innerHTML = "";
       fn(view);
-      saveAll();
+
       updateStatusPill();
       updateNavLocks();
     }
@@ -771,97 +738,15 @@
       root.append(h1("Not Found"), sub("Route does not exist."));
     }
 
-    /******************** Utility ********************/
-    const uid = () => (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + "_" + Math.random().toString(16).slice(2));
-    const clamp = (n,a,b)=>Math.max(a,Math.min(b,n));
-    const fmtUTC = (d)=> new Date(d).toISOString().replace("T"," ").slice(0,16) + " UTC";
-
+    /******************** Shared components ********************/
     function progressBar(pct){
       const wrap = el("div",{className:"progress"});
       const bar = el("span");
-      bar.style.width = `${clamp(pct,0,100)}%`;
+      bar.style.width = `${Math.max(0, Math.min(100, Number(pct)||0))}%`;
       wrap.append(bar);
       return wrap;
     }
 
-    function requireSignedIn(){
-      if (!isSignedIn()){
-        showToast("Sign In Required", "Enter your email on the Account tab to continue.");
-        location.hash = "#/profile";
-        return false;
-      }
-      return true;
-    }
-
-    function requireProfileReady(){
-      if (!requireSignedIn()) return false;
-      if (!DB.profile.callsign || !DB.profile.region){
-        showToast("Profile Required", "Set callsign and region on the Account tab to submit.");
-        location.hash = "#/profile";
-        return false;
-      }
-      return true;
-    }
-
-    function computeOIForSubmission(sub){
-      const integ = Number(sub.integrationSeconds || 0);
-      const snr = Number(sub.snrDb || 0);
-      const mode = sub.mode;
-      let base=200, wI=10, wS=5;
-      if (mode==="radio"){ base=220; wI=8; wS=6; }
-      if (mode==="spectral"){ base=240; wI=9; wS=6; }
-      const v = base + (integ / wI) + (snr * wS);
-      return Math.max(0, Math.round(v));
-    }
-
-    function computeCIForSubmission(sub){
-      const snr = Number(sub.snrDb || 0);
-      const seeing = Number(sub.seeingArcsec || 0);
-      const transparency = Number(sub.transparency || 0);
-      let score = 50 + snr * 8;
-      if (seeing) score += clamp((2.5 - seeing) * 20, -30, 30);
-      if (transparency) score += (transparency - 3) * 12;
-      return Math.max(0, Math.round(score));
-    }
-
-    function matchesCampaign(c, sub){
-      const now = Date.now();
-      if (c.startAt && now < new Date(c.startAt).getTime()) return false;
-      if (c.endAt && now > new Date(c.endAt).getTime()) return false;
-
-      if (c.mode && c.mode !== "any" && c.mode !== sub.mode) return false;
-
-      const t = (sub.target || "").trim().toLowerCase();
-      const ct = (c.target || "").trim().toLowerCase();
-      if (ct){
-        const list = ct.split(",").map(s=>s.trim()).filter(Boolean);
-        if (!list.some(x => t === x || t.startsWith(x))) return false;
-      }
-      return true;
-    }
-
-    function computeCampaignProgress(c){
-      const goal = Math.max(1, Number(c.goalSubmissions || 1));
-      const matching = DB.submissions.filter(s => matchesCampaign(c, s)).length;
-      const pct = clamp((matching / goal) * 100, 0, 100);
-      return { matching, goal, pct: Math.round(pct) };
-    }
-
-    function sortedLeaderboard(){
-      const map = new Map();
-      for (const s of DB.submissions){
-        const key = s.operatorCallsign || "UNKNOWN";
-        const cur = map.get(key) || { callsign:key, oi:0, ci:0, submissions:0, region: s.operatorRegion || "" };
-        cur.oi += Number(s.oi || 0);
-        cur.ci += Number(s.ci || 0);
-        cur.submissions += 1;
-        if (!cur.region && s.operatorRegion) cur.region = s.operatorRegion;
-        map.set(key, cur);
-      }
-      return Array.from(map.values()).sort((a,b)=>b.oi-a.oi);
-    }
-
-    /******************** Forms helpers ********************/
     function fieldInput(label, opts){
       const { type="text", placeholder="", value="", oninput=null, attrs={} } = opts || {};
       const wrap = el("div");
@@ -898,66 +783,11 @@
       return { wrap, select: sel };
     }
 
-    function fieldSlider(label, opts){
-      const { min=1, max=5, value=3, onchange=null } = opts || {};
-      const wrap = el("div");
-      wrap.append(el("div",{className:"label",textContent:label}));
-      const row = div("row");
-      const range = el("input",{ type:"range", min, max, value, style:"width:100%" });
-      const read = el("div",{ className:"kpi", textContent:String(value) });
-      range.addEventListener("input", () => {
-        read.textContent = String(range.value);
-        if (onchange) onchange(Number(range.value));
-      });
-      row.append(range, read);
-      wrap.append(row);
-      return { wrap, range };
-    }
-
-    function fileAcceptForMode(mode){
-      if (mode==="visual") return "image/*,.tif,.tiff,.fits,.fit,.zip,.json,.csv";
-      if (mode==="radio") return "audio/*,.wav,.zip,.json,.csv";
-      if (mode==="spectral") return ".zip,.json,.csv,.txt";
-      return "*/*";
-    }
-
-    /******************** Billing success handler ********************/
-    function handleBillingSuccessIfPresent(){
-      const hash = location.hash || "";
-      if (!hash.startsWith("#/billing")) return;
-
-      const qIndex = hash.indexOf("?");
-      if (qIndex === -1) return;
-
-      const qs = hash.slice(qIndex + 1);
-      const params = new URLSearchParams(qs);
-
-      const success = params.get("success");
-      const plan = params.get("plan");
-
-      if (success !== "1") return;
-      if (!plan || !(plan in PRICING)) return;
-
-      // Client-side TRUSTED redirect: mark as paid locally
-      const days = PRICING[plan].days;
-      const until = new Date(Date.now() + days * 24*60*60*1000);
-
-      DB.subscription.plan = plan;
-      DB.subscription.active = true;
-      DB.subscription.activeUntil = until.toISOString();
-      DB.subscription.lastUpdatedAt = new Date().toISOString();
-      saveAll();
-
-      // remove query from hash so it doesn't re-trigger
-      location.hash = "#/billing";
-      showToast("Subscription Activated", `Plan: ${plan.toUpperCase()} (local unlock).`);
-    }
-
     /******************** PAGES ********************/
 
-    // Campaigns (read-only)
-    function renderCampaigns(root){
-      root.append(h1("Campaigns"), sub("Campaigns are generated by the operator."));
+    // 1) Campaigns (read-only, loaded from backend)
+    async function renderCampaigns(root){
+      root.append(h1("Campaigns"), sub("Campaigns are generated by the operator."िटर));
 
       const card = div("card");
       card.append(div("cardHeader",
@@ -965,12 +795,497 @@
         badge("READ-ONLY")
       ));
 
-      if (!DB.campaigns.length){
-        card.append(empty("No Campaigns Found",
-          "Add a campaigns.json next to index.html. This client will load and display campaigns from that file."
+      const body = div("");
+      card.append(body);
+      root.append(card);
+
+      // load real campaigns
+      body.append(empty("Loading", "Fetching campaign directives…"));
+
+      try{
+        const res = await api("/api/campaigns?status=active", { method:"GET" });
+        const campaigns = Array.isArray(res?.campaigns) ? res.campaigns : (Array.isArray(res) ? res : []);
+        STATE.campaigns = campaigns;
+
+        body.innerHTML = "";
+
+        if (!campaigns.length){
+          body.append(empty("No Active Campaigns", "No active missions are currently published."));
+          return;
+        }
+
+        for (const c of campaigns){
+          const title = String(c.title || "Untitled Campaign");
+          const kind = String(c.kind || "campaign").toUpperCase(); // DAILY/WEEKLY/GLOBAL
+          const desc = String(c.description || "");
+          const endsIn = c.ends_in ? String(c.ends_in) : ""; // backend can provide computed string
+          const progressPct = (typeof c.progress_pct === "number") ? c.progress_pct : null;
+          const progressText = c.progress_text ? String(c.progress_text) : ""; // e.g. "78,432 / 100,000 submissions"
+
+          const item = div("card");
+          item.append(div("cardHeader",
+            el("div",{className:"cardTitle",textContent:title}),
+            badge(kind, kind==="GLOBAL" ? "violet" : "cyan")
+          ));
+          if (endsIn){
+            item.append(el("div",{className:"meta",textContent:`ENDS IN ${endsIn}`}));
+          }
+          if (desc){
+            item.append(el("div",{style:"color:rgba(234,242,255,.78); font-size:13px; line-height:1.45; margin-top:10px;"}, desc));
+          }
+          if (progressText || progressPct !== null){
+            item.append(hr());
+            if (progressText){
+              item.append(el("div",{className:"meta",textContent:progressText}));
+            }
+            if (progressPct !== null){
+              item.append(progressBar(progressPct));
+            }
+          }
+          root.append(item);
+        }
+      }catch(e){
+        body.innerHTML = "";
+        body.append(empty("Unable to Load Campaigns", "Your /api/campaigns endpoint isn’t returning data yet."));
+        showToast("Campaign Load Failed", e.message || "Check backend endpoint.");
+      }
+    }
+
+    // 2) Telemetry feed (real feed)
+    async function renderTelemetry(root){
+      root.append(h1("Community Telemetry Feed"), sub("Obfuscated Data Stream"));
+
+      const card = div("card");
+      card.append(div("cardHeader",
+        el("div",{className:"cardTitle",textContent:"Live Feed"}),
+        badge("NETWORK")
+      ));
+      const body = div("");
+      card.append(body);
+      root.append(card);
+
+      body.append(empty("Loading", "Retrieving latest submissions…"));
+
+      try{
+        const res = await api("/api/telemetry?limit=25", { method:"GET" });
+        const rows = Array.isArray(res?.items) ? res.items : (Array.isArray(res) ? res : []);
+        STATE.telemetry = rows;
+
+        body.innerHTML = "";
+        if (!rows.length){
+          body.append(empty("No Telemetry Yet", "When nodes begin submitting, entries will appear here."));
+          return;
+        }
+
+        for (const t of rows){
+          // No mock: just display what backend provides
+          const operator = String(t.operator_callsign || "—");
+          const region = String(t.operator_region || "");
+          const target = String(t.target || "—");
+          const mode = String(t.mode || "").toUpperCase();
+          const ts = t.timestamp ? new Date(t.timestamp).toISOString().replace("T"," ").slice(0,16) + " UTC" : "";
+          const snr = (t.snr_db !== undefined && t.snr_db !== null) ? `${t.snr_db} dB` : "";
+          const status = String(t.status || "PENDING").toUpperCase();
+
+          const li = div("listItem");
+          const left = div("");
+          left.append(el("div",{style:"font-weight:800; font-size:18px; letter-spacing:.02em;"}, target));
+          left.append(el("div",{className:"meta",textContent:`${operator}${region ? " • "+region : ""}${ts ? " • "+ts : ""}`}));
+          li.append(left);
+
+          const right = div("", badge(mode || "TELEMETRY", mode==="RADIO" ? "warn" : "cyan"));
+          if (snr) right.append(el("div",{style:"margin-top:8px; textAlign:"right", className:"meta", textContent:`SNR: ${snr}`}));
+          right.append(el("div",{style:"margin-top:6px; textAlign:"right", className:"meta", textContent:`STATUS: ${status}`}));
+          li.append(right);
+
+          body.append(li);
+        }
+      }catch(e){
+        body.innerHTML = "";
+        body.append(empty("Unable to Load Feed", "Your /api/telemetry endpoint isn’t returning data yet."));
+        showToast("Feed Load Failed", e.message || "Check backend endpoint.");
+      }
+    }
+
+    // 3) Submit (paid + signed in)
+    async function renderSubmit(root){
+      root.append(h1("Data Logging Protocol"), sub("Telemetry Stream: Active"));
+
+      const card = div("card");
+      card.append(div("cardHeader",
+        el("div",{className:"cardTitle",textContent:"Submission"}),
+        badge("PROTOCOL", "violet")
+      ));
+
+      // mode tabs
+      const modeRow = div("tabs");
+      const modes = ["visual","spectral","radio"];
+      let currentMode = "visual";
+
+      const modeBtns = {};
+      for (const m of modes){
+        const b = el("button",{className:"tabBtn"+(m==="visual"?" active":""), type:"button", textContent:m});
+        b.addEventListener("click", ()=>{
+          currentMode = m;
+          for (const k in modeBtns) modeBtns[k].classList.remove("active");
+          modeBtns[m].classList.add("active");
+          showToast("Mode Selected", `${m.toUpperCase()} protocol engaged.`);
+        });
+        modeBtns[m] = b;
+        modeRow.append(b);
+      }
+      card.append(modeRow);
+
+      // fields
+      let target = "";
+      let bortle = "4";
+      let equipment = "";
+      let notes = "";
+      let snrDb = "";
+      let seeingArcsec = "";
+      let transparency = "3";
+      let integrationSeconds = "300";
+
+      const fTarget = fieldInput("Target Object", { placeholder:"e.g. M31, NGC 7000", oninput:(v)=>target=v });
+      const fBortle = fieldSelect("Sky Quality (Bortle Scale)", {
+        value: bortle,
+        options: [
+          {value:"1", label:"Class 1 - Excellent Dark Sky"},
+          {value:"2", label:"Class 2 - Typical Truly Dark Site"},
+          {value:"3", label:"Class 3 - Rural Sky"},
+          {value:"4", label:"Class 4 - Urban/Rural Transition"},
+          {value:"5", label:"Class 5 - Suburban"},
+          {value:"6", label:"Class 6 - Bright Suburban"},
+          {value:"7", label:"Class 7 - Suburban/Urban Transition"},
+          {value:"8", label:"Class 8 - City Sky"},
+          {value:"9", label:"Class 9 - Inner City"}
+        ],
+        onchange:(v)=>bortle=v
+      });
+
+      const fEquip = fieldTextarea("Equipment & Software Infrastructure", {
+        placeholder:"Specify make/model, extra hardware, and software used (e.g. N.I.N.A, PixInsight).",
+        oninput:(v)=>equipment=v
+      });
+
+      // optional but useful
+      const fSNR = fieldInput("Signal-to-Noise Ratio (dB)", { placeholder:"e.g. 17.0", oninput:(v)=>snrDb=v, attrs:{ inputMode:"decimal" }});
+      const fSeeing = fieldInput("Seeing (arcsec)", { placeholder:"e.g. 1.5", oninput:(v)=>seeingArcsec=v, attrs:{ inputMode:"decimal" }});
+      const fTrans = fieldSelect("Transparency (1-5)", {
+        value: transparency,
+        options: [
+          {value:"1", label:"1 - Poor"},
+          {value:"2", label:"2 - Fair"},
+          {value:"3", label:"3 - Good"},
+          {value:"4", label:"4 - Very Good"},
+          {value:"5", label:"5 - Excellent"}
+        ],
+        onchange:(v)=>transparency=v
+      });
+      const fInt = fieldInput("Total Integration (s)", { placeholder:"e.g. 300", oninput:(v)=>integrationSeconds=v, attrs:{ inputMode:"numeric" }});
+
+      const fNotes = fieldTextarea("Encrypted Frame Data (Optional)", {
+        placeholder:"If your pipeline produces an encrypted payload reference, paste it here (or submit as file via your uploader later).",
+        oninput:(v)=>notes=v
+      });
+
+      card.append(
+        fTarget.wrap,
+        fBortle.wrap,
+        fEquip.wrap,
+        hr(),
+        fSNR.wrap,
+        fSeeing.wrap,
+        fTrans.wrap,
+        fInt.wrap,
+        hr(),
+        fNotes.wrap,
+        el("div",{className:"help"}, "Verified telemetry metadata requires precise documentation. Submissions enter PENDING state until peer validation.")
+      );
+
+      const btn = el("button",{className:"primary", textContent:"COMMIT DATA TO NETWORK", type:"button"});
+      btn.addEventListener("click", async ()=>{
+        // hard validation (no mock)
+        if (!target.trim()){
+          showToast("Target Required", "Enter a target object (e.g. M31).");
+          return;
+        }
+        if (!equipment.trim()){
+          showToast("Equipment Required", "Provide your equipment/software stack.");
+          return;
+        }
+
+        btn.disabled = true;
+        try{
+          await api("/api/telemetry", {
+            method:"POST",
+            body: JSON.stringify({
+              mode: currentMode,
+              target: target.trim(),
+              bortle_class: Number(bortle),
+              equipment_stack: equipment.trim(),
+              snr_db: snrDb ? Number(snrDb) : null,
+              seeing_arcsec: seeingArcsec ? Number(seeingArcsec) : null,
+              transparency: transparency ? Number(transparency) : null,
+              integration_seconds: integrationSeconds ? Number(integrationSeconds) : null,
+              encrypted_frame_data: notes ? String(notes) : null
+            })
+          });
+
+          showToast("Submission Logged", "Telemetry committed. Status: PENDING.");
+          location.hash = "#/telemetry";
+        }catch(e){
+          showToast("Submit Failed", e.message || "Check /api/telemetry.");
+        }finally{
+          btn.disabled = false;
+        }
+      });
+
+      card.append(hr(), btn);
+      root.append(card);
+    }
+
+    // 4) Leaderboard (paid, real only)
+    async function renderLeaderboard(root){
+      root.append(h1("Global Sector Rankings"), sub("Reputation economy reflects validated telemetry."));
+
+      const card = div("card");
+      card.append(div("cardHeader",
+        el("div",{className:"cardTitle",textContent:"Rankings"}),
+        badge("PAID", "violet")
+      ));
+      const body = div("");
+      card.append(body);
+      root.append(card);
+
+      body.append(empty("Loading", "Aggregating network reputation metrics…"));
+
+      try{
+        const res = await api("/api/leaderboard?scope=global", { method:"GET" });
+        const rows = Array.isArray(res?.items) ? res.items : (Array.isArray(res) ? res : []);
+        STATE.leaderboard = rows;
+
+        body.innerHTML = "";
+        if (!rows.length){
+          body.append(empty("No Rankings Yet", "When validated telemetry accumulates, rankings will appear here."));
+          return;
+        }
+
+        let i = 1;
+        for (const r of rows){
+          const rank = r.rank ?? i;
+          const name = String(r.callsign || "—");
+          const role = String(r.role || "");
+          const region = String(r.region || "");
+          const oi = (r.total_oi !== undefined && r.total_oi !== null) ? String(r.total_oi) : "—";
+
+          const li = div("listItem");
+          li.append(el("div",{className:"meta",textContent:`#${String(rank).padStart(2,"0")}`}));
+
+          const left = div("");
+          left.append(el("div",{style:"font-weight:800; font-size:20px;"}, name));
+          left.append(el("div",{className:"meta",textContent:`${role}${region ? " • " + region : ""}`}));
+          li.append(left);
+
+          li.append(el("div",{className:"kpi",textContent:oi}, el("small",{textContent:"TOTAL OI"})));
+          body.append(li);
+          i++;
+        }
+      }catch(e){
+        body.innerHTML = "";
+        body.append(empty("Unable to Load Rankings", "Your /api/leaderboard endpoint isn’t returning data yet."));
+        showToast("Leaderboard Failed", e.message || "Check backend endpoint.");
+      }
+    }
+
+    // 5) Billing (sign-in required; upgrades via backend Stripe session)
+    function renderBilling(root){
+      root.append(h1("Spectre Pro Tier"), sub("Operational participation requires membership."));
+
+      const card = div("card");
+      card.append(div("cardHeader",
+        el("div",{className:"cardTitle",textContent:"Enrollment"}),
+        badge(isPaid() ? "ACTIVE" : "UPGRADE", isPaid() ? "cyan" : "warn")
+      ));
+
+      const copy = el("div",{style:"color:rgba(234,242,255,.78); font-size:13px; line-height:1.5; margin-top:8px;"},
+        "Advanced analytical precision, predictive simulation, and priority certification. ",
+        "Elevate your observation strategy without compromising network integrity."
+      );
+      card.append(copy, hr());
+
+      // Show current subscription status (real)
+      if (STATE.subscription){
+        const s = STATE.subscription;
+        const line = el("div",{className:"meta", style:"margin-bottom:10px;"});
+        if (s.active){
+          const until = s.current_period_end ? new Date(s.current_period_end).toISOString().slice(0,10) : "";
+          line.textContent = `STATUS: ACTIVE${s.plan ? " • PLAN: "+String(s.plan).toUpperCase() : ""}${until ? " • UNTIL: "+until : ""}`;
+        } else {
+          line.textContent = "STATUS: FREE (NO ACTIVE MEMBERSHIP)";
+        }
+        card.append(line);
+      }
+
+      const btnMonthly = el("button",{className:"primary", type:"button", textContent:`ENROLL • ${PLANS.monthly.label}`});
+      const btnYearly  = el("button",{className:"secondary", type:"button", textContent:`ENROLL • ${PLANS.yearly.label}`});
+
+      btnMonthly.addEventListener("click", ()=>startCheckout("monthly"));
+      btnYearly.addEventListener("click", ()=>startCheckout("yearly"));
+
+      async function startCheckout(plan){
+        try{
+          if (!isSignedIn()){
+            showToast("Sign In Required", "Create an account to enroll.");
+            location.hash = "#/profile";
+            return;
+          }
+          // Backend creates Stripe checkout session; returns { url }
+          const res = await api("/api/stripe/create-checkout-session", {
+            method:"POST",
+            body: JSON.stringify({ plan })
+          });
+          if (!res?.url) throw new Error("Checkout session missing URL.");
+          window.location.href = res.url;
+        }catch(e){
+          showToast("Billing Error", e.message || "Check /api/stripe/create-checkout-session.");
+        }
+      }
+
+      // If active, show a manage link (optional backend can return portal url)
+      const manageBtn = el("button",{className:"secondary", type:"button", textContent:"MANAGE SUBSCRIPTION"});
+      manageBtn.addEventListener("click", async ()=>{
+        try{
+          const res = await api("/api/stripe/create-portal-session", { method:"POST", body: JSON.stringify({}) });
+          if (!res?.url) throw new Error("Portal session missing URL.");
+          window.location.href = res.url;
+        }catch(e){
+          showToast("Portal Error", e.message || "Check /api/stripe/create-portal-session.");
+        }
+      });
+
+      card.append(btnMonthly, btnYearly);
+
+      if (isPaid()){
+        card.append(hr(), manageBtn);
+      }
+
+      root.append(card);
+    }
+
+    // 6) Profile / Account (Supabase email auth + profile saved via backend)
+    function renderProfile(root){
+      root.append(h1("Account"), sub("Identity layer: member credentials and operator profile."));
+
+      // If not signed in: show sign up / sign in
+      if (!isSignedIn()){
+        const card = div("card");
+        card.append(div("cardHeader",
+          el("div",{className:"cardTitle",textContent:"Sign In / Create Account"}),
+          badge("REQUIRED", "warn")
         ));
+
+        let email = "";
+        let password = "";
+
+        const fE = fieldInput("Email", { placeholder:"you@domain.com", oninput:(v)=>email=v, attrs:{ inputMode:"email" }});
+        const fP = fieldInput("Password", { type:"password", placeholder:"••••••••", oninput:(v)=>password=v });
+
+        const btnIn = el("button",{className:"secondary", type:"button", textContent:"SIGN IN"});
+        const btnUp = el("button",{className:"primary", type:"button", textContent:"CREATE ACCOUNT"});
+
+        btnIn.addEventListener("click", async ()=>{
+          try{
+            btnIn.disabled = true; btnUp.disabled = true;
+            const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+            if (error) throw error;
+            showToast("Signed In", "Welcome to Helvarix.");
+          }catch(e){
+            showToast("Sign In Failed", e.message || "Check credentials.");
+          }finally{
+            btnIn.disabled = false; btnUp.disabled = false;
+          }
+        });
+
+        btnUp.addEventListener("click", async ()=>{
+          try{
+            btnIn.disabled = true; btnUp.disabled = true;
+            const { error } = await supabase.auth.signUp({ email: email.trim(), password });
+            if (error) throw error;
+            showToast("Account Created", "Check your email if confirmation is enabled.");
+          }catch(e){
+            showToast("Sign Up Failed", e.message || "Try a different password/email.");
+          }finally{
+            btnIn.disabled = false; btnUp.disabled = false;
+          }
+        });
+
+        card.append(fE.wrap, fP.wrap, hr(), btnIn, btnUp);
         root.append(card);
+
+        // explain briefly
+        root.append(div("card",
+          div("cardHeader", el("div",{className:"cardTitle",textContent:"Notes"}), badge("INFO")),
+          el("div",{style:"color:rgba(234,242,255,.74); font-size:13px; line-height:1.5;"},
+            "This platform requires an account before operational access. ",
+            "Membership gates are enforced server-side via Stripe subscription checks."
+          )
+        ));
         return;
       }
 
-      const active = DB.campaigns.filter(c => !c.archived
+      // Signed in: show profile editor + sign out
+      const card = div("card");
+      card.append(div("cardHeader",
+        el("div",{className:"cardTitle",textContent:"Operator Profile"}),
+        badge(isPaid() ? "ACTIVE" : "FREE", isPaid() ? "cyan" : "warn")
+      ));
+
+      const userEmail = STATE.user?.email || "—";
+      card.append(el("div",{className:"meta",textContent:`SIGNED IN AS: ${userEmail}`}));
+
+      let callsign = String(STATE.profile?.callsign || "");
+      let region = String(STATE.profile?.region || "");
+      let equipmentIndex = String(STATE.profile?.equipment_index || "");
+
+      const fC = fieldInput("Callsign / Designation", { placeholder:"e.g. Cmdr. Starlight", value:callsign, oninput:(v)=>callsign=v });
+      const fR = fieldInput("Region / Sector", { placeholder:"e.g. NA-EAST, EU-NORTH", value:region, oninput:(v)=>region=v });
+      const fEQ = fieldInput("Equipment Index", { placeholder:"e.g. Advanced Telescope", value:equipmentIndex, oninput:(v)=>equipmentIndex=v });
+
+      const saveBtn = el("button",{className:"primary", type:"button", textContent:"SAVE PROFILE"});
+      const outBtn  = el("button",{className:"danger", type:"button", textContent:"SIGN OUT"});
+
+      saveBtn.addEventListener("click", async ()=>{
+        if (!callsign.trim() || !region.trim()){
+          showToast("Missing Fields", "Callsign and region are required.");
+          return;
+        }
+        saveBtn.disabled = true;
+        try{
+          const res = await api("/api/profile", {
+            method:"POST",
+            body: JSON.stringify({
+              callsign: callsign.trim(),
+              region: region.trim(),
+              equipment_index: equipmentIndex.trim() || null
+            })
+          });
+          STATE.profile = res?.profile || STATE.profile;
+          showToast("Saved", "Profile updated.");
+        }catch(e){
+          showToast("Save Failed", e.message || "Check /api/profile endpoint.");
+        }finally{
+          saveBtn.disabled = false;
+        }
+      });
+
+      outBtn.addEventListener("click", async ()=>{
+        await supabase.auth.signOut();
+      });
+
+      card.append(fC.wrap, fR.wrap, fEQ.wrap, hr(), saveBtn, outBtn);
+      root.append(card);
+    }
+  </script>
+</body>
+</html>
