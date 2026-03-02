@@ -1,1 +1,3 @@
-
+npm i @supabase/supabase-js react-router-dom
+npm i @stripe/stripe-js
+npm i stripe
