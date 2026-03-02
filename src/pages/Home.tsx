@@ -3,21 +3,56 @@ import { supabase } from "../lib/supabaseClient";
 import { UiCard } from "../components/UiCard";
 
 type Profile = {
-  callsign: string;
-  observation_index: number;
-  campaign_impact: number;
-  streak_days: number;
-  submissions_count: number;
-  is_pro: boolean;
+  callsign: string | null;
+  observation_index: number | null;
+  campaign_impact: number | null;
+  streak_days: number | null;
+  submissions_count: number | null;
+  is_pro: boolean | null;
 };
+
+function Stat({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+  return (
+    <div className="stat">
+      <div className="statLabel">{label}</div>
+      <div className={"statValue " + (accent ? "statAccent" : "")}>{value}</div>
+    </div>
+  );
+}
+
+function Campaign({
+  tag,
+  title,
+  desc,
+  pct
+}: {
+  tag: string;
+  title: string;
+  desc: string;
+  pct: number;
+}) {
+  return (
+    <div className="campaign">
+      <div className="tagRow">
+        <div className="tag">{tag}</div>
+        <div className="deadline">ACTIVE</div>
+      </div>
+      <div className="campaignTitle">{title}</div>
+      <div className="campaignDesc">{desc}</div>
+      <div className="progress" style={{ ["--w" as any]: `${pct}%` }}>
+        <div />
+      </div>
+    </div>
+  );
+}
 
 export function Home() {
   const [p, setP] = useState<Profile | null>(null);
 
   useEffect(() => {
     (async () => {
-      const { data: session } = await supabase.auth.getSession();
-      const uid = session.session?.user.id;
+      const { data: sess } = await supabase.auth.getSession();
+      const uid = sess.session?.user.id;
       if (!uid) return;
 
       const { data } = await supabase
@@ -26,76 +61,55 @@ export function Home() {
         .eq("id", uid)
         .single();
 
-      setP(data as any);
+      setP((data ?? null) as any);
     })();
   }, []);
 
+  const callsign = p?.callsign ?? "Operator";
+  const isPro = Boolean(p?.is_pro);
+
   return (
     <div style={{ display: "grid", gap: 14 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-        <div style={{ fontSize: 12, letterSpacing: "0.30em", color: "rgba(41,217,255,0.85)" }}>
-          SPECTRE GLOBAL ARRAY
-        </div>
-        <div style={{ color: "rgba(255,255,255,0.65)", fontSize: 12 }}>
-          {p?.is_pro ? "PRO: ACTIVE" : "PRO: INACTIVE"}
-        </div>
-      </div>
-
       <UiCard
-        title={p?.callsign ?? "Operator"}
-        subtitle="Operator level + statistics"
-        right={
-          <div style={{ textAlign: "right" }}>
-            <div style={{ color: "rgba(41,217,255,0.9)", fontWeight: 800, fontSize: 18 }}>
-              {p?.observation_index ?? 0}
-            </div>
-            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.6)" }}>Observation Index</div>
-          </div>
-        }
+        kicker="Helvarix Global Array"
+        title={callsign}
+        subtitle="Operator level • performance • campaign readiness"
+        right={<div className="chip">{isPro ? "PRO • ACTIVE" : "PRO • LOCKED"}</div>}
       >
-        <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(4, 1fr)" }}>
-          <Stat label="Impact" value={p?.campaign_impact ?? 0} />
-          <Stat label="Streak" value={`${p?.streak_days ?? 0}d`} />
-          <Stat label="Submissions" value={p?.submissions_count ?? 0} />
-          <Stat label="Rank" value="—" />
+        <div className="grid4">
+          <Stat label="Observation Index" value={String(p?.observation_index ?? 0)} accent />
+          <Stat label="Campaign Impact" value={String(p?.campaign_impact ?? 0)} />
+          <Stat label="Submission Count" value={String(p?.submissions_count ?? 0)} />
+          <Stat label="Streak" value={`${p?.streak_days ?? 0} days`} />
         </div>
       </UiCard>
 
       <UiCard
+        kicker="Campaign Operations"
         title="Active Campaigns"
-        subtitle="Daily / Weekly / Global"
+        subtitle="Daily • Weekly • Global"
       >
         <div style={{ display: "grid", gap: 12 }}>
-          <CampaignChip tag="DAILY" title="Capture Jupiter" desc="Submit high-resolution planetary imaging of the Jovian gas giant." />
-          <CampaignChip tag="WEEKLY" title="Globular Clusters" desc="Identify and image Messier objects M13 or M92." />
-          <CampaignChip tag="GLOBAL EVENT" title="Hydrogen Line Mapping Event" desc="Coordinated effort to map the H-I 21cm emission across the galactic plane." />
+          <Campaign
+            tag="DAILY"
+            title="Capture Jupiter"
+            desc="Submit high-resolution planetary imaging. Prioritize sharpness + color balance."
+            pct={52}
+          />
+          <Campaign
+            tag="WEEKLY"
+            title="Globular Clusters"
+            desc="Image M13 or M92 with clean stars and stable tracking."
+            pct={34}
+          />
+          <Campaign
+            tag="GLOBAL"
+            title="Hydrogen Line Mapping Event"
+            desc="Coordinated 21cm capture across many nodes. (Beta event placeholder.)"
+            pct={78}
+          />
         </div>
       </UiCard>
-    </div>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: any }) {
-  return (
-    <div className="card" style={{ padding: 12, borderRadius: 14 }}>
-      <div style={{ fontSize: 12, color: "rgba(255,255,255,0.6)" }}>{label}</div>
-      <div style={{ fontSize: 18, fontWeight: 800, marginTop: 6 }}>{value}</div>
-    </div>
-  );
-}
-
-function CampaignChip({ tag, title, desc }: { tag: string; title: string; desc: string }) {
-  return (
-    <div className="card" style={{ padding: 14 }}>
-      <div style={{ display: "flex", justifyContent: "space-between" }}>
-        <div style={{ fontSize: 12, letterSpacing: "0.20em", color: "rgba(124,58,237,0.9)" }}>{tag}</div>
-        <div style={{ fontSize: 12, color: "rgba(255,255,255,0.55)" }}>ENDS SOON</div>
-      </div>
-      <div style={{ fontSize: 18, fontWeight: 800, marginTop: 8 }}>{title}</div>
-      <div style={{ color: "rgba(255,255,255,0.65)", marginTop: 6 }}>{desc}</div>
-      <div style={{ height: 10, marginTop: 12, borderRadius: 999, border: "1px solid rgba(52,211,255,0.14)", overflow: "hidden" }}>
-        <div style={{ height: "100%", width: "58%", background: "linear-gradient(90deg, rgba(41,217,255,0.85), rgba(124,58,237,0.65))" }} />
-      </div>
     </div>
   );
 }
