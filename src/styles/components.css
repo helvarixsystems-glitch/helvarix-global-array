@@ -1,0 +1,138 @@
+.shell{
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 18px 16px 110px; /* bottom nav room */
+}
+
+.topbar{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding: 8px 2px 18px;
+}
+
+.brand{
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+}
+.brand .name{
+  color: var(--cyan);
+  font-weight: 800;
+  letter-spacing: .28em;
+  text-transform: uppercase;
+  font-size: 12px;
+}
+.brand .sub{
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.pillRow{ display:flex; gap:10px; align-items:center; }
+.pill{
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.07);
+  box-shadow: var(--inner);
+  display:flex;
+  gap:10px;
+  align-items:baseline;
+}
+.pill .label{ color: var(--muted); font-size: 11px; letter-spacing:.18em; text-transform:uppercase; }
+.pill .val{ font-family: "JetBrains Mono"; font-weight: 700; color: var(--text); }
+
+.card{
+  background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
+  border: 1px solid rgba(37,216,255,0.16);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow), var(--inner);
+  padding: 16px;
+}
+.card.dim{
+  border-color: rgba(37,216,255,0.10);
+  background: rgba(10,16,34,0.45);
+}
+.cardTitle{
+  display:flex; align-items:center; justify-content:space-between;
+  margin-bottom: 10px;
+}
+.badge{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(0,0,0,0.25);
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.badge.cyan{ border-color: rgba(37,216,255,0.22); color: rgba(37,216,255,0.95); }
+.badge.violet{ border-color: rgba(122,71,255,0.28); color: rgba(165,132,255,0.95); }
+
+.btn{
+  width:100%;
+  padding: 16px 18px;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.06);
+  color: var(--text);
+  font-weight: 800;
+  letter-spacing: .35em;
+  text-transform: uppercase;
+  box-shadow: var(--inner);
+  cursor:pointer;
+}
+.btnPrimary{
+  background: linear-gradient(90deg, rgba(122,71,255,1), rgba(105,63,255,1));
+  border-color: rgba(122,71,255,0.55);
+}
+.btnPrimary:hover{ filter: brightness(1.03); }
+
+.progress{
+  height: 10px;
+  border-radius: 999px;
+  overflow:hidden;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.07);
+}
+.progress > div{
+  height:100%;
+  width: 40%;
+  background: linear-gradient(90deg, var(--cyan), var(--violet));
+}
+
+.bottomNav{
+  position: fixed;
+  left:0; right:0; bottom:0;
+  background: rgba(0,0,0,0.45);
+  backdrop-filter: blur(14px);
+  border-top: 1px solid rgba(255,255,255,0.08);
+  padding: 10px 10px calc(12px + env(safe-area-inset-bottom));
+}
+.bottomNav .row{
+  max-width: 980px;
+  margin: 0 auto;
+  display:flex;
+  justify-content:space-around;
+  gap: 6px;
+}
+.navBtn{
+  width: 54px;
+  height: 44px;
+  border-radius: 14px;
+  display:grid;
+  place-items:center;
+  border: 1px solid transparent;
+  color: rgba(220,230,255,0.65);
+  background: transparent;
+}
+.navBtn.active{
+  color: var(--cyan);
+  border-color: rgba(37,216,255,0.22);
+  background: rgba(37,216,255,0.06);
+  box-shadow: 0 0 22px rgba(37,216,255,0.08);
+}
