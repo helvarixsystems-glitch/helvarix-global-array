@@ -1,1 +1,40 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
+:root {
+  --bg: #050810;
+  --panel: rgba(12, 18, 34, 0.75);
+  --stroke: rgba(52, 211, 255, 0.18);
+  --cyan: #29d9ff;
+  --violet: #7c3aed;
+  --text: rgba(255, 255, 255, 0.92);
+  --muted: rgba(255, 255, 255, 0.60);
+}
+
+body {
+  margin: 0;
+  background: radial-gradient(1200px 600px at 50% -10%, rgba(124,58,237,0.18), transparent),
+              radial-gradient(1000px 600px at 50% 110%, rgba(41,217,255,0.12), transparent),
+              var(--bg);
+  color: var(--text);
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--stroke);
+  border-radius: 18px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+}
+
+.btn-primary {
+  background: linear-gradient(90deg, rgba(124,58,237,0.95), rgba(124,58,237,0.75));
+  border: 1px solid rgba(124,58,237,0.55);
+  border-radius: 14px;
+  padding: 14px 16px;
+  color: white;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
