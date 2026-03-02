@@ -9,8 +9,8 @@ export function Collective() {
 
   useEffect(() => {
     (async () => {
-      const { data: session } = await supabase.auth.getSession();
-      const uid = session.session?.user.id;
+      const { data: sess } = await supabase.auth.getSession();
+      const uid = sess.session?.user.id;
       if (!uid) return;
 
       const { data } = await supabase.from("profiles").select("is_pro").eq("id", uid).single();
@@ -18,25 +18,29 @@ export function Collective() {
     })();
   }, []);
 
-  if (isPro === null) return <div>Loading…</div>;
+  if (isPro === null) return <div className="helper">Loading…</div>;
 
   if (!isPro) {
     return (
       <div style={{ display: "grid", gap: 14 }}>
         <UiCard
-          title="Spectre Pro Tier"
-          subtitle="Advanced analytical precision, predictive simulation, and priority certification."
+          kicker="Helvarix Research Collective"
+          title="Pro Access"
+          subtitle="Teams • advanced tools • limited-entry campaigns"
+          right={<div className="chip">LOCKED</div>}
         >
-          <div style={{ display: "grid", gap: 10 }}>
-            <button className="btn-primary" onClick={() => startCheckout(env.priceMonthly)}>
-              Enroll Monthly ($15)
-            </button>
-            <button className="btn-primary" onClick={() => startCheckout(env.priceAnnual)}>
-              Enroll Annual ($150)
-            </button>
-            <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 12 }}>
-              Pro unlocks teams, advanced tools, and limited-entry campaigns (beta cap: 50 slots).
-            </div>
+          <div className="sp" />
+          <button className="btnPrimary" onClick={() => startCheckout(env.priceMonthly)}>
+            Enroll • $15 / Month
+          </button>
+          <div className="sp" />
+          <div className="helper">
+            Pro unlocks: team coordination, advanced target planning, analysis tooling,
+            and special campaigns (limited slots during beta).
+          </div>
+          <div className="sp" />
+          <div className="warn">
+            Yearly billing is disabled for now (coming later).
           </div>
         </UiCard>
       </div>
@@ -45,21 +49,49 @@ export function Collective() {
 
   return (
     <div style={{ display: "grid", gap: 14 }}>
-      <UiCard title="Helvarix Research Collective" subtitle="Teams • Advanced Tools • Special Campaigns">
-        <div className="card" style={{ padding: 14, marginTop: 10 }}>
-          <div style={{ fontWeight: 800 }}>Team Observatory</div>
-          <div style={{ color: "rgba(255,255,255,0.65)", marginTop: 6 }}>
-            Coordinate multi-site observations with private dashboards.
+      <UiCard
+        kicker="Helvarix Research Collective"
+        title="Workspace Unlocked"
+        subtitle="Teams • Tools • Special Campaigns"
+        right={<div className="chip">PRO • ACTIVE</div>}
+      >
+        <div className="grid2" style={{ marginTop: 10 }}>
+          <div className="campaign">
+            <div className="tagRow">
+              <div className="tag">TEAMS</div>
+              <div className="deadline">BETA</div>
+            </div>
+            <div className="campaignTitle">Team Observatory</div>
+            <div className="campaignDesc">
+              Coordinate multi-site observations with shared objectives and private dashboards.
+            </div>
+            <div className="sp" />
+            <button className="btnGhost">Initialize Team</button>
           </div>
-          <button className="btn-primary" style={{ marginTop: 12, width: "100%" }}>
-            Initialize Team
-          </button>
+
+          <div className="campaign">
+            <div className="tagRow">
+              <div className="tag">TOOLS</div>
+              <div className="deadline">BETA</div>
+            </div>
+            <div className="campaignTitle">Advanced Planner</div>
+            <div className="campaignDesc">
+              Target optimization based on sky conditions + your equipment profile (placeholder).
+            </div>
+            <div className="sp" />
+            <button className="btnGhost">Open Planner</button>
+          </div>
         </div>
 
-        <div className="card" style={{ padding: 14, marginTop: 12 }}>
-          <div style={{ fontWeight: 800 }}>Limited Entry Campaigns</div>
-          <div style={{ color: "rgba(255,255,255,0.65)", marginTop: 6 }}>
-            These will be capped to 50 individuals/teams in beta.
+        <div className="sp" />
+        <div className="campaign">
+          <div className="tagRow">
+            <div className="tag">SPECIAL CAMPAIGNS</div>
+            <div className="deadline">LIMITED ENTRY</div>
+          </div>
+          <div className="campaignTitle">Limited-entry Missions</div>
+          <div className="campaignDesc">
+            Enforce the “50 spots” rule server-side when you build campaign joining logic.
           </div>
         </div>
       </UiCard>
