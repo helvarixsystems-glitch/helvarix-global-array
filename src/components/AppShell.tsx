@@ -1,5 +1,5 @@
 import React from "react";
-import { BottomNav } from "../../components/BottomNav";
+import { BottomNav } from "./BottomNav";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
@@ -8,9 +8,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="topbar">
           <div className="brand">
             <div className="name">HELVARIX GLOBAL ARRAY</div>
-            <div className="sub mono">
-              Operator Console • Secure Telemetry
-            </div>
+            <div className="sub mono">Operator Console • Secure Telemetry</div>
           </div>
 
           <div className="pillRow">
@@ -20,7 +18,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 24,500
               </div>
             </div>
-
             <div className="pill">
               <div className="label">CI</div>
               <div className="val" style={{ color: "var(--violet)" }}>
