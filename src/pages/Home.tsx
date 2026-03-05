@@ -297,6 +297,10 @@ export default function HomePage() {
   );
 
   const [recentObs, setRecentObs] = useState<ObservationRow[]>([]);
+  const [submissions7d, setSubmissions7d] = useState<number[]>([
+    0, 0, 0, 0, 0, 0, 0,
+  ]);
+
   const [userSubmissions, setUserSubmissions] = useState<number>(0);
 
   const [earth, setEarth] = useState<EarthTelemetry | null>(null);
@@ -316,7 +320,7 @@ export default function HomePage() {
       const uid = data.session?.user?.id ?? null;
       setSessionUserId(uid);
 
-      await Promise.all([loadCampaigns(), loadRecent()]);
+      await Promise.all([loadCampaigns(), loadRecent(), load7dCharts()]);
 
       if (uid) {
         await Promise.all([loadProfile(uid), loadUserSubmissionCount(uid)]);
@@ -354,6 +358,7 @@ export default function HomePage() {
         (payload) => {
           const row = payload.new as ObservationRow;
           setRecentObs((prev) => [row, ...prev].slice(0, 12));
+          load7dCharts();
         }
       )
       .subscribe();
@@ -454,7 +459,6 @@ export default function HomePage() {
       alive = false;
     };
   }, [campaigns, sessionUserId]);
-
 
 
   async function loadEarthSector() {
@@ -811,7 +815,6 @@ export default function HomePage() {
         <span className="dot violet" />
         <div>
           <div className="h1">NETWORK ACTIVITY</div>
-          <div className="mono sub">Traffic analysis • field telemetry</div>
         </div>
       </div>
 
@@ -826,9 +829,6 @@ export default function HomePage() {
             <div className="miniValue">{visibleSpectrumPct.toFixed(1)}%</div>
           </div>
 
-          <div className="miniPanel">
-            <div className="mono miniLabel">CURRENT SKY STATE</div>
-            <div className="miniValue">{earth?.skyState ?? "—"}</div>
           </div>
         </div>
 
