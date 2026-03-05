@@ -297,7 +297,6 @@ export default function HomePage() {
   );
 
   const [recentObs, setRecentObs] = useState<ObservationRow[]>([]);
-
   const [userSubmissions, setUserSubmissions] = useState<number>(0);
 
   const [earth, setEarth] = useState<EarthTelemetry | null>(null);
