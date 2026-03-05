@@ -1085,7 +1085,7 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* Page-local CSS hooks: KEEPING your original UI */}
+           {/* Page-local CSS hooks: KEEPING your original UI */}
       <style>{`
         .page{display:flex;flex-direction:column;gap:18px;}
         .heroCard{padding:22px;}
@@ -1152,10 +1152,9 @@ export default function HomePage() {
         .quoteBar{width:4px;border-radius:999px;background:rgba(160,110,255,.7);box-shadow:0 0 18px rgba(160,110,255,.2);}
         .quoteText{opacity:.7;font-style:italic;}
         .metricRow{margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:14px;}
-        .metricCard{border-radius:18px;border:1px solid rgba(255,255,255,.08);background:rgba(6,10,18,.25);padding:14px;display:flex;flex-direction:column;gap:10px;}
+        .metricCard{border-radius:18px;border:1px solid rgba(255,255,255,.08);background:rgba(6,10,18,.25);padding:14px;display:flex;flex-direction:column;gap:10px;position:relative;}
         .metricLabel{opacity:.65;letter-spacing:.28em;font-weight:900;font-size:11px;}
-        .metricRight{position:absolute;right:14px;margin-top:0;}
-        .metricCard{position:relative;}
+        .metricRight{position:absolute;right:14px;top:14px;}
         .zenith{border-radius:18px;border:1px solid rgba(160,110,255,.12);background:rgba(6,10,18,.25);padding:18px;}
         .zenHead{display:flex;justify-content:space-between;gap:10px;align-items:center;}
         .zenLegend{opacity:.7;letter-spacing:.22em;font-weight:800;font-size:12px;display:flex;align-items:center;}
