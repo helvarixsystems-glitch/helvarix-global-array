@@ -118,15 +118,6 @@ function Chip({
   return <span className={cls}>{children}</span>;
 }
 
-function StatTile({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="statTile">
-      <div className="mono statLabel">{label}</div>
-      <div className="statValue">{value}</div>
-    </div>
-  );
-}
-
 function fmtEndsIn(endIso: string) {
   const end = new Date(endIso).getTime();
   const now = Date.now();
@@ -306,6 +297,10 @@ export default function HomePage() {
   );
 
   const [recentObs, setRecentObs] = useState<ObservationRow[]>([]);
+  const [submissions7d, setSubmissions7d] = useState<number[]>([
+    0, 0, 0, 0, 0, 0, 0,
+  ]);
+
   const [userSubmissions, setUserSubmissions] = useState<number>(0);
 
   const [earth, setEarth] = useState<EarthTelemetry | null>(null);
@@ -325,7 +320,7 @@ export default function HomePage() {
       const uid = data.session?.user?.id ?? null;
       setSessionUserId(uid);
 
-      await Promise.all([loadCampaigns(), loadRecent()]);
+      await Promise.all([loadCampaigns(), loadRecent(), load7dCharts()]);
 
       if (uid) {
         await Promise.all([loadProfile(uid), loadUserSubmissionCount(uid)]);
@@ -363,6 +358,7 @@ export default function HomePage() {
         (payload) => {
           const row = payload.new as ObservationRow;
           setRecentObs((prev) => [row, ...prev].slice(0, 12));
+          load7dCharts();
         }
       )
       .subscribe();
@@ -463,6 +459,33 @@ export default function HomePage() {
       alive = false;
     };
   }, [campaigns, sessionUserId]);
+
+  // ✅ Peer review removed: submissions-only 7-day chart
+  async function load7dCharts() {
+    const now = new Date();
+    const days: { start: Date; end: Date }[] = [];
+
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(now.getDate() - i);
+      d.setHours(0, 0, 0, 0);
+      const start = new Date(d);
+      const end = new Date(d);
+      end.setHours(23, 59, 59, 999);
+      days.push({ start, end });
+    }
+
+    const subs: number[] = [];
+    for (const w of days) {
+      const { count } = await supabase
+        .from("observations")
+        .select("id", { count: "exact", head: true })
+        .gte("created_at", w.start.toISOString())
+        .lte("created_at", w.end.toISOString());
+      subs.push(count ?? 0);
+    }
+    setSubmissions7d(subs);
+  }
 
   async function loadEarthSector() {
     setEarthErr(null);
@@ -613,7 +636,6 @@ export default function HomePage() {
     : "UNAUTHENTICATED NODE";
 
   const oi = profile?.observation_index ?? 0;
-  const ci = profile?.campaign_impact ?? 0;
   const streak = profile?.streak_days ?? 0;
 
   const rank = useMemo(() => rankFromOI(oi), [oi]);
@@ -652,6 +674,20 @@ export default function HomePage() {
       accent: "cyan" | "violet";
     }>;
   }, [campaigns, campaignProgress]);
+
+  const visibleSpectrumPct = useMemo(() => {
+    if (!recentObs.length) return 0;
+    const vis = recentObs.filter(
+      (o) => (o.mode ?? "").toUpperCase() === "VISUAL"
+    ).length;
+    return Math.round((vis / recentObs.length) * 1000) / 10;
+  }, [recentObs]);
+
+  // 7-day activity total from recent observations
+  const submissionsTotal7d = useMemo(
+    () => submissions7d.reduce((a, b) => a + b, 0),
+    [submissions7d]
+  );
 
   const sectorCoords = useMemo(() => {
     const lat = earth?.lat ?? profile?.lat;
@@ -693,17 +729,10 @@ export default function HomePage() {
             <div className="heroMeta">
               <div className="metaPill mono">STREAK: {streak}D</div>
               <div className="metaPill mono">
-                SUBMISSIONS: {sessionUserId ? userSubmissions : "—"}
+                ENTRIES: {sessionUserId ? userSubmissions : "—"}
               </div>
             </div>
           </div>
-        </div>
-
-        <div className="divider" />
-
-        <div className="heroStats">
-          <StatTile label="OBSERVATION INDEX" value={oi.toLocaleString()} />
-          <StatTile label="CAMPAIGN IMPACT" value={ci.toLocaleString()} />
         </div>
 
         <div className="divider" />
@@ -813,6 +842,147 @@ export default function HomePage() {
         )}
       </div>
 
+      {/* NETWORK ACTIVITY */}
+      <div className="sectionTitle" style={{ marginTop: 22 }}>
+        <span className="dot violet" />
+        <div>
+          <div className="h1">NETWORK ACTIVITY</div>
+          <div className="mono sub">Traffic analysis • field telemetry</div>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="mono kicker">TRAFFIC ANALYSIS</div>
+        <div className="h2">Global Telemetry Flow</div>
+        <div className="hr" />
+
+        <div className="twoCol">
+          <div className="miniPanel">
+            <div className="mono miniLabel">VISIBLE SPECTRUM</div>
+            <div className="miniValue">{visibleSpectrumPct.toFixed(1)}%</div>
+          </div>
+
+          {/* ✅ Keeps UI intact: replace peer metric with a submission metric */}
+          <div className="miniPanel">
+            <div className="mono miniLabel">ACTIVITY (7D)</div>
+            <div className="miniValue">{submissionsTotal7d.toLocaleString()}</div>
+          </div>
+        </div>
+
+        <div className="hr" />
+
+        {/* EARTH SECTOR */}
+        <div className="sectorPanel">
+          <div className="sectorHead">
+            <div className="mono sectorTitle">
+              <span className="diamond" /> SECTOR ANALYSIS
+            </div>
+            <div className="mono sectorCoords">{sectorCoords}</div>
+          </div>
+
+          <div className="sectorQuote">
+            <div className="quoteBar" />
+            <div className="quoteText">
+              {earth
+                ? `“Local telemetry synchronized (${earth.skyState}).”`
+                : "“Initializing localized telemetry stream…”"}
+            </div>
+          </div>
+
+          {earthErr ? (
+            <div style={{ color: "var(--danger)", marginTop: 10 }}>
+              {earthErr}
+            </div>
+          ) : null}
+
+          <div className="metricRow">
+            <div className="metricCard">
+              <div className="mono metricLabel">PHOTON FLUX STABILITY</div>
+              <div
+                className="metricRight mono"
+                style={{ color: "var(--cyan)" }}
+              >
+                {photonFlux != null ? `${photonFlux}%` : "—"}
+              </div>
+              <ProgressBar value={photonFluxProgress} accent="cyan" />
+            </div>
+
+            <div className="metricCard">
+              <div className="mono metricLabel">
+                MAGNETOSPHERIC INTERFERENCE
+              </div>
+              <div className="metricRight mono" style={{ color: "#e4b73a" }}>
+                {kpTxt}
+              </div>
+              <ProgressBar value={kpProgress} accent="amber" />
+            </div>
+          </div>
+        </div>
+
+        <div className="hr" />
+
+        {/* ZENITH */}
+        <div className="zenith">
+          <div className="zenHead">
+            <div
+              className="mono sectorTitle"
+              style={{ color: "var(--violet)" }}
+            >
+              <span className="diamond" /> ZENITH AIRMASS FORECAST
+            </div>
+            <div className="mono zenLegend">
+              <span className="legendDot cyan" /> SEEING (″)
+              <span className="legendDot violet" style={{ marginLeft: 12 }} />{" "}
+              AIRMASS
+            </div>
+          </div>
+
+          <div className="zenChart">
+            <div className="zenGrid" />
+            <div className="zenLine violet" />
+            <div className="zenLine cyan dashed" />
+            <div className="mono zenAxis">
+              {(earth?.hours?.length
+                ? earth.hours
+                : ["20:00", "21:00", "22:00", "23:00", "00:00", "01:00", "02:00"]
+              ).join("  ")}
+            </div>
+          </div>
+
+          <div className="zenFooter">
+            <div className="zenTile">
+              <div className="mono miniLabel">OPTIMAL COLLECTION START</div>
+              <div className="miniValue">
+                {earth?.optimalCollectionStartLocal ?? "—"}
+              </div>
+            </div>
+            <div className="zenTile">
+              <div className="mono miniLabel">PEAK ALTITUDE VISIBILITY</div>
+              <div className="miniValue">Zenith (90°)</div>
+            </div>
+            <div className="zenTile">
+              <div className="mono miniLabel">NIGHT DURATION REMAINING</div>
+              <div className="miniValue" style={{ color: "var(--cyan)" }}>
+                {earth?.nightRemaining ?? "—"}
+              </div>
+            </div>
+          </div>
+
+          <div className="hr" />
+
+          <div className="quickActions">
+            <Chip tone="cyan">GLOBAL ARRAY LINK: ESTABLISHED</Chip>
+            <Chip tone="neutral">
+              COORD:{" "}
+              {earth ? `${earth.lat.toFixed(4)}, ${earth.lon.toFixed(4)}` : "—"}
+            </Chip>
+            <Chip tone="violet">
+              ELV: {earth?.elevM == null ? "—" : `${Math.round(earth.elevM)}m`}
+            </Chip>
+          </div>
+        </div>
+      </div>
+
       {/* ✅ Styles kept intact. Peer-review-related styles can remain safely. */}
       <style>{`
         .page{display:flex;flex-direction:column;gap:18px;}
@@ -833,10 +1003,6 @@ export default function HomePage() {
         .heroMeta{margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;}
         .metaPill{padding:8px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.08);background:rgba(10,16,28,.35);}
         .divider{height:1px;background:rgba(255,255,255,.08);margin:16px 0;}
-        .heroStats{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
-        .statTile{padding:14px;border-radius:16px;border:1px solid rgba(255,255,255,.08);background:rgba(10,16,28,.35);}
-        .statLabel{opacity:.7;letter-spacing:.22em;font-size:12px;}
-        .statValue{margin-top:8px;font-size:34px;font-weight:900;color:rgba(255,255,255,.92);}
         .progressBlock{display:flex;flex-direction:column;gap:10px;}
         .progressLabel{opacity:.7;letter-spacing:.22em;font-size:12px;}
         .progressRow{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;}
@@ -856,17 +1022,9 @@ export default function HomePage() {
         .campaignEnds{opacity:.6;letter-spacing:.3em;font-size:12px;}
         .campaignTitle{margin-top:8px;font-size:28px;font-weight:900;}
         .campaignDesc{opacity:.65;margin-top:6px;line-height:1.45;}
-        .chartMock{border-radius:18px;border:1px solid rgba(255,255,255,.08);background:rgba(6,10,18,.25);padding:16px;}
-        .chartLegend{opacity:.7;letter-spacing:.22em;font-weight:800;font-size:12px;display:flex;align-items:center;gap:10px;}
         .legendDot{display:inline-block;width:10px;height:10px;border-radius:999px;margin-right:8px;}
         .legendDot.violet{background:rgba(160,110,255,.8);box-shadow:0 0 18px rgba(160,110,255,.25);}
         .legendDot.cyan{background:rgba(0,255,255,.75);box-shadow:0 0 18px rgba(0,255,255,.22);}
-        .chartBars{display:grid;grid-template-columns:repeat(7,1fr);gap:10px;margin-top:14px;align-items:end;height:220px;}
-        .barCol{display:flex;flex-direction:column;gap:8px;align-items:center;justify-content:flex-end;}
-        .bar{width:18px;border-radius:999px;}
-        .bar.violet{background:linear-gradient(180deg, rgba(160,110,255,.85), rgba(160,110,255,.15));box-shadow:0 0 22px rgba(160,110,255,.18);}
-        .bar.cyan{background:linear-gradient(180deg, rgba(0,255,255,.75), rgba(0,255,255,.12));box-shadow:0 0 22px rgba(0,255,255,.14);}
-        .barLabel{opacity:.55;letter-spacing:.26em;font-size:11px;}
         .twoCol{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
         .miniPanel{border-radius:18px;border:1px solid rgba(255,255,255,.08);background:rgba(6,10,18,.25);padding:18px;text-align:center;}
         .miniLabel{opacity:.65;letter-spacing:.28em;font-weight:900;font-size:12px;}
@@ -907,7 +1065,6 @@ export default function HomePage() {
         .dot.cyan{background:rgba(0,255,255,.8);box-shadow:0 0 18px rgba(0,255,255,.2);}
         .dot.violet{background:rgba(160,110,255,.8);box-shadow:0 0 18px rgba(160,110,255,.2);}
         @media (max-width: 860px){
-          .heroStats{grid-template-columns:1fr;}
           .twoCol{grid-template-columns:1fr;}
           .metricRow{grid-template-columns:1fr;}
           .zenFooter{grid-template-columns:1fr;}
