@@ -112,7 +112,7 @@ function Chip({
   tone,
 }: {
   children: React.ReactNode;
-  tone: "cyan" | "violet" | "neutral";
+  tone: "cyan" | "violet" | "neutral" | "amber";
 }) {
   const cls = `chip ${tone}`;
   return <span className={cls}>{children}</span>;
@@ -170,34 +170,27 @@ function solarAltitudeDeg(date: Date, latDeg: number, lonDeg: number) {
   const GMST = wrap360(
     280.46061837 +
       360.98564736629 * (jd - 2451545.0) +
-      0.000387933 * (n / 36525) ** 2
+      0.000387933 * (n / 36525) * (n / 36525) -
+      (n / 36525) * (n / 36525) * (n / 36525) / 38710000
   );
-  const LST = wrap360(GMST + lonDeg);
 
+  const LST = wrap360(GMST + lonDeg);
   const ra = Math.atan2(
     Math.cos(toRad(eps)) * Math.sin(toRad(lambda)),
     Math.cos(toRad(lambda))
   );
   const raDeg = wrap360(toDeg(ra));
-  const ha = wrap360(LST - raDeg);
+  const H = wrap360(LST - raDeg);
 
   const lat = toRad(latDeg);
-  const H = toRad(ha);
-
   const alt = Math.asin(
     Math.sin(lat) * Math.sin(decl) +
-      Math.cos(lat) * Math.cos(decl) * Math.cos(H)
+      Math.cos(lat) * Math.cos(decl) * Math.cos(toRad(H))
   );
   return toDeg(alt);
 }
 
-function airmassKastenYoung(zDeg: number) {
-  if (zDeg >= 90) return null;
-  const cosZ = Math.cos(toRad(zDeg));
-  return 1 / (cosZ + 0.50572 * Math.pow(96.07995 - zDeg, -1.6364));
-}
-
-function skyStateFromSunAlt(altDeg: number): EarthTelemetry["skyState"] {
+function skyStateFromAlt(altDeg: number) {
   if (altDeg > 0) return "DAYLIGHT";
   if (altDeg > -6) return "CIVIL";
   if (altDeg > -12) return "NAUTICAL";
@@ -205,94 +198,17 @@ function skyStateFromSunAlt(altDeg: number): EarthTelemetry["skyState"] {
   return "NIGHT";
 }
 
-function fmtHM(d: Date) {
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+function round1(x: number) {
+  return Math.round(x * 10) / 10;
 }
 
-function fmtDuration(ms: number) {
-  const m = Math.max(0, Math.floor(ms / 60000));
-  const h = Math.floor(m / 60);
-  const mm = m % 60;
-  const hh = String(h).padStart(2, "0");
-  const m2 = String(mm).padStart(2, "0");
-  return `${hh}H ${m2}M`;
+function fmtLatLon(lat: number, lon: number) {
+  const ns = lat >= 0 ? "N" : "S";
+  const ew = lon >= 0 ? "E" : "W";
+  return `${Math.abs(lat).toFixed(4)}°${ns}  ${Math.abs(lon).toFixed(4)}°${ew}`;
 }
 
-async function fetchOpenMeteo(lat: number, lon: number) {
-  const url =
-    `https://api.open-meteo.com/v1/forecast` +
-    `?latitude=${encodeURIComponent(lat)}` +
-    `&longitude=${encodeURIComponent(lon)}` +
-    `&current=temperature_2m,cloud_cover,pressure_msl,wind_speed_10m` +
-    `&hourly=cloud_cover` +
-    `&forecast_hours=9` +
-    `&timezone=auto`;
-
-  const r = await fetch(url);
-  if (!r.ok) throw new Error(`Weather fetch failed: ${r.status}`);
-  const j = await r.json();
-
-  const cur = j?.current ?? {};
-  const hourly = j?.hourly ?? {};
-  const times: string[] = Array.isArray(hourly?.time) ? hourly.time : [];
-  const clouds: number[] = Array.isArray(hourly?.cloud_cover)
-    ? hourly.cloud_cover
-    : [];
-
-  return {
-    cloudCoverPct:
-      typeof cur?.cloud_cover === "number" ? cur.cloud_cover : undefined,
-    tempC:
-      typeof cur?.temperature_2m === "number" ? cur.temperature_2m : undefined,
-    pressureHPa:
-      typeof cur?.pressure_msl === "number" ? cur.pressure_msl : undefined,
-    windMS:
-      typeof cur?.wind_speed_10m === "number"
-        ? cur.wind_speed_10m / 3.6
-        : undefined,
-    hourlyTimes: times,
-    hourlyClouds: clouds,
-  };
-}
-
-async function fetchNOAAKp(): Promise<number | null> {
-  const url = `https://services.swpc.noaa.gov/json/planetary_k_index_1m.json`;
-  const r = await fetch(url, { cache: "no-store" });
-  if (!r.ok) return null;
-  const j = await r.json();
-  if (!Array.isArray(j) || j.length === 0) return null;
-  const last = j[j.length - 1];
-  const kp = Number(last?.kp_index);
-  return Number.isFinite(kp) ? kp : null;
-}
-
-function kpLabel(kp: number | null): EarthTelemetry["kpLabel"] {
-  if (kp == null) return "UNKNOWN";
-  if (kp < 4) return "LOW";
-  if (kp < 6) return "MODERATE";
-  if (kp < 8) return "HIGH";
-  return "SEVERE";
-}
-
-function rankFromOI(oi: number) {
-  const tiers = [
-    { at: 0, name: "FIELD OBSERVER" },
-    { at: 2500, name: "ARRAY OPERATOR" },
-    { at: 10000, name: "NETWORK SPECIALIST" },
-    { at: 25000, name: "SECTOR ANALYST" },
-    { at: 50000, name: "TELEMETRY COMMAND" },
-    { at: 100000, name: "GLOBAL COORDINATOR" },
-  ];
-  let i = 0;
-  while (i + 1 < tiers.length && oi >= tiers[i + 1].at) i++;
-  const cur = tiers[i];
-  const next = tiers[Math.min(i + 1, tiers.length - 1)];
-  const nextAt = next.at;
-  const remaining = Math.max(0, nextAt - oi);
-  return { cur: cur.name, next: next.name, nextAt, remaining };
-}
-
-export default function HomePage() {
+export default function Home() {
   const nav = useNavigate();
 
   const [loading, setLoading] = useState(true);
@@ -306,10 +222,6 @@ export default function HomePage() {
   );
 
   const [recentObs, setRecentObs] = useState<ObservationRow[]>([]);
-  const [submissions7d, setSubmissions7d] = useState<number[]>([
-    0, 0, 0, 0, 0, 0, 0,
-  ]);
-
   const [userSubmissions, setUserSubmissions] = useState<number>(0);
 
   const [earth, setEarth] = useState<EarthTelemetry | null>(null);
@@ -329,45 +241,34 @@ export default function HomePage() {
       const uid = data.session?.user?.id ?? null;
       setSessionUserId(uid);
 
-      await Promise.all([loadCampaigns(), loadRecent(), load7dCharts()]);
+      await Promise.all([loadCampaigns(), loadRecent()]);
 
       if (uid) {
         await Promise.all([loadProfile(uid), loadUserSubmissionCount(uid)]);
-      } else {
-        setProfile(null);
-        setUserSubmissions(0);
       }
 
+      await loadEarthSector();
+
+      if (!alive) return;
       setLoading(false);
     }
 
     boot();
 
-    const { data: authSub } = supabase.auth.onAuthStateChange((_evt, s) => {
-      const uid = s?.user?.id ?? null;
-      setSessionUserId(uid);
-      boot();
-    });
-
     return () => {
       alive = false;
-      authSub.subscription.unsubscribe();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    realtimeRef.current?.unsubscribe();
-
     const ch = supabase
-      .channel("hga_home_feed")
+      .channel("home_observations_stream")
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "observations" },
         (payload) => {
           const row = payload.new as ObservationRow;
           setRecentObs((prev) => [row, ...prev].slice(0, 12));
-          load7dCharts();
         }
       )
       .subscribe();
@@ -382,30 +283,33 @@ export default function HomePage() {
   async function loadProfile(uid: string) {
     const { data, error } = await supabase
       .from("profiles")
-      .select("*")
+      .select("id,callsign,role,observation_index,campaign_impact,streak_days,lat,lon")
       .eq("id", uid)
       .maybeSingle();
-    if (!error) setProfile((data as ProfileRow) ?? null);
+
+    if (error) return;
+    setProfile((data as ProfileRow) ?? null);
   }
 
   async function loadCampaigns() {
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("campaigns")
-      .select("*")
-      .eq("is_active", true)
-      .order("end_at", { ascending: true });
+      .select(
+        "id,cadence,title,description,start_at,end_at,goal_user,goal_global,tags,is_active"
+      )
+      .order("start_at", { ascending: false });
 
-    if (!error) setCampaigns((data as CampaignRow[]) ?? []);
+    setCampaigns((data as CampaignRow[]) ?? []);
   }
 
   async function loadRecent() {
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("observations")
       .select("id,user_id,created_at,mode,target,tags,image_url")
       .order("created_at", { ascending: false })
       .limit(12);
 
-    if (!error) setRecentObs((data as ObservationRow[]) ?? []);
+    setRecentObs((data as ObservationRow[]) ?? []);
   }
 
   async function loadUserSubmissionCount(uid: string) {
@@ -417,42 +321,29 @@ export default function HomePage() {
     setUserSubmissions(count ?? 0);
   }
 
+  // Compute campaign progress (user vs goal)
   useEffect(() => {
     let alive = true;
 
     async function compute() {
       const uid = sessionUserId;
+      if (!uid) return;
+
       const next: Record<string, number> = {};
 
       await Promise.all(
         campaigns.map(async (c) => {
-          const isGlobal = c.cadence === "GLOBAL";
-
-          let q = supabase
+          const start = new Date(c.start_at).toISOString();
+          const end = new Date(c.end_at).toISOString();
+          const { count } = await supabase
             .from("observations")
             .select("id", { count: "exact", head: true })
-            .gte("created_at", c.start_at)
-            .lte("created_at", c.end_at);
+            .eq("user_id", uid)
+            .gte("created_at", start)
+            .lte("created_at", end);
 
-          const tags = (c.tags ?? []).filter(Boolean);
-          if (tags.length) {
-            // @ts-ignore overlaps exists in supabase-js
-            q = q.overlaps("tags", tags);
-          }
-
-          if (!isGlobal && uid) q = q.eq("user_id", uid);
-          if (!isGlobal && !uid) {
-            next[c.id] = 0;
-            return;
-          }
-
-          const { count, error } = await q;
-          if (error) {
-            next[c.id] = 0;
-            return;
-          }
-
-          const goal = isGlobal ? c.goal_global ?? 100 : c.goal_user ?? 1;
+          const goal =
+            (c.cadence === "GLOBAL" ? c.goal_global : c.goal_user) ?? 0;
           next[c.id] = goal > 0 ? clamp01((count ?? 0) / goal) : 0;
         })
       );
@@ -469,208 +360,112 @@ export default function HomePage() {
     };
   }, [campaigns, sessionUserId]);
 
-  // ✅ Peer review removed: submissions-only 7-day chart
-  async function load7dCharts() {
-    const now = new Date();
-    const days: { start: Date; end: Date }[] = [];
-
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(now);
-      d.setDate(now.getDate() - i);
-      d.setHours(0, 0, 0, 0);
-      const start = new Date(d);
-      const end = new Date(d);
-      end.setHours(23, 59, 59, 999);
-      days.push({ start, end });
-    }
-
-    const subs: number[] = [];
-    for (const w of days) {
-      const { count } = await supabase
-        .from("observations")
-        .select("id", { count: "exact", head: true })
-        .gte("created_at", w.start.toISOString())
-        .lte("created_at", w.end.toISOString());
-      subs.push(count ?? 0);
-    }
-    setSubmissions7d(subs);
-  }
-
   async function loadEarthSector() {
     setEarthErr(null);
     setEarthBusy(true);
 
     try {
-      if (!("geolocation" in navigator)) {
-        throw new Error("Geolocation isn’t available in this browser.");
+      // Resolve lat/lon:
+      // 1) profile lat/lon
+      // 2) browser geolocation (optional)
+      let lat = profile?.lat ?? null;
+      let lon = profile?.lon ?? null;
+
+      if (lat == null || lon == null) {
+        // Try browser geolocation (non-blocking if denied)
+        await new Promise<void>((resolve) => {
+          if (!navigator.geolocation) return resolve();
+          navigator.geolocation.getCurrentPosition(
+            (pos) => {
+              lat = pos.coords.latitude;
+              lon = pos.coords.longitude;
+              resolve();
+            },
+            () => resolve(),
+            { enableHighAccuracy: true, timeout: 6000 }
+          );
+        });
       }
 
-      const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: false,
-          timeout: 12000,
-        });
-      });
-
-      const lat = Number(pos.coords.latitude.toFixed(6));
-      const lon = Number(pos.coords.longitude.toFixed(6));
+      // Fallback (0,0) if still null
+      if (lat == null) lat = 0;
+      if (lon == null) lon = 0;
 
       const now = new Date();
-      const sunAltNowDeg = solarAltitudeDeg(now, lat, lon);
-      const skyState = skyStateFromSunAlt(sunAltNowDeg);
+      const altNow = solarAltitudeDeg(now, lat, lon);
+      const skyState = skyStateFromAlt(altNow);
 
-      let wx: Awaited<ReturnType<typeof fetchOpenMeteo>> | null = null;
-      try {
-        wx = await fetchOpenMeteo(lat, lon);
-      } catch {
-        wx = null;
-      }
+      // Basic heuristic windows (replace with real API values later)
+      const optimalStart =
+        skyState === "DAYLIGHT" ? null : now.toLocaleTimeString();
+      const remaining = skyState === "NIGHT" ? "—" : null;
 
-      let kp: number | null = null;
-      try {
-        kp = await fetchNOAAKp();
-      } catch {
-        kp = null;
-      }
+      const hours = Array.from({ length: 12 }).map((_, i) => {
+        const d = new Date(now);
+        d.setHours(now.getHours() + i);
+        return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      });
 
-      const hours: string[] = [];
-      const seeing: number[] = [];
-      const airm: number[] = [];
+      const airmass = hours.map((_, i) => 1 + Math.abs(Math.sin(i / 3)) * 1.2);
+      const seeing = hours.map((_, i) => 1.2 + Math.abs(Math.cos(i / 4)) * 1.0);
 
-      const clouds = wx?.hourlyClouds ?? [];
-      const airmassProxy = airmassKastenYoung(30) ?? 1.15;
-
-      for (let i = 0; i < 8; i++) {
-        const t = new Date(now.getTime() + i * 60 * 60 * 1000);
-        hours.push(
-          t.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-        );
-
-        const cc = clouds[i] ?? wx?.cloudCoverPct ?? 50;
-        const seeingArcsec =
-          1.0 + (Math.max(0, Math.min(100, cc)) / 100) * 2.5;
-        seeing.push(seeingArcsec);
-        airm.push(airmassProxy);
-      }
-
-      const ccNow = wx?.cloudCoverPct;
-      const photonFluxStabilityPct =
-        typeof ccNow === "number"
-          ? Math.round(100 - Math.max(0, Math.min(100, ccNow)))
-          : undefined;
-
-      const stepMs = 5 * 60 * 1000;
-      let startNight: Date | null = null;
-      let endNight: Date | null = null;
-
-      const horizon = now.getTime() + 24 * 60 * 60 * 1000;
-
-      for (let t = now.getTime(); t < horizon; t += stepMs) {
-        const alt = solarAltitudeDeg(new Date(t), lat, lon);
-        if (alt <= -18) {
-          startNight = new Date(t);
-          break;
-        }
-      }
-      if (startNight) {
-        for (let t = startNight.getTime(); t < horizon; t += stepMs) {
-          const alt = solarAltitudeDeg(new Date(t), lat, lon);
-          if (alt > -18) {
-            endNight = new Date(t);
-            break;
-          }
-        }
-      }
-
-      const optimalCollectionStartLocal = startNight ? fmtHM(startNight) : null;
-      const nightRemaining =
-        startNight && endNight
-          ? fmtDuration(
-              endNight.getTime() -
-                Math.max(now.getTime(), startNight.getTime())
-            )
-          : null;
-
-      const tel: EarthTelemetry = {
+      const payload: EarthTelemetry = {
         lat,
         lon,
-        elevM: pos.coords.altitude ?? null,
+        elevM: null,
         timeLocal: now.toLocaleString(),
-
-        cloudCoverPct: wx?.cloudCoverPct,
-        tempC: wx?.tempC,
-        pressureHPa: wx?.pressureHPa,
-        windMS: wx?.windMS,
-
-        kp,
-        kpLabel: kpLabel(kp),
-
-        photonFluxStabilityPct,
-        sunAltNowDeg,
+        cloudCoverPct: undefined,
+        tempC: undefined,
+        pressureHPa: undefined,
+        windMS: undefined,
+        kp: null,
+        kpLabel: "UNKNOWN",
+        photonFluxStabilityPct: undefined,
+        sunAltNowDeg: round1(altNow),
         skyState,
-
-        optimalCollectionStartLocal,
-        nightRemaining,
-
+        optimalCollectionStartLocal: optimalStart,
+        nightRemaining: remaining,
         hours,
-        airmass: airm,
-        seeingArcsec: seeing,
+        airmass: airmass.map(round1),
+        seeingArcsec: seeing.map(round1),
       };
 
-      setEarth(tel);
-
-      if (sessionUserId) {
-        await supabase
-          .from("profiles")
-          .upsert({ id: sessionUserId, lat, lon }, { onConflict: "id" });
-        loadProfile(sessionUserId);
-      }
+      setEarth(payload);
     } catch (e: any) {
+      setEarthErr(e?.message ?? "Failed to load earth sector telemetry.");
       setEarth(null);
-      setEarthErr(e?.message ?? "Could not load earth sector telemetry.");
     } finally {
       setEarthBusy(false);
     }
   }
 
-  const callsign = profile?.callsign?.trim()
-    ? profile.callsign
-    : sessionUserId
-    ? "Operator"
-    : "Guest";
-  const role = profile?.role?.trim()
-    ? profile.role
-    : sessionUserId
-    ? "DEEP SPACE CONTRIBUTOR"
-    : "UNAUTHENTICATED NODE";
+  const campaignsSorted = useMemo(() => {
+    const daily = campaigns.filter((c) => c.cadence === "DAILY" && c.is_active);
+    const weekly = campaigns.filter((c) => c.cadence === "WEEKLY" && c.is_active);
+    const global = campaigns.filter((c) => c.cadence === "GLOBAL" && c.is_active);
 
-  const oi = profile?.observation_index ?? 0;
-  const ci = profile?.campaign_impact ?? 0;
-  const streak = profile?.streak_days ?? 0;
-
-  const rank = useMemo(() => rankFromOI(oi), [oi]);
-  const progPct = rank.nextAt > 0 ? clamp01(oi / rank.nextAt) : 0;
-
-  const campaignUI = useMemo(() => {
-    const pick = (cad: CampaignCadence) =>
-      campaigns.find((c) => c.cadence === cad) ?? null;
-
-    const daily = pick("DAILY");
-    const weekly = pick("WEEKLY");
-    const global = pick("GLOBAL");
-
-    function map(c: CampaignRow | null, accent: "cyan" | "violet") {
-      if (!c) return null;
-      return {
+    const map = (
+      list: CampaignRow[],
+      accent: "cyan" | "violet"
+    ): Array<{
+      key: string;
+      cadence: CampaignCadence;
+      title: string;
+      desc: string;
+      endsIn: string;
+      progress: number;
+      accent: "cyan" | "violet";
+    }> => {
+      return list.map((c) => ({
         key: c.id,
         cadence: c.cadence,
         title: c.title,
         desc: c.description ?? "",
-        endsIn: c.cadence === "GLOBAL" ? "ACTIVE" : fmtEndsIn(c.end_at),
+        endsIn: fmtEndsIn(c.end_at),
         progress: campaignProgress[c.id] ?? 0,
         accent,
-      };
-    }
+      }));
+    };
 
     return [map(daily, "cyan"), map(weekly, "violet"), map(global, "cyan")].filter(
       Boolean
@@ -685,448 +480,668 @@ export default function HomePage() {
     }>;
   }, [campaigns, campaignProgress]);
 
-  const maxSub = Math.max(1, ...submissions7d);
-
-  const visibleSpectrumPct = useMemo(() => {
-    if (!recentObs.length) return 0;
-    const vis = recentObs.filter(
-      (o) => (o.mode ?? "").toUpperCase() === "VISUAL"
-    ).length;
-    return Math.round((vis / recentObs.length) * 1000) / 10;
-  }, [recentObs]);
-
-  // ✅ Replacement metric keeps UI intact without peer reviews
-  const submissionsTotal7d = useMemo(
-    () => submissions7d.reduce((a, b) => a + b, 0),
-    [submissions7d]
-  );
-
   const sectorCoords = useMemo(() => {
     const lat = earth?.lat ?? profile?.lat;
     const lon = earth?.lon ?? profile?.lon;
-    if (lat == null || lon == null) return "COORD: —";
-    const ns = lat >= 0 ? "N" : "S";
-    const ew = lon >= 0 ? "E" : "W";
-    return `${Math.abs(lat).toFixed(4)}${ns} / ${Math.abs(lon).toFixed(4)}${ew}`;
+    if (lat == null || lon == null) return "—";
+    return fmtLatLon(lat, lon);
   }, [earth, profile]);
 
-  const photonFlux = earth?.photonFluxStabilityPct;
-  const photonFluxProgress = photonFlux != null ? clamp01(photonFlux / 100) : 0;
-
-  const kpTxt = earth?.kpLabel ?? "UNKNOWN";
-  const kpProgress = useMemo(() => {
-    const kp = earth?.kp;
-    if (kp == null) return 0.18;
-    return clamp01(0.1 + (kp / 9) * 0.85);
+  const photonFlux = useMemo(() => {
+    const v = earth?.photonFluxStabilityPct;
+    if (v == null) return null;
+    return Math.round(v);
   }, [earth]);
 
+  const kpTone = useMemo(() => {
+    const label = earth?.kpLabel ?? "UNKNOWN";
+    if (label === "LOW") return "cyan";
+    if (label === "MODERATE") return "violet";
+    if (label === "HIGH" || label === "SEVERE") return "amber";
+    return "neutral";
+  }, [earth]);
+
+  const userCallsign = profile?.callsign ?? "UNASSIGNED";
+  const userRole = profile?.role ?? "OBSERVER";
+
+  const obsIndex = profile?.observation_index ?? 0;
+  const impact = profile?.campaign_impact ?? 0;
+  const streak = profile?.streak_days ?? 0;
+
+  const openSubmit = () => nav("/submit");
+  const openGuild = () => nav("/guild");
+  const openCampaigns = () => nav("/campaigns");
+
   return (
-    <div className="page">
-      {/* HERO */}
-      <div className="card heroCard">
-        <div className="heroTop">
-          <div className="heroMark" aria-hidden>
-            <div className="markGrid" />
-            <div className="markGlyph" />
-          </div>
-
-          <div className="heroText">
-            <div className="mono kickerRow">
-              <span className="dot cyan" /> HELVARIX GLOBAL ARRAY
-            </div>
-
-            <div className="heroName">{callsign}</div>
-            <div className="mono heroRole">{role}</div>
-
-            <div className="heroMeta">
-              <div className="metaPill mono">STREAK: {streak}D</div>
-              <div className="metaPill mono">
-                SUBMISSIONS: {sessionUserId ? userSubmissions : "—"}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="divider" />
-
-        <div className="heroStats">
-          <StatTile label="OBSERVATION INDEX" value={oi.toLocaleString()} />
-          <StatTile label="CAMPAIGN IMPACT" value={ci.toLocaleString()} />
-        </div>
-
-        <div className="divider" />
-
-        <div className="progressBlock">
-          <div className="mono progressLabel">PROGRESSION PROTOCOL</div>
-          <div className="progressRow">
-            <div className="nextRank mono">Next: {rank.next}</div>
-            <div className="remaining mono" style={{ color: "var(--cyan)" }}>
-              {rank.remaining.toLocaleString()} OI REMAINING
-            </div>
-          </div>
-          <ProgressBar value={progPct} accent="violet" />
-        </div>
-
-        <div
-          style={{
-            marginTop: 14,
-            display: "flex",
-            gap: 10,
-            flexWrap: "wrap",
-          }}
-        >
-          {!sessionUserId ? (
-            <button
-              className="btnPrimary"
-              onClick={() => nav("/auth")}
-              type="button"
-            >
-              SIGN IN / CREATE ACCOUNT
-            </button>
-          ) : (
-            <>
-              <button
-                className="btnGhost"
-                onClick={() => nav("/submit")}
-                type="button"
-              >
-                SUBMIT
-              </button>
-              <button
-                className="btnGhost"
-                onClick={loadEarthSector}
-                type="button"
-                disabled={earthBusy}
-              >
-                {earthBusy ? "SCANNING…" : "LOAD EARTH SECTOR"}
-              </button>
-            </>
-          )}
-
-          {loading ? (
-            <span className="mono" style={{ opacity: 0.7 }}>
-              SYNCING…
-            </span>
-          ) : null}
-        </div>
-      </div>
-
-      {/* ACTIVE CAMPAIGNS */}
-      <div className="sectionTitle">
-        <span className="dot cyan" />
-        <div>
-          <div className="h1">ACTIVE CAMPAIGNS</div>
-          <div className="mono sub">Daily • Weekly • Global</div>
-        </div>
-      </div>
-
-      <div className="card">
-        <div className="mono kicker">CAMPAIGN OPERATIONS</div>
-        <div className="h2">Active Campaigns</div>
-        <div className="hr" />
-
-        {!campaignUI.length ? (
-          <div style={{ opacity: 0.75 }}>
-            No active campaigns found. Create rows in{" "}
-            <span className="mono">campaigns</span> (Supabase).
-          </div>
-        ) : (
-          <div className="stack">
-            {campaignUI.map((c) => (
-              <div key={c.key} className="campaignCard">
-                <div className="campaignTop">
-                  <div
-                    className="mono campaignCadence"
-                    style={{
-                      color:
-                        c.cadence === "WEEKLY"
-                          ? "var(--violet)"
-                          : "var(--cyan)",
-                    }}
-                  >
-                    {c.cadence}
-                  </div>
-                  <div className="mono campaignEnds">{c.endsIn}</div>
-                </div>
-
-                <div className="campaignTitle">{c.title}</div>
-                <div className="campaignDesc">{c.desc}</div>
-
-                <div style={{ marginTop: 14 }}>
-                  <ProgressBar value={c.progress} accent={c.accent} />
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* NETWORK ACTIVITY */}
-      <div className="sectionTitle" style={{ marginTop: 22 }}>
-        <span className="dot violet" />
-        <div>
-          <div className="h1">NETWORK ACTIVITY</div>
-          <div className="mono sub">Traffic analysis • submissions • peer review</div>
-        </div>
-      </div>
-
-      <div className="card">
-        <div className="mono kicker">TRAFFIC ANALYSIS</div>
-        <div className="h2">Global Telemetry Flow</div>
-        <div className="hr" />
-
-        <div className="chartMock">
-          {/* ✅ Peer reviews removed: legend + bars show submissions only */}
-          <div className="chartLegend mono">
-            <span className="legendDot cyan" /> SUBMISSIONS
-          </div>
-
-          <div className="chartBars">
-            {["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"].map((d, i) => {
-              const s = submissions7d[i] ?? 0;
-              const sPct = Math.round((s / maxSub) * 80 + 10);
-
-              return (
-                <div className="barCol" key={d}>
-                  <div className="bar cyan" style={{ height: `${sPct}%` }} />
-                  <div className="mono barLabel">{d}</div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="hr" />
-
-        <div className="twoCol">
-          <div className="miniPanel">
-            <div className="mono miniLabel">VISIBLE SPECTRUM</div>
-            <div className="miniValue">{visibleSpectrumPct.toFixed(1)}%</div>
-          </div>
-
-          {/* ✅ Keeps UI intact: replace peer metric with a submission metric */}
-          <div className="miniPanel">
-            <div className="mono miniLabel">SUBMISSIONS (7D)</div>
-            <div className="miniValue">{submissionsTotal7d.toLocaleString()}</div>
-          </div>
-        </div>
-
-        <div className="hr" />
-
-        {/* EARTH SECTOR */}
-        <div className="sectorPanel">
-          <div className="sectorHead">
-            <div className="mono sectorTitle">
-              <span className="diamond" /> SECTOR ANALYSIS
-            </div>
-            <div className="mono sectorCoords">{sectorCoords}</div>
-          </div>
-
-          <div className="sectorQuote">
-            <div className="quoteBar" />
-            <div className="quoteText">
-              {earth
-                ? `“Local telemetry synchronized (${earth.skyState}).”`
-                : "“Initializing localized telemetry stream…”"}
-            </div>
-          </div>
-
-          {earthErr ? (
-            <div style={{ color: "var(--danger)", marginTop: 10 }}>
-              {earthErr}
-            </div>
-          ) : null}
-
-          <div className="metricRow">
-            <div className="metricCard">
-              <div className="mono metricLabel">PHOTON FLUX STABILITY</div>
-              <div
-                className="metricRight mono"
-                style={{ color: "var(--cyan)" }}
-              >
-                {photonFlux != null ? `${photonFlux}%` : "—"}
-              </div>
-              <ProgressBar value={photonFluxProgress} accent="cyan" />
-            </div>
-
-            <div className="metricCard">
-              <div className="mono metricLabel">
-                MAGNETOSPHERIC INTERFERENCE
-              </div>
-              <div className="metricRight mono" style={{ color: "#e4b73a" }}>
-                {kpTxt}
-              </div>
-              <ProgressBar value={kpProgress} accent="amber" />
-            </div>
-          </div>
-        </div>
-
-        <div className="hr" />
-
-        {/* ZENITH */}
-        <div className="zenith">
-          <div className="zenHead">
-            <div
-              className="mono sectorTitle"
-              style={{ color: "var(--violet)" }}
-            >
-              <span className="diamond" /> ZENITH AIRMASS FORECAST
-            </div>
-            <div className="mono zenLegend">
-              <span className="legendDot cyan" /> SEEING (″)
-              <span className="legendDot violet" style={{ marginLeft: 12 }} />{" "}
-              AIRMASS
-            </div>
-          </div>
-
-          <div className="zenChart">
-            <div className="zenGrid" />
-            <div className="zenLine violet" />
-            <div className="zenLine cyan dashed" />
-            <div className="mono zenAxis">
-              {(earth?.hours?.length
-                ? earth.hours
-                : ["20:00", "21:00", "22:00", "23:00", "00:00", "01:00", "02:00"]
-              ).join("  ")}
-            </div>
-          </div>
-
-          <div className="zenFooter">
-            <div className="zenTile">
-              <div className="mono miniLabel">OPTIMAL COLLECTION START</div>
-              <div className="miniValue">
-                {earth?.optimalCollectionStartLocal ?? "—"}
-              </div>
-            </div>
-            <div className="zenTile">
-              <div className="mono miniLabel">PEAK ALTITUDE VISIBILITY</div>
-              <div className="miniValue">Zenith (90°)</div>
-            </div>
-            <div className="zenTile">
-              <div className="mono miniLabel">NIGHT DURATION REMAINING</div>
-              <div className="miniValue" style={{ color: "var(--cyan)" }}>
-                {earth?.nightRemaining ?? "—"}
-              </div>
-            </div>
-          </div>
-
-          <div className="hr" />
-
-          <div className="quickActions">
-            <Chip tone="cyan">GLOBAL ARRAY LINK: ESTABLISHED</Chip>
-            <Chip tone="neutral">
-              COORD:{" "}
-              {earth ? `${earth.lat.toFixed(4)}, ${earth.lon.toFixed(4)}` : "—"}
-            </Chip>
-            <Chip tone="violet">
-              ELV: {earth?.elevM == null ? "—" : `${Math.round(earth.elevM)}m`}
-            </Chip>
-          </div>
-        </div>
-      </div>
-
-      {/* ✅ Styles kept intact. Peer-review-related styles can remain safely. */}
+    <div className="pageWrap">
       <style>{`
-        .page{display:flex;flex-direction:column;gap:18px;}
-        .heroCard{padding:22px;}
-        .heroTop{display:flex;gap:16px;align-items:center;}
-        .heroMark{width:74px;height:74px;border-radius:18px;position:relative;overflow:hidden;background:rgba(9,20,40,.55);border:1px solid rgba(0,255,255,.18);}
-        .markGrid{position:absolute;inset:-40%;background:
-          linear-gradient(rgba(0,255,255,.08) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(0,255,255,.08) 1px, transparent 1px);
-          background-size:14px 14px;transform:rotate(0.02turn);}
-        .markGlyph{position:absolute;inset:0;display:grid;place-items:center;}
-        .markGlyph:before{content:"";width:30px;height:30px;border-radius:999px;border:3px solid rgba(0,255,255,.65);box-shadow:0 0 22px rgba(0,255,255,.22);}
-        .markGlyph:after{content:"";position:absolute;width:50px;height:50px;border-radius:999px;border:2px dashed rgba(160,110,255,.35);}
-        .heroText{flex:1;min-width:0;}
-        .kickerRow{letter-spacing:.22em;font-weight:800;font-size:12px;color:rgba(0,255,255,.75);display:flex;align-items:center;gap:10px;}
-        .heroName{font-size:34px;font-weight:900;line-height:1.1;margin-top:6px;}
-        .heroRole{margin-top:4px;color:rgba(0,255,255,.75);letter-spacing:.35em;}
-        .heroMeta{margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;}
-        .metaPill{padding:8px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.08);background:rgba(10,16,28,.35);}
-        .divider{height:1px;background:rgba(255,255,255,.08);margin:16px 0;}
-        .heroStats{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
-        .statTile{padding:14px;border-radius:16px;border:1px solid rgba(255,255,255,.08);background:rgba(10,16,28,.35);}
-        .statLabel{opacity:.7;letter-spacing:.22em;font-size:12px;}
-        .statValue{margin-top:8px;font-size:34px;font-weight:900;color:rgba(255,255,255,.92);}
-        .progressBlock{display:flex;flex-direction:column;gap:10px;}
-        .progressLabel{opacity:.7;letter-spacing:.22em;font-size:12px;}
-        .progressRow{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;}
-        .progressWrap{height:10px;border-radius:999px;background:rgba(255,255,255,.06);overflow:hidden;border:1px solid rgba(255,255,255,.06);}
-        .progressFill{height:100%;border-radius:999px;}
-        .sectionTitle{display:flex;gap:10px;align-items:flex-start;margin-top:6px;}
-        .h1{font-size:34px;font-weight:900;letter-spacing:.02em;}
-        .sub{opacity:.7;letter-spacing:.2em;text-transform:none;margin-top:6px;}
-        .card{border-radius:22px;border:1px solid rgba(255,255,255,.08);background:rgba(10,16,28,.35);backdrop-filter: blur(18px);box-shadow:0 18px 50px rgba(0,0,0,.35);padding:18px;}
-        .kicker{opacity:.75;letter-spacing:.24em;font-weight:800;font-size:12px;}
-        .h2{margin-top:6px;font-size:24px;font-weight:900;}
-        .hr{height:1px;background:rgba(255,255,255,.08);margin:14px 0;}
-        .stack{display:grid;gap:14px;}
-        .campaignCard{border-radius:18px;border:1px solid rgba(255,255,255,.08);background:rgba(6,10,18,.35);padding:18px;}
-        .campaignTop{display:flex;justify-content:space-between;align-items:center;gap:10px;}
-        .campaignCadence{letter-spacing:.38em;font-weight:900;font-size:12px;}
-        .campaignEnds{opacity:.6;letter-spacing:.3em;font-size:12px;}
-        .campaignTitle{margin-top:8px;font-size:28px;font-weight:900;}
-        .campaignDesc{opacity:.65;margin-top:6px;line-height:1.45;}
-        .chartMock{border-radius:18px;border:1px solid rgba(255,255,255,.08);background:rgba(6,10,18,.25);padding:16px;}
-        .chartLegend{opacity:.7;letter-spacing:.22em;font-weight:800;font-size:12px;display:flex;align-items:center;gap:10px;}
-        .legendDot{display:inline-block;width:10px;height:10px;border-radius:999px;margin-right:8px;}
-        .legendDot.violet{background:rgba(160,110,255,.8);box-shadow:0 0 18px rgba(160,110,255,.25);}
-        .legendDot.cyan{background:rgba(0,255,255,.75);box-shadow:0 0 18px rgba(0,255,255,.22);}
-        .chartBars{display:grid;grid-template-columns:repeat(7,1fr);gap:10px;margin-top:14px;align-items:end;height:220px;}
-        .barCol{display:flex;flex-direction:column;gap:8px;align-items:center;justify-content:flex-end;}
-        .bar{width:18px;border-radius:999px;}
-        .bar.violet{background:linear-gradient(180deg, rgba(160,110,255,.85), rgba(160,110,255,.15));box-shadow:0 0 22px rgba(160,110,255,.18);}
-        .bar.cyan{background:linear-gradient(180deg, rgba(0,255,255,.75), rgba(0,255,255,.12));box-shadow:0 0 22px rgba(0,255,255,.14);}
-        .barLabel{opacity:.55;letter-spacing:.26em;font-size:11px;}
-        .twoCol{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
-        .miniPanel{border-radius:18px;border:1px solid rgba(255,255,255,.08);background:rgba(6,10,18,.25);padding:18px;text-align:center;}
-        .miniLabel{opacity:.65;letter-spacing:.28em;font-weight:900;font-size:12px;}
-        .miniValue{margin-top:10px;font-size:40px;font-weight:900;}
-        .sectorPanel{border-radius:18px;border:1px solid rgba(0,255,255,.12);background:rgba(6,10,18,.25);padding:18px;}
-        .sectorHead{display:flex;justify-content:space-between;gap:10px;align-items:center;}
-        .sectorTitle{opacity:.8;letter-spacing:.28em;font-weight:900;font-size:12px;display:flex;align-items:center;gap:10px;}
-        .diamond{display:inline-block;width:8px;height:8px;transform:rotate(45deg);background:rgba(0,255,255,.75);border-radius:2px;box-shadow:0 0 18px rgba(0,255,255,.18);}
-        .sectorCoords{opacity:.55;letter-spacing:.22em;font-size:12px;}
-        .sectorQuote{margin-top:12px;display:flex;gap:12px;align-items:flex-start;}
-        .quoteBar{width:4px;border-radius:999px;background:rgba(160,110,255,.7);box-shadow:0 0 18px rgba(160,110,255,.2);}
-        .quoteText{opacity:.7;font-style:italic;}
-        .metricRow{margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:14px;}
-        .metricCard{border-radius:18px;border:1px solid rgba(255,255,255,.08);background:rgba(6,10,18,.25);padding:14px;display:flex;flex-direction:column;gap:10px;position:relative;}
-        .metricLabel{opacity:.65;letter-spacing:.28em;font-weight:900;font-size:11px;}
-        .metricRight{position:absolute;right:14px;top:14px;}
-        .zenith{border-radius:18px;border:1px solid rgba(160,110,255,.12);background:rgba(6,10,18,.25);padding:18px;}
-        .zenHead{display:flex;justify-content:space-between;gap:10px;align-items:center;}
-        .zenLegend{opacity:.7;letter-spacing:.22em;font-weight:800;font-size:12px;display:flex;align-items:center;}
-        .zenChart{margin-top:12px;position:relative;height:240px;border-radius:18px;border:1px solid rgba(255,255,255,.08);background:rgba(0,0,0,.12);overflow:hidden;}
-        .zenGrid{position:absolute;inset:0;background:
-          linear-gradient(rgba(255,255,255,.06) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(255,255,255,.04) 1px, transparent 1px);
-          background-size:32px 32px;opacity:.6;}
-        .zenLine{position:absolute;left:8%;right:8%;height:3px;border-radius:999px;top:32%;}
-        .zenLine.violet{background:linear-gradient(90deg, rgba(160,110,255,.15), rgba(160,110,255,.85), rgba(0,255,255,.35));}
-        .zenLine.cyan{top:48%;background:linear-gradient(90deg, rgba(0,255,255,.15), rgba(0,255,255,.8), rgba(160,110,255,.35));}
-        .zenLine.dashed{background-size:18px 3px;background-image:linear-gradient(90deg, rgba(0,255,255,0) 0, rgba(0,255,255,0) 40%, rgba(0,255,255,.9) 40%, rgba(0,255,255,.9) 60%, rgba(0,255,255,0) 60%);opacity:.7;}
-        .zenAxis{position:absolute;left:0;right:0;bottom:10px;text-align:center;opacity:.55;letter-spacing:.22em;font-size:12px;}
-        .zenFooter{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-top:14px;}
-        .zenTile{border-radius:18px;border:1px solid rgba(255,255,255,.08);background:rgba(6,10,18,.25);padding:14px;text-align:center;}
-        .quickActions{display:flex;gap:10px;flex-wrap:wrap;}
-        .chip{display:inline-flex;align-items:center;gap:8px;padding:10px 12px;border-radius:999px;border:1px solid rgba(255,255,255,.08);background:rgba(10,16,28,.35);letter-spacing:.16em;font-weight:900;font-size:12px;}
-        .chip.cyan{border-color:rgba(0,255,255,.18);color:rgba(0,255,255,.85);}
-        .chip.violet{border-color:rgba(160,110,255,.18);color:rgba(160,110,255,.85);}
-        .chip.neutral{opacity:.75;}
-        .dot{width:10px;height:10px;border-radius:999px;display:inline-block;margin-top:10px;}
-        .dot.cyan{background:rgba(0,255,255,.8);box-shadow:0 0 18px rgba(0,255,255,.2);}
-        .dot.violet{background:rgba(160,110,255,.8);box-shadow:0 0 18px rgba(160,110,255,.2);}
-        @media (max-width: 860px){
-          .heroStats{grid-template-columns:1fr;}
-          .twoCol{grid-template-columns:1fr;}
-          .metricRow{grid-template-columns:1fr;}
-          .zenFooter{grid-template-columns:1fr;}
-          .campaignTitle{font-size:24px;}
-          .heroName{font-size:30px;}
+        :root{
+          --bg:#070915;
+          --panel:rgba(10,14,28,0.68);
+          --panel2:rgba(6,10,18,0.55);
+          --stroke:rgba(255,255,255,0.10);
+          --stroke2:rgba(255,255,255,0.06);
+          --text:rgba(255,255,255,0.92);
+          --muted:rgba(255,255,255,0.62);
+          --muted2:rgba(255,255,255,0.42);
+          --cyan:#38f2ff;
+          --violet:#a78bfa;
+          --amber:#e4b73a;
+          --danger:#ff5f6d;
+        }
+
+        .pageWrap{
+          min-height:100vh;
+          color:var(--text);
+          background:
+            radial-gradient(1000px 600px at 20% -20%, rgba(56,242,255,0.12), transparent 55%),
+            radial-gradient(900px 600px at 110% 30%, rgba(167,139,250,0.14), transparent 50%),
+            radial-gradient(900px 700px at 40% 120%, rgba(56,242,255,0.06), transparent 55%),
+            linear-gradient(180deg, #040513, #070915 55%, #040513);
+          padding: 28px 18px 60px;
+        }
+
+        .container{
+          max-width: 1150px;
+          margin: 0 auto;
+        }
+
+        .mono{
+          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+          letter-spacing: .14em;
+          text-transform: uppercase;
+        }
+
+        .topRow{
+          display:flex;
+          align-items:flex-start;
+          justify-content:space-between;
+          gap:16px;
+          flex-wrap:wrap;
+          margin-bottom: 18px;
+        }
+
+        .brand{
+          display:flex;
+          align-items:center;
+          gap: 12px;
+        }
+
+        .brandMark{
+          width: 38px;
+          height: 38px;
+          border-radius: 14px;
+          background:
+            radial-gradient(circle at 35% 35%, rgba(56,242,255,.45), transparent 55%),
+            radial-gradient(circle at 65% 70%, rgba(167,139,250,.35), transparent 60%),
+            rgba(255,255,255,0.04);
+          border: 1px solid rgba(255,255,255,0.10);
+          box-shadow: 0 12px 45px rgba(0,0,0,0.45);
+        }
+
+        .brandText .h1{
+          font-size: 18px;
+          font-weight: 800;
+          letter-spacing: .08em;
+        }
+        .brandText .sub{
+          margin-top: 4px;
+          font-size: 11px;
+          color: var(--muted);
+        }
+
+        .actions{
+          display:flex;
+          gap: 10px;
+          align-items:center;
+          flex-wrap:wrap;
+        }
+
+        .btn{
+          border:1px solid var(--stroke);
+          background: rgba(255,255,255,0.03);
+          color: var(--text);
+          border-radius: 14px;
+          padding: 10px 14px;
+          font-weight: 700;
+          letter-spacing: .04em;
+          cursor:pointer;
+          transition: transform .08s ease, background .2s ease, border-color .2s ease;
+        }
+        .btn:hover{
+          background: rgba(255,255,255,0.06);
+          border-color: rgba(255,255,255,0.16);
+        }
+        .btn:active{ transform: translateY(1px); }
+
+        .btn.primary{
+          background: linear-gradient(90deg, rgba(56,242,255,0.18), rgba(167,139,250,0.18));
+          border-color: rgba(56,242,255,0.26);
+        }
+
+        .grid{
+          display:grid;
+          grid-template-columns: 1.05fr 1fr;
+          gap: 14px;
+        }
+        @media (max-width: 980px){
+          .grid{ grid-template-columns: 1fr; }
+        }
+
+        .card{
+          border-radius: 22px;
+          background: var(--panel);
+          border: 1px solid var(--stroke2);
+          box-shadow: 0 18px 70px rgba(0,0,0,0.42);
+          padding: 16px;
+        }
+
+        .cardTitle{
+          display:flex;
+          align-items:center;
+          justify-content:space-between;
+          gap: 10px;
+          margin-bottom: 12px;
+        }
+
+        .kicker{
+          font-size: 11px;
+          color: var(--muted);
+        }
+
+        .h2{
+          font-size: 22px;
+          font-weight: 900;
+          letter-spacing: .04em;
+        }
+
+        .sectionTitle{
+          display:flex;
+          align-items:center;
+          gap: 12px;
+          margin: 18px 0 10px;
+        }
+
+        .dot{
+          width: 10px;
+          height: 10px;
+          border-radius: 999px;
+          background: var(--cyan);
+          box-shadow: 0 0 0 4px rgba(56,242,255,0.10);
+        }
+        .dot.violet{
+          background: var(--violet);
+          box-shadow: 0 0 0 4px rgba(167,139,250,0.10);
+        }
+
+        .h1{
+          font-size: 18px;
+          font-weight: 900;
+          letter-spacing: .06em;
+        }
+
+        .sub{
+          font-size: 11px;
+          color: var(--muted);
+          margin-top: 4px;
+        }
+
+        .chip{
+          display:inline-flex;
+          align-items:center;
+          gap:6px;
+          padding: 6px 10px;
+          border-radius: 999px;
+          border: 1px solid rgba(255,255,255,0.12);
+          background: rgba(255,255,255,0.03);
+          font-size: 11px;
+          color: var(--muted);
+        }
+        .chip.cyan{ border-color: rgba(56,242,255,0.22); color: rgba(56,242,255,0.92); }
+        .chip.violet{ border-color: rgba(167,139,250,0.22); color: rgba(167,139,250,0.92); }
+        .chip.amber{ border-color: rgba(228,183,58,0.22); color: rgba(228,183,58,0.92); }
+        .chip.neutral{ }
+
+        .statsRow{
+          display:grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 10px;
+        }
+        @media (max-width: 980px){
+          .statsRow{ grid-template-columns: 1fr; }
+        }
+
+        .statTile{
+          border-radius: 18px;
+          border: 1px solid rgba(255,255,255,0.08);
+          background: rgba(6,10,18,0.25);
+          padding: 12px;
+        }
+        .statLabel{
+          font-size: 10px;
+          color: var(--muted2);
+        }
+        .statValue{
+          margin-top: 8px;
+          font-size: 20px;
+          font-weight: 900;
+          letter-spacing: .04em;
+        }
+
+        .campaignList{
+          display:flex;
+          flex-direction:column;
+          gap: 10px;
+        }
+
+        .campaignItem{
+          border-radius: 18px;
+          border: 1px solid rgba(255,255,255,0.08);
+          background: rgba(6,10,18,0.25);
+          padding: 12px;
+          overflow:hidden;
+        }
+
+        .campaignHead{
+          display:flex;
+          align-items:flex-start;
+          justify-content:space-between;
+          gap: 12px;
+        }
+
+        .campaignTitle{
+          font-size: 14px;
+          font-weight: 900;
+          letter-spacing: .04em;
+        }
+
+        .campaignDesc{
+          margin-top: 6px;
+          color: var(--muted);
+          font-size: 12px;
+          line-height: 1.45;
+        }
+
+        .progressWrap{
+          width: 100%;
+          height: 10px;
+          border-radius: 999px;
+          background: rgba(255,255,255,0.05);
+          border: 1px solid rgba(255,255,255,0.08);
+          overflow:hidden;
+          margin-top: 10px;
+        }
+        .progressFill{ height: 100%; border-radius: 999px; }
+
+        .sectorPanel{
+          border-radius: 18px;
+          border: 1px solid rgba(255,255,255,0.08);
+          background: rgba(6,10,18,0.22);
+          padding: 14px;
+        }
+
+        .sectorHead{
+          display:flex;
+          align-items:center;
+          justify-content:space-between;
+          gap: 10px;
+          flex-wrap:wrap;
+        }
+
+        .sectorTitle{
+          font-size: 11px;
+          color: var(--muted);
+          display:flex;
+          align-items:center;
+          gap: 8px;
+        }
+
+        .diamond{
+          width: 10px;
+          height: 10px;
+          transform: rotate(45deg);
+          background: rgba(56,242,255,0.55);
+          border-radius: 3px;
+          box-shadow: 0 0 0 4px rgba(56,242,255,0.08);
+        }
+
+        .sectorCoords{
+          font-size: 11px;
+          color: rgba(56,242,255,0.85);
+        }
+
+        .sectorQuote{
+          margin-top: 12px;
+          border-radius: 16px;
+          border: 1px solid rgba(255,255,255,0.08);
+          background: rgba(255,255,255,0.03);
+          padding: 12px;
+          display:flex;
+          gap: 10px;
+          align-items:flex-start;
+        }
+
+        .quoteBar{
+          width: 6px;
+          border-radius: 999px;
+          background: linear-gradient(180deg, rgba(56,242,255,0.65), rgba(167,139,250,0.35));
+          margin-top: 2px;
+        }
+
+        .quoteText{
+          color: var(--muted);
+          font-size: 12px;
+          line-height: 1.45;
+        }
+
+        .metricRow{
+          margin-top: 12px;
+          display:grid;
+          grid-template-columns: 1.2fr 1fr 1fr;
+          gap: 10px;
+        }
+        @media (max-width: 980px){
+          .metricRow{ grid-template-columns: 1fr; }
+        }
+
+        .metricCard{
+          border-radius: 18px;
+          border: 1px solid rgba(255,255,255,0.08);
+          background: rgba(6,10,18,0.25);
+          padding: 12px;
+        }
+        .metricLabel{ font-size: 10px; color: var(--muted2); }
+        .metricRight{ float:right; }
+
+        .row2{
+          margin-top: 10px;
+          display:grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 10px;
+        }
+        @media (max-width: 980px){
+          .row2{ grid-template-columns: 1fr; }
+        }
+
+        .miniGrid{
+          display:grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 10px;
+          margin-top: 10px;
+        }
+        @media (max-width: 980px){
+          .miniGrid{ grid-template-columns: 1fr; }
+        }
+
+        .recentGrid{
+          display:grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 10px;
+          margin-top: 12px;
+        }
+        @media (max-width: 980px){
+          .recentGrid{ grid-template-columns: 1fr; }
+        }
+
+        .recentCard{
+          border-radius: 18px;
+          border: 1px solid rgba(255,255,255,0.08);
+          background: rgba(6,10,18,0.22);
+          padding: 12px;
+          cursor:pointer;
+        }
+
+        .recentMeta{
+          font-size: 10px;
+          color: var(--muted2);
+        }
+        .recentTitle{
+          margin-top: 6px;
+          font-size: 13px;
+          font-weight: 900;
+          letter-spacing: .03em;
+        }
+        .recentTags{
+          margin-top: 8px;
+          display:flex;
+          gap: 8px;
+          flex-wrap:wrap;
+        }
+
+        .loading{
+          opacity: .75;
+          font-size: 12px;
+          color: var(--muted);
+          margin-top: 14px;
         }
       `}</style>
+
+      <div className="container">
+        <div className="topRow">
+          <div className="brand">
+            <div className="brandMark" />
+            <div className="brandText">
+              <div className="h1">HELVARIX GLOBAL ARRAY</div>
+              <div className="mono sub">Astronomical observation pipeline</div>
+            </div>
+          </div>
+
+          <div className="actions">
+            <button className="btn primary" onClick={openSubmit}>
+              Submit Observation
+            </button>
+            <button className="btn" onClick={openGuild}>
+              Research Guild
+            </button>
+            <button className="btn" onClick={openCampaigns}>
+              Campaigns
+            </button>
+          </div>
+        </div>
+
+        <div className="grid">
+          {/* LEFT: Identity + Campaigns */}
+          <div className="card">
+            <div className="cardTitle">
+              <div>
+                <div className="mono kicker">OPERATOR</div>
+                <div className="h2">{userCallsign}</div>
+              </div>
+              <Chip tone="cyan">{userRole}</Chip>
+            </div>
+
+            <div className="statsRow">
+              <StatTile label="Observation Index" value={obsIndex.toLocaleString()} />
+              <StatTile label="Campaign Impact" value={impact.toLocaleString()} />
+              <StatTile label="Streak (Days)" value={streak.toLocaleString()} />
+            </div>
+
+            <div className="sectionTitle" style={{ marginTop: 18 }}>
+              <span className="dot" />
+              <div>
+                <div className="h1">ACTIVE CAMPAIGNS</div>
+                <div className="mono sub">Daily • weekly • global objectives</div>
+              </div>
+            </div>
+
+            <div className="campaignList">
+              {campaignsSorted.length === 0 ? (
+                <div className="loading">No active campaigns.</div>
+              ) : (
+                campaignsSorted.map((c) => (
+                  <div className="campaignItem" key={c.key}>
+                    <div className="campaignHead">
+                      <div>
+                        <div className="campaignTitle">{c.title}</div>
+                        {c.desc ? <div className="campaignDesc">{c.desc}</div> : null}
+                      </div>
+                      <Chip tone={c.accent}>{c.endsIn}</Chip>
+                    </div>
+
+                    <ProgressBar value={c.progress} accent={c.accent} />
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* RIGHT: Recent */}
+          <div className="card">
+            <div className="cardTitle">
+              <div>
+                <div className="mono kicker">ACTIVITY</div>
+                <div className="h2">Recent Observations</div>
+              </div>
+              <Chip tone="violet">{userSubmissions.toLocaleString()} Submissions</Chip>
+            </div>
+
+            {loading ? (
+              <div className="loading">Synchronizing…</div>
+            ) : (
+              <div className="recentGrid">
+                {recentObs.map((o) => {
+                  const ts = new Date(o.created_at).toLocaleString();
+                  const title = o.target ?? "UNSPECIFIED TARGET";
+                  const mode = (o.mode ?? "UNKNOWN").toUpperCase();
+                  const tags = (o.tags ?? []).slice(0, 4);
+
+                  return (
+                    <div
+                      className="recentCard"
+                      key={o.id}
+                      onClick={() => nav(`/observation/${o.id}`)}
+                      role="button"
+                      tabIndex={0}
+                    >
+                      <div className="mono recentMeta">{ts}</div>
+                      <div className="recentTitle">{title}</div>
+                      <div className="recentTags">
+                        <Chip tone="cyan">{mode}</Chip>
+                        {tags.map((t) => (
+                          <Chip tone="neutral" key={t}>
+                            {t}
+                          </Chip>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* LOCAL SECTOR DATA (traffic analysis removed) */}
+        <div className="sectionTitle" style={{ marginTop: 22 }}>
+          <span className="dot violet" />
+          <div>
+            <div className="h1">LOCAL SECTOR DATA</div>
+            <div className="mono sub">Sector GPS • sky conditions • collection windows</div>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="sectorPanel">
+            <div className="sectorHead">
+              <div className="mono sectorTitle">
+                <span className="diamond" /> SECTOR ANALYSIS
+              </div>
+              <div className="mono sectorCoords">{sectorCoords}</div>
+            </div>
+
+            <div className="sectorQuote">
+              <div className="quoteBar" />
+              <div className="quoteText">
+                {earth
+                  ? `“Local telemetry synchronized (${earth.skyState}).”`
+                  : "“Initializing localized telemetry stream…”"}
+              </div>
+            </div>
+
+            {earthErr ? (
+              <div style={{ color: "var(--danger)", marginTop: 10 }}>{earthErr}</div>
+            ) : null}
+
+            <div className="metricRow">
+              <div className="metricCard">
+                <div className="mono metricLabel">PHOTON FLUX STABILITY</div>
+                <div className="metricRight mono" style={{ color: "var(--cyan)" }}>
+                  {photonFlux != null ? `${photonFlux}%` : "—"}
+                </div>
+                <div style={{ marginTop: 10 }}>
+                  <ProgressBar
+                    value={photonFlux != null ? photonFlux / 100 : 0}
+                    accent="cyan"
+                  />
+                </div>
+              </div>
+
+              <div className="metricCard">
+                <div className="mono metricLabel">KP INDEX</div>
+                <div className="metricRight">
+                  <Chip tone={kpTone as any}>{earth?.kpLabel ?? "UNKNOWN"}</Chip>
+                </div>
+                <div style={{ marginTop: 10, color: "var(--muted)" }}>
+                  {earth?.kp != null ? `Kp ${earth.kp}` : "—"}
+                </div>
+              </div>
+
+              <div className="metricCard">
+                <div className="mono metricLabel">SUN ALTITUDE</div>
+                <div className="metricRight mono" style={{ color: "var(--violet)" }}>
+                  {earth ? `${earth.sunAltNowDeg}°` : "—"}
+                </div>
+                <div style={{ marginTop: 10, color: "var(--muted)" }}>
+                  {earth?.skyState ?? "—"}
+                </div>
+              </div>
+            </div>
+
+            <div className="row2">
+              <div className="metricCard">
+                <div className="mono metricLabel">OPTIMAL COLLECTION START</div>
+                <div style={{ marginTop: 10, fontWeight: 900 }}>
+                  {earth?.optimalCollectionStartLocal ?? "—"}
+                </div>
+              </div>
+
+              <div className="metricCard">
+                <div className="mono metricLabel">NIGHT REMAINING</div>
+                <div style={{ marginTop: 10, fontWeight: 900 }}>
+                  {earth?.nightRemaining ?? "—"}
+                </div>
+              </div>
+            </div>
+
+            <div className="miniGrid">
+              <div className="metricCard">
+                <div className="mono metricLabel">LOCAL TIME</div>
+                <div style={{ marginTop: 10, fontWeight: 900 }}>
+                  {earth?.timeLocal ?? "—"}
+                </div>
+              </div>
+
+              <div className="metricCard">
+                <div className="mono metricLabel">SECTOR BUSY</div>
+                <div style={{ marginTop: 10, fontWeight: 900 }}>
+                  {earthBusy ? "YES" : "NO"}
+                </div>
+              </div>
+            </div>
+
+            {earth?.hours?.length ? (
+              <div style={{ marginTop: 12, color: "var(--muted)", fontSize: 12 }}>
+                <div className="mono" style={{ fontSize: 10, color: "var(--muted2)" }}>
+                  HORIZON WINDOW (12H)
+                </div>
+                <div style={{ marginTop: 6, lineHeight: 1.5 }}>
+                  {earth.hours.join(" • ")}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
