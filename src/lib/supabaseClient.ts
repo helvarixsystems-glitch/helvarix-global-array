@@ -1,31 +1,27 @@
+// src/lib/supabaseClient.ts
 import { createClient } from "@supabase/supabase-js";
+import { env } from "./env";
 
-// Vite injects only VITE_* variables into the client bundle
-const rawUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
-
-function normalizeSupabaseUrl(url: string) {
-  const trimmed = url.trim();
-
-  // If user accidentally pastes only the project ref or domain without protocol,
-  // fix it so fetch() doesn't become a relative URL on Cloudflare Pages.
-  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) return trimmed;
-
-  // If they pasted just the project ref, build the full domain
-  if (!trimmed.includes(".")) return `https://${trimmed}.supabase.co`;
-
-  // If they pasted "<ref>.supabase.co" without protocol
-  return `https://${trimmed}`;
-}
-
-if (!rawUrl || !anonKey) {
-  // Fail loudly in dev + prod so you don't get mysterious 404 spam
+// Hard guard: if this isn't absolute, the browser will treat it as a relative path on Cloudflare,
+// causing the exact 404 spam you’re seeing.
+if (!env.supabaseUrl.startsWith("http://") && !env.supabaseUrl.startsWith("https://")) {
   throw new Error(
-    "Missing Supabase env vars. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in Cloudflare Pages."
+    `Invalid SUPABASE URL at runtime: "${env.supabaseUrl}". ` +
+      `It must start with https://. Check your VITE_SUPABASE_URL value in Cloudflare Pages.`
   );
 }
 
-export const supabase = createClient(normalizeSupabaseUrl(rawUrl), anonKey, {
+// Optional: runtime check in production console
+declare global {
+  interface Window {
+    __HGA_SUPABASE_URL__?: string;
+  }
+}
+if (typeof window !== "undefined") {
+  window.__HGA_SUPABASE_URL__ = env.supabaseUrl;
+}
+
+export const supabase = createClient(env.supabaseUrl, env.supabaseAnonKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
