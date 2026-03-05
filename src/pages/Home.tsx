@@ -306,10 +306,6 @@ export default function HomePage() {
   );
 
   const [recentObs, setRecentObs] = useState<ObservationRow[]>([]);
-  const [submissions7d, setSubmissions7d] = useState<number[]>([
-    0, 0, 0, 0, 0, 0, 0,
-  ]);
-
   const [userSubmissions, setUserSubmissions] = useState<number>(0);
 
   const [earth, setEarth] = useState<EarthTelemetry | null>(null);
@@ -329,7 +325,7 @@ export default function HomePage() {
       const uid = data.session?.user?.id ?? null;
       setSessionUserId(uid);
 
-      await Promise.all([loadCampaigns(), loadRecent(), load7dCharts()]);
+      await Promise.all([loadCampaigns(), loadRecent()]);
 
       if (uid) {
         await Promise.all([loadProfile(uid), loadUserSubmissionCount(uid)]);
@@ -367,7 +363,6 @@ export default function HomePage() {
         (payload) => {
           const row = payload.new as ObservationRow;
           setRecentObs((prev) => [row, ...prev].slice(0, 12));
-          load7dCharts();
         }
       )
       .subscribe();
@@ -468,33 +463,6 @@ export default function HomePage() {
       alive = false;
     };
   }, [campaigns, sessionUserId]);
-
-  // ✅ Peer review removed: submissions-only 7-day chart
-  async function load7dCharts() {
-    const now = new Date();
-    const days: { start: Date; end: Date }[] = [];
-
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(now);
-      d.setDate(now.getDate() - i);
-      d.setHours(0, 0, 0, 0);
-      const start = new Date(d);
-      const end = new Date(d);
-      end.setHours(23, 59, 59, 999);
-      days.push({ start, end });
-    }
-
-    const subs: number[] = [];
-    for (const w of days) {
-      const { count } = await supabase
-        .from("observations")
-        .select("id", { count: "exact", head: true })
-        .gte("created_at", w.start.toISOString())
-        .lte("created_at", w.end.toISOString());
-      subs.push(count ?? 0);
-    }
-    setSubmissions7d(subs);
-  }
 
   async function loadEarthSector() {
     setEarthErr(null);
@@ -685,22 +653,6 @@ export default function HomePage() {
     }>;
   }, [campaigns, campaignProgress]);
 
-  const maxSub = Math.max(1, ...submissions7d);
-
-  const visibleSpectrumPct = useMemo(() => {
-    if (!recentObs.length) return 0;
-    const vis = recentObs.filter(
-      (o) => (o.mode ?? "").toUpperCase() === "VISUAL"
-    ).length;
-    return Math.round((vis / recentObs.length) * 1000) / 10;
-  }, [recentObs]);
-
-  // ✅ Replacement metric keeps UI intact without peer reviews
-  const submissionsTotal7d = useMemo(
-    () => submissions7d.reduce((a, b) => a + b, 0),
-    [submissions7d]
-  );
-
   const sectorCoords = useMemo(() => {
     const lat = earth?.lat ?? profile?.lat;
     const lon = earth?.lon ?? profile?.lon;
@@ -859,170 +811,6 @@ export default function HomePage() {
             ))}
           </div>
         )}
-      </div>
-
-      {/* NETWORK ACTIVITY */}
-      <div className="sectionTitle" style={{ marginTop: 22 }}>
-        <span className="dot violet" />
-        <div>
-          <div className="h1">NETWORK ACTIVITY</div>
-          <div className="mono sub">Traffic analysis • submissions • peer review</div>
-        </div>
-      </div>
-
-      <div className="card">
-        <div className="mono kicker">TRAFFIC ANALYSIS</div>
-        <div className="h2">Global Telemetry Flow</div>
-        <div className="hr" />
-
-        <div className="chartMock">
-          {/* ✅ Peer reviews removed: legend + bars show submissions only */}
-          <div className="chartLegend mono">
-            <span className="legendDot cyan" /> SUBMISSIONS
-          </div>
-
-          <div className="chartBars">
-            {["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"].map((d, i) => {
-              const s = submissions7d[i] ?? 0;
-              const sPct = Math.round((s / maxSub) * 80 + 10);
-
-              return (
-                <div className="barCol" key={d}>
-                  <div className="bar cyan" style={{ height: `${sPct}%` }} />
-                  <div className="mono barLabel">{d}</div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="hr" />
-
-        <div className="twoCol">
-          <div className="miniPanel">
-            <div className="mono miniLabel">VISIBLE SPECTRUM</div>
-            <div className="miniValue">{visibleSpectrumPct.toFixed(1)}%</div>
-          </div>
-
-          {/* ✅ Keeps UI intact: replace peer metric with a submission metric */}
-          <div className="miniPanel">
-            <div className="mono miniLabel">SUBMISSIONS (7D)</div>
-            <div className="miniValue">{submissionsTotal7d.toLocaleString()}</div>
-          </div>
-        </div>
-
-        <div className="hr" />
-
-        {/* EARTH SECTOR */}
-        <div className="sectorPanel">
-          <div className="sectorHead">
-            <div className="mono sectorTitle">
-              <span className="diamond" /> SECTOR ANALYSIS
-            </div>
-            <div className="mono sectorCoords">{sectorCoords}</div>
-          </div>
-
-          <div className="sectorQuote">
-            <div className="quoteBar" />
-            <div className="quoteText">
-              {earth
-                ? `“Local telemetry synchronized (${earth.skyState}).”`
-                : "“Initializing localized telemetry stream…”"}
-            </div>
-          </div>
-
-          {earthErr ? (
-            <div style={{ color: "var(--danger)", marginTop: 10 }}>
-              {earthErr}
-            </div>
-          ) : null}
-
-          <div className="metricRow">
-            <div className="metricCard">
-              <div className="mono metricLabel">PHOTON FLUX STABILITY</div>
-              <div
-                className="metricRight mono"
-                style={{ color: "var(--cyan)" }}
-              >
-                {photonFlux != null ? `${photonFlux}%` : "—"}
-              </div>
-              <ProgressBar value={photonFluxProgress} accent="cyan" />
-            </div>
-
-            <div className="metricCard">
-              <div className="mono metricLabel">
-                MAGNETOSPHERIC INTERFERENCE
-              </div>
-              <div className="metricRight mono" style={{ color: "#e4b73a" }}>
-                {kpTxt}
-              </div>
-              <ProgressBar value={kpProgress} accent="amber" />
-            </div>
-          </div>
-        </div>
-
-        <div className="hr" />
-
-        {/* ZENITH */}
-        <div className="zenith">
-          <div className="zenHead">
-            <div
-              className="mono sectorTitle"
-              style={{ color: "var(--violet)" }}
-            >
-              <span className="diamond" /> ZENITH AIRMASS FORECAST
-            </div>
-            <div className="mono zenLegend">
-              <span className="legendDot cyan" /> SEEING (″)
-              <span className="legendDot violet" style={{ marginLeft: 12 }} />{" "}
-              AIRMASS
-            </div>
-          </div>
-
-          <div className="zenChart">
-            <div className="zenGrid" />
-            <div className="zenLine violet" />
-            <div className="zenLine cyan dashed" />
-            <div className="mono zenAxis">
-              {(earth?.hours?.length
-                ? earth.hours
-                : ["20:00", "21:00", "22:00", "23:00", "00:00", "01:00", "02:00"]
-              ).join("  ")}
-            </div>
-          </div>
-
-          <div className="zenFooter">
-            <div className="zenTile">
-              <div className="mono miniLabel">OPTIMAL COLLECTION START</div>
-              <div className="miniValue">
-                {earth?.optimalCollectionStartLocal ?? "—"}
-              </div>
-            </div>
-            <div className="zenTile">
-              <div className="mono miniLabel">PEAK ALTITUDE VISIBILITY</div>
-              <div className="miniValue">Zenith (90°)</div>
-            </div>
-            <div className="zenTile">
-              <div className="mono miniLabel">NIGHT DURATION REMAINING</div>
-              <div className="miniValue" style={{ color: "var(--cyan)" }}>
-                {earth?.nightRemaining ?? "—"}
-              </div>
-            </div>
-          </div>
-
-          <div className="hr" />
-
-          <div className="quickActions">
-            <Chip tone="cyan">GLOBAL ARRAY LINK: ESTABLISHED</Chip>
-            <Chip tone="neutral">
-              COORD:{" "}
-              {earth ? `${earth.lat.toFixed(4)}, ${earth.lon.toFixed(4)}` : "—"}
-            </Chip>
-            <Chip tone="violet">
-              ELV: {earth?.elevM == null ? "—" : `${Math.round(earth.elevM)}m`}
-            </Chip>
-          </div>
-        </div>
       </div>
 
       {/* ✅ Styles kept intact. Peer-review-related styles can remain safely. */}
