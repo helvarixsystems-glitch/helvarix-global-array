@@ -38,15 +38,10 @@ type ObservationRow = {
   image_url: string | null;
 };
 
-type PeerReviewRow = {
-  id: string;
-  created_at: string;
-};
-
 type EarthTelemetry = {
   lat: number;
   lon: number;
-  elevM?: number | null; // optional
+  elevM?: number | null;
   timeLocal: string;
 
   cloudCoverPct?: number;
@@ -57,17 +52,16 @@ type EarthTelemetry = {
   kp?: number | null;
   kpLabel?: "LOW" | "MODERATE" | "HIGH" | "SEVERE" | "UNKNOWN";
 
-  photonFluxStabilityPct?: number; // derived from cloud cover (proxy)
-  // Sun + night
+  photonFluxStabilityPct?: number;
+
   sunAltNowDeg: number;
   skyState: "DAYLIGHT" | "CIVIL" | "NAUTICAL" | "ASTRONOMICAL" | "NIGHT";
   optimalCollectionStartLocal?: string | null;
   nightRemaining?: string | null;
 
-  // next-hours chart series
-  hours: string[]; // "20:00"
-  airmass: number[]; // proxy (based on zenith of a chosen target; we use a stable proxy line)
-  seeingArcsec: number[]; // proxy from cloud cover (lower is better)
+  hours: string[];
+  airmass: number[];
+  seeingArcsec: number[];
 };
 
 function clamp01(v: number) {
@@ -158,7 +152,6 @@ function wrap360(deg: number) {
   return x;
 }
 
-// Solar altitude (UI-grade; not observatory-grade)
 function solarAltitudeDeg(date: Date, latDeg: number, lonDeg: number) {
   const ms = date.getTime();
   const jd = ms / 86400000 + 2440587.5;
@@ -167,7 +160,7 @@ function solarAltitudeDeg(date: Date, latDeg: number, lonDeg: number) {
   const L = wrap360(280.46 + 0.9856474 * n);
   const g = wrap360(357.528 + 0.9856003 * n);
   const lambda = wrap360(
-    L + 1.915 * Math.sin(toRad(g)) + 0.020 * Math.sin(toRad(2 * g))
+    L + 1.915 * Math.sin(toRad(g)) + 0.02 * Math.sin(toRad(2 * g))
   );
   const eps = 23.439 - 0.0000004 * n;
 
@@ -198,7 +191,6 @@ function solarAltitudeDeg(date: Date, latDeg: number, lonDeg: number) {
   return toDeg(alt);
 }
 
-// Relative air mass approximation for zenith angle z
 function airmassKastenYoung(zDeg: number) {
   if (zDeg >= 90) return null;
   const cosZ = Math.cos(toRad(zDeg));
@@ -226,7 +218,6 @@ function fmtDuration(ms: number) {
   return `${hh}H ${m2}M`;
 }
 
-// Open-Meteo (no key). Current + hourly cloud cover for chart.
 async function fetchOpenMeteo(lat: number, lon: number) {
   const url =
     `https://api.open-meteo.com/v1/forecast` +
@@ -251,19 +242,19 @@ async function fetchOpenMeteo(lat: number, lon: number) {
   return {
     cloudCoverPct:
       typeof cur?.cloud_cover === "number" ? cur.cloud_cover : undefined,
-    tempC: typeof cur?.temperature_2m === "number" ? cur.temperature_2m : undefined,
+    tempC:
+      typeof cur?.temperature_2m === "number" ? cur.temperature_2m : undefined,
     pressureHPa:
       typeof cur?.pressure_msl === "number" ? cur.pressure_msl : undefined,
     windMS:
       typeof cur?.wind_speed_10m === "number"
         ? cur.wind_speed_10m / 3.6
-        : undefined, // km/h -> m/s
+        : undefined,
     hourlyTimes: times,
     hourlyClouds: clouds,
   };
 }
 
-// NOAA SWPC Kp (no key). If it fails, we just show UNKNOWN.
 async function fetchNOAAKp(): Promise<number | null> {
   const url = `https://services.swpc.noaa.gov/json/planetary_k_index_1m.json`;
   const r = await fetch(url, { cache: "no-store" });
@@ -310,11 +301,17 @@ export default function HomePage() {
   const [profile, setProfile] = useState<ProfileRow | null>(null);
 
   const [campaigns, setCampaigns] = useState<CampaignRow[]>([]);
-  const [campaignProgress, setCampaignProgress] = useState<Record<string, number>>({});
+  const [campaignProgress, setCampaignProgress] = useState<
+    Record<string, number>
+  >({});
 
   const [recentObs, setRecentObs] = useState<ObservationRow[]>([]);
-  const [submissions7d, setSubmissions7d] = useState<number[]>([0, 0, 0, 0, 0, 0, 0]);
-  const [reviews7d, setReviews7d] = useState<number[]>([0, 0, 0, 0, 0, 0, 0]);
+  const [submissions7d, setSubmissions7d] = useState<number[]>([
+    0, 0, 0, 0, 0, 0, 0,
+  ]);
+  const [reviews7d, setReviews7d] = useState<number[]>([
+    0, 0, 0, 0, 0, 0, 0,
+  ]);
 
   const [userSubmissions, setUserSubmissions] = useState<number>(0);
 
@@ -324,7 +321,6 @@ export default function HomePage() {
 
   const realtimeRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
-  // --- session bootstrap
   useEffect(() => {
     let alive = true;
 
@@ -363,7 +359,6 @@ export default function HomePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // --- realtime: prepend new observations to activity list
   useEffect(() => {
     realtimeRef.current?.unsubscribe();
 
@@ -375,7 +370,6 @@ export default function HomePage() {
         (payload) => {
           const row = payload.new as ObservationRow;
           setRecentObs((prev) => [row, ...prev].slice(0, 12));
-          // refresh chart counts lazily
           load7dCharts();
         }
       )
@@ -389,7 +383,11 @@ export default function HomePage() {
   }, []);
 
   async function loadProfile(uid: string) {
-    const { data, error } = await supabase.from("profiles").select("*").eq("id", uid).maybeSingle();
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", uid)
+      .maybeSingle();
     if (!error) setProfile((data as ProfileRow) ?? null);
   }
 
@@ -422,7 +420,6 @@ export default function HomePage() {
     setUserSubmissions(count ?? 0);
   }
 
-  // campaigns progress (real)
   useEffect(() => {
     let alive = true;
 
@@ -442,7 +439,7 @@ export default function HomePage() {
 
           const tags = (c.tags ?? []).filter(Boolean);
           if (tags.length) {
-            // @ts-ignore supabase-js has overlaps in recent versions
+            // @ts-ignore overlaps exists in supabase-js
             q = q.overlaps("tags", tags);
           }
 
@@ -458,7 +455,7 @@ export default function HomePage() {
             return;
           }
 
-          const goal = isGlobal ? (c.goal_global ?? 100) : (c.goal_user ?? 1);
+          const goal = isGlobal ? c.goal_global ?? 100 : c.goal_user ?? 1;
           next[c.id] = goal > 0 ? clamp01((count ?? 0) / goal) : 0;
         })
       );
@@ -475,65 +472,22 @@ export default function HomePage() {
     };
   }, [campaigns, sessionUserId]);
 
-  // 7-day charts for submissions + peer reviews
+  // ✅ FIXED: single, non-duplicated function
   async function load7dCharts() {
-  // build daily windows (local time)
-  const now = new Date();
-  const days: { start: Date; end: Date }[] = [];
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date(now);
-    d.setDate(now.getDate() - i);
-    d.setHours(0, 0, 0, 0);
-    const start = new Date(d);
-    const end = new Date(d);
-    end.setHours(23, 59, 59, 999);
-    days.push({ start, end });
-  }
+    const now = new Date();
+    const days: { start: Date; end: Date }[] = [];
 
-  // submissions
-  const subs: number[] = [];
-  for (const w of days) {
-    const { count } = await supabase
-      .from("observations")
-      .select("id", { count: "exact", head: true })
-      .gte("created_at", w.start.toISOString())
-      .lte("created_at", w.end.toISOString());
-    subs.push(count ?? 0);
-  }
-  setSubmissions7d(subs);
-
-  // peer reviews (optional table)
-  // If the table doesn't exist, Supabase PostgREST returns 404.
-  // We detect that once and stop querying to avoid console spam.
-  try {
-    const revs: number[] = [];
-
-    for (const w of days) {
-      const { count, error } = await supabase
-        .from("peer_reviews")
-        .select("id", { count: "exact", head: true })
-        .gte("created_at", w.start.toISOString())
-        .lte("created_at", w.end.toISOString());
-
-      if (error) {
-        const status = (error as any)?.status;
-        if (status === 404) {
-          // table/view doesn't exist or isn't exposed -> stop trying
-          setReviews7d([0, 0, 0, 0, 0, 0, 0]);
-          return;
-        }
-        throw error;
-      }
-
-      revs.push(count ?? 0);
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(now.getDate() - i);
+      d.setHours(0, 0, 0, 0);
+      const start = new Date(d);
+      const end = new Date(d);
+      end.setHours(23, 59, 59, 999);
+      days.push({ start, end });
     }
 
-    setReviews7d(revs);
-  } catch {
-    setReviews7d([0, 0, 0, 0, 0, 0, 0]);
-  }
-}
-
+    // submissions
     const subs: number[] = [];
     for (const w of days) {
       const { count } = await supabase
@@ -545,18 +499,29 @@ export default function HomePage() {
     }
     setSubmissions7d(subs);
 
-    // peer reviews (optional table)
+    // peer reviews (optional). If table/view doesn't exist, PostgREST returns 404.
     try {
       const revs: number[] = [];
+
       for (const w of days) {
         const { count, error } = await supabase
           .from("peer_reviews")
           .select("id", { count: "exact", head: true })
           .gte("created_at", w.start.toISOString())
           .lte("created_at", w.end.toISOString());
-        if (error) throw error;
+
+        if (error) {
+          const status = (error as any)?.status;
+          if (status === 404) {
+            setReviews7d([0, 0, 0, 0, 0, 0, 0]);
+            return;
+          }
+          throw error;
+        }
+
         revs.push(count ?? 0);
       }
+
       setReviews7d(revs);
     } catch {
       setReviews7d([0, 0, 0, 0, 0, 0, 0]);
@@ -586,7 +551,6 @@ export default function HomePage() {
       const sunAltNowDeg = solarAltitudeDeg(now, lat, lon);
       const skyState = skyStateFromSunAlt(sunAltNowDeg);
 
-      // weather
       let wx: Awaited<ReturnType<typeof fetchOpenMeteo>> | null = null;
       try {
         wx = await fetchOpenMeteo(lat, lon);
@@ -594,7 +558,6 @@ export default function HomePage() {
         wx = null;
       }
 
-      // kp
       let kp: number | null = null;
       try {
         kp = await fetchNOAAKp();
@@ -602,46 +565,38 @@ export default function HomePage() {
         kp = null;
       }
 
-      // chart series (next 8 hours)
       const hours: string[] = [];
       const seeing: number[] = [];
       const airm: number[] = [];
 
-      // If we have hourly cloud cover, use it; else derive a flat line
-      const times = wx?.hourlyTimes ?? [];
       const clouds = wx?.hourlyClouds ?? [];
-
-      // Airmass “what not”: zenith itself is ~1, so we show a stable airmass proxy line
-      // representing a “high-altitude” target (~60° alt => z=30° => airmass ~1.15)
       const airmassProxy = airmassKastenYoung(30) ?? 1.15;
 
       for (let i = 0; i < 8; i++) {
         const t = new Date(now.getTime() + i * 60 * 60 * 1000);
-        hours.push(t.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
+        hours.push(
+          t.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+        );
 
         const cc = clouds[i] ?? wx?.cloudCoverPct ?? 50;
-        // “Seeing” proxy: map cloud cover -> worse seeing (UI proxy, but tied to real cloud cover)
-        // 0% clouds ~ 1.0", 100% clouds ~ 3.5"
-        const seeingArcsec = 1.0 + (Math.max(0, Math.min(100, cc)) / 100) * 2.5;
+        const seeingArcsec =
+          1.0 + (Math.max(0, Math.min(100, cc)) / 100) * 2.5;
         seeing.push(seeingArcsec);
-
         airm.push(airmassProxy);
       }
 
-      // “photon flux stability” proxy: inverse of cloud cover
       const ccNow = wx?.cloudCoverPct;
       const photonFluxStabilityPct =
-        typeof ccNow === "number" ? Math.round(100 - Math.max(0, Math.min(100, ccNow))) : undefined;
+        typeof ccNow === "number"
+          ? Math.round(100 - Math.max(0, Math.min(100, ccNow)))
+          : undefined;
 
-      // compute optimal collection start & night remaining:
-      // step forward in 5-minute increments until sun alt <= -18 (astro night)
       const stepMs = 5 * 60 * 1000;
       let startNight: Date | null = null;
       let endNight: Date | null = null;
 
       const horizon = now.getTime() + 24 * 60 * 60 * 1000;
 
-      // find first time sun <= -18 after now
       for (let t = now.getTime(); t < horizon; t += stepMs) {
         const alt = solarAltitudeDeg(new Date(t), lat, lon);
         if (alt <= -18) {
@@ -649,7 +604,6 @@ export default function HomePage() {
           break;
         }
       }
-      // find end of astronomical night after startNight
       if (startNight) {
         for (let t = startNight.getTime(); t < horizon; t += stepMs) {
           const alt = solarAltitudeDeg(new Date(t), lat, lon);
@@ -663,7 +617,10 @@ export default function HomePage() {
       const optimalCollectionStartLocal = startNight ? fmtHM(startNight) : null;
       const nightRemaining =
         startNight && endNight
-          ? fmtDuration(endNight.getTime() - Math.max(now.getTime(), startNight.getTime()))
+          ? fmtDuration(
+              endNight.getTime() -
+                Math.max(now.getTime(), startNight.getTime())
+            )
           : null;
 
       const tel: EarthTelemetry = {
@@ -681,7 +638,6 @@ export default function HomePage() {
         kpLabel: kpLabel(kp),
 
         photonFluxStabilityPct,
-
         sunAltNowDeg,
         skyState,
 
@@ -695,10 +651,10 @@ export default function HomePage() {
 
       setEarth(tel);
 
-      // Store coords to profile (optional)
       if (sessionUserId) {
-        await supabase.from("profiles").upsert({ id: sessionUserId, lat, lon }, { onConflict: "id" });
-        // refresh profile to show coords in other places
+        await supabase
+          .from("profiles")
+          .upsert({ id: sessionUserId, lat, lon }, { onConflict: "id" });
         loadProfile(sessionUserId);
       }
     } catch (e: any) {
@@ -709,9 +665,16 @@ export default function HomePage() {
     }
   }
 
-  // Derived UI values
-  const callsign = profile?.callsign?.trim() ? profile.callsign : sessionUserId ? "Operator" : "Guest";
-  const role = profile?.role?.trim() ? profile.role : sessionUserId ? "DEEP SPACE CONTRIBUTOR" : "UNAUTHENTICATED NODE";
+  const callsign = profile?.callsign?.trim()
+    ? profile.callsign
+    : sessionUserId
+    ? "Operator"
+    : "Guest";
+  const role = profile?.role?.trim()
+    ? profile.role
+    : sessionUserId
+    ? "DEEP SPACE CONTRIBUTOR"
+    : "UNAUTHENTICATED NODE";
 
   const oi = profile?.observation_index ?? 0;
   const ci = profile?.campaign_impact ?? 0;
@@ -720,9 +683,9 @@ export default function HomePage() {
   const rank = useMemo(() => rankFromOI(oi), [oi]);
   const progPct = rank.nextAt > 0 ? clamp01(oi / rank.nextAt) : 0;
 
-  // Campaign cards arranged like your UI (daily, weekly, global)
   const campaignUI = useMemo(() => {
-    const pick = (cad: CampaignCadence) => campaigns.find((c) => c.cadence === cad) ?? null;
+    const pick = (cad: CampaignCadence) =>
+      campaigns.find((c) => c.cadence === cad) ?? null;
 
     const daily = pick("DAILY");
     const weekly = pick("WEEKLY");
@@ -741,11 +704,9 @@ export default function HomePage() {
       };
     }
 
-    return [
-      map(daily, "cyan"),
-      map(weekly, "violet"),
-      map(global, "cyan"),
-    ].filter(Boolean) as Array<{
+    return [map(daily, "cyan"), map(weekly, "violet"), map(global, "cyan")].filter(
+      Boolean
+    ) as Array<{
       key: string;
       cadence: CampaignCadence;
       title: string;
@@ -756,15 +717,14 @@ export default function HomePage() {
     }>;
   }, [campaigns, campaignProgress]);
 
-  // Chart scaling (keeps your bar UI, but uses real numbers)
   const maxSub = Math.max(1, ...submissions7d);
   const maxRev = Math.max(1, ...reviews7d);
 
-  // Visible spectrum + peer validation
   const visibleSpectrumPct = useMemo(() => {
-    // proxy: % observations in last 12 that are VISUAL
     if (!recentObs.length) return 0;
-    const vis = recentObs.filter((o) => (o.mode ?? "").toUpperCase() === "VISUAL").length;
+    const vis = recentObs.filter(
+      (o) => (o.mode ?? "").toUpperCase() === "VISUAL"
+    ).length;
     return Math.round((vis / recentObs.length) * 1000) / 10;
   }, [recentObs]);
 
@@ -775,7 +735,6 @@ export default function HomePage() {
     return Math.round((sumRev / sumSub) * 10) / 10;
   }, [reviews7d, submissions7d]);
 
-  // Sector panel values in your style
   const sectorCoords = useMemo(() => {
     const lat = earth?.lat ?? profile?.lat;
     const lon = earth?.lon ?? profile?.lon;
@@ -792,12 +751,8 @@ export default function HomePage() {
   const kpProgress = useMemo(() => {
     const kp = earth?.kp;
     if (kp == null) return 0.18;
-    // map 0..9 => 0.10..0.95
-    return clamp01(0.10 + (kp / 9) * 0.85);
+    return clamp01(0.1 + (kp / 9) * 0.85);
   }, [earth]);
-
-  // Zenith chart lines: we use pseudo-lines via CSS but we can set “visual” widths by CSS vars if wanted.
-  // We keep your exact visuals; values appear in the tiles + chips.
 
   return (
     <div className="page">
@@ -819,7 +774,9 @@ export default function HomePage() {
 
             <div className="heroMeta">
               <div className="metaPill mono">STREAK: {streak}D</div>
-              <div className="metaPill mono">SUBMISSIONS: {sessionUserId ? userSubmissions : "—"}</div>
+              <div className="metaPill mono">
+                SUBMISSIONS: {sessionUserId ? userSubmissions : "—"}
+              </div>
             </div>
           </div>
         </div>
@@ -860,7 +817,11 @@ export default function HomePage() {
             </>
           )}
 
-          {loading ? <span className="mono" style={{ opacity: 0.7 }}>SYNCING…</span> : null}
+          {loading ? (
+            <span className="mono" style={{ opacity: 0.7 }}>
+              SYNCING…
+            </span>
+          ) : null}
         </div>
       </div>
 
@@ -880,7 +841,8 @@ export default function HomePage() {
 
         {!campaignUI.length ? (
           <div style={{ opacity: 0.75 }}>
-            No active campaigns found. Create rows in <span className="mono">campaigns</span> (Supabase).
+            No active campaigns found. Create rows in{" "}
+            <span className="mono">campaigns</span> (Supabase).
           </div>
         ) : (
           <div className="stack">
@@ -890,8 +852,7 @@ export default function HomePage() {
                   <div
                     className="mono campaignCadence"
                     style={{
-                      color:
-                        c.cadence === "WEEKLY" ? "var(--violet)" : "var(--cyan)",
+                      color: c.cadence === "WEEKLY" ? "var(--violet)" : "var(--cyan)",
                     }}
                   >
                     {c.cadence}
@@ -935,8 +896,7 @@ export default function HomePage() {
               const r = reviews7d[i] ?? 0;
               const s = submissions7d[i] ?? 0;
 
-              // scale to % heights to preserve your existing visuals
-              const rPct = Math.round((r / maxRev) * 80 + 10); // 10..90
+              const rPct = Math.round((r / maxRev) * 80 + 10);
               const sPct = Math.round((s / maxSub) * 80 + 10);
 
               return (
@@ -965,7 +925,7 @@ export default function HomePage() {
 
         <div className="hr" />
 
-        {/* EARTH SECTOR PANEL (keeps your same UI shape, but real telemetry) */}
+        {/* EARTH SECTOR */}
         <div className="sectorPanel">
           <div className="sectorHead">
             <div className="mono sectorTitle">
@@ -977,7 +937,9 @@ export default function HomePage() {
           <div className="sectorQuote">
             <div className="quoteBar" />
             <div className="quoteText">
-              {earth ? `“Local telemetry synchronized (${earth.skyState}).”` : "“Initializing localized telemetry stream…”"}
+              {earth
+                ? `“Local telemetry synchronized (${earth.skyState}).”`
+                : "“Initializing localized telemetry stream…”"}
             </div>
           </div>
 
@@ -1002,38 +964,11 @@ export default function HomePage() {
               <ProgressBar value={kpProgress} accent="amber" />
             </div>
           </div>
-
-          <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10 }}>
-            <div className="miniPanel" style={{ padding: 12 }}>
-              <div className="mono miniLabel">CLOUD COVER</div>
-              <div className="miniValue">
-                {earth?.cloudCoverPct == null ? "—" : `${Math.round(earth.cloudCoverPct)}%`}
-              </div>
-            </div>
-            <div className="miniPanel" style={{ padding: 12 }}>
-              <div className="mono miniLabel">TEMP</div>
-              <div className="miniValue">
-                {earth?.tempC == null ? "—" : `${earth.tempC.toFixed(1)}°C`}
-              </div>
-            </div>
-            <div className="miniPanel" style={{ padding: 12 }}>
-              <div className="mono miniLabel">PRESSURE</div>
-              <div className="miniValue">
-                {earth?.pressureHPa == null ? "—" : `${Math.round(earth.pressureHPa)} hPa`}
-              </div>
-            </div>
-            <div className="miniPanel" style={{ padding: 12 }}>
-              <div className="mono miniLabel">WIND</div>
-              <div className="miniValue">
-                {earth?.windMS == null ? "—" : `${earth.windMS.toFixed(1)} m/s`}
-              </div>
-            </div>
-          </div>
         </div>
 
         <div className="hr" />
 
-        {/* ZENITH / AIRMASS FORECAST (keeps your layout; values are real, chart lines remain stylistic) */}
+        {/* ZENITH */}
         <div className="zenith">
           <div className="zenHead">
             <div className="mono sectorTitle" style={{ color: "var(--violet)" }}>
@@ -1050,16 +985,17 @@ export default function HomePage() {
             <div className="zenLine violet" />
             <div className="zenLine cyan dashed" />
             <div className="mono zenAxis">
-              {(earth?.hours?.length ? earth.hours : ["20:00", "21:00", "22:00", "23:00", "00:00", "01:00", "02:00"]).join("  ")}
+              {(earth?.hours?.length
+                ? earth.hours
+                : ["20:00", "21:00", "22:00", "23:00", "00:00", "01:00", "02:00"]
+              ).join("  ")}
             </div>
           </div>
 
           <div className="zenFooter">
             <div className="zenTile">
               <div className="mono miniLabel">OPTIMAL COLLECTION START</div>
-              <div className="miniValue">
-                {earth?.optimalCollectionStartLocal ?? "—"}
-              </div>
+              <div className="miniValue">{earth?.optimalCollectionStartLocal ?? "—"}</div>
             </div>
             <div className="zenTile">
               <div className="mono miniLabel">PEAK ALTITUDE VISIBILITY</div>
@@ -1077,7 +1013,9 @@ export default function HomePage() {
 
           <div className="quickActions">
             <Chip tone="cyan">GLOBAL ARRAY LINK: ESTABLISHED</Chip>
-            <Chip tone="neutral">COORD: {earth ? `${earth.lat.toFixed(4)}, ${earth.lon.toFixed(4)}` : "—"}</Chip>
+            <Chip tone="neutral">
+              COORD: {earth ? `${earth.lat.toFixed(4)}, ${earth.lon.toFixed(4)}` : "—"}
+            </Chip>
             <Chip tone="violet">
               ELV: {earth?.elevM == null ? "—" : `${Math.round(earth.elevM)}m`}
             </Chip>
@@ -1085,7 +1023,7 @@ export default function HomePage() {
         </div>
       </div>
 
-           {/* Page-local CSS hooks: KEEPING your original UI */}
+      {/* ✅ FIXED STYLE WRAP */}
       <style>{`
         .page{display:flex;flex-direction:column;gap:18px;}
         .heroCard{padding:22px;}
@@ -1166,7 +1104,7 @@ export default function HomePage() {
         .zenLine{position:absolute;left:8%;right:8%;height:3px;border-radius:999px;top:32%;}
         .zenLine.violet{background:linear-gradient(90deg, rgba(160,110,255,.15), rgba(160,110,255,.85), rgba(0,255,255,.35));}
         .zenLine.cyan{top:48%;background:linear-gradient(90deg, rgba(0,255,255,.15), rgba(0,255,255,.8), rgba(160,110,255,.35));}
-        .zenLine.dashed{background-size:18px 3px;background-image:linear-gradient(90deg, rgba(0,255,255,.0) 0, rgba(0,255,255,.0) 40%, rgba(0,255,255,.9) 40%, rgba(0,255,255,.9) 60%, rgba(0,255,255,.0) 60%);opacity:.7;}
+        .zenLine.dashed{background-size:18px 3px;background-image:linear-gradient(90deg, rgba(0,255,255,0) 0, rgba(0,255,255,0) 40%, rgba(0,255,255,.9) 40%, rgba(0,255,255,.9) 60%, rgba(0,255,255,0) 60%);opacity:.7;}
         .zenAxis{position:absolute;left:0;right:0;bottom:10px;text-align:center;opacity:.55;letter-spacing:.22em;font-size:12px;}
         .zenFooter{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-top:14px;}
         .zenTile{border-radius:18px;border:1px solid rgba(255,255,255,.08);background:rgba(6,10,18,.25);padding:14px;text-align:center;}
