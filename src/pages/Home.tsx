@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useNavigate } from "react-router-dom";
 
@@ -10,10 +9,10 @@ type CampaignRow = {
   cadence: CampaignCadence;
   title: string;
   description: string | null;
-  start_at: string; // timestamptz
-  end_at: string; // timestamptz
-  goal_user: number | null; // daily/weekly user goal
-  goal_global: number | null; // global goal
+  start_at: string;
+  end_at: string;
+  goal_user: number | null;
+  goal_global: number | null;
   tags: string[] | null;
   is_active: boolean | null;
 };
@@ -37,12 +36,101 @@ type ObservationRow = {
   target: string | null;
   tags: string[] | null;
   image_url: string | null;
-  ra: number | null;
-  dec: number | null;
+};
+
+type PeerReviewRow = {
+  id: string;
+  created_at: string;
+};
+
+type EarthTelemetry = {
+  lat: number;
+  lon: number;
+  elevM?: number | null; // optional
+  timeLocal: string;
+
+  cloudCoverPct?: number;
+  tempC?: number;
+  pressureHPa?: number;
+  windMS?: number;
+
+  kp?: number | null;
+  kpLabel?: "LOW" | "MODERATE" | "HIGH" | "SEVERE" | "UNKNOWN";
+
+  photonFluxStabilityPct?: number; // derived from cloud cover (proxy)
+  // Sun + night
+  sunAltNowDeg: number;
+  skyState: "DAYLIGHT" | "CIVIL" | "NAUTICAL" | "ASTRONOMICAL" | "NIGHT";
+  optimalCollectionStartLocal?: string | null;
+  nightRemaining?: string | null;
+
+  // next-hours chart series
+  hours: string[]; // "20:00"
+  airmass: number[]; // proxy (based on zenith of a chosen target; we use a stable proxy line)
+  seeingArcsec: number[]; // proxy from cloud cover (lower is better)
 };
 
 function clamp01(v: number) {
   return Math.max(0, Math.min(1, v));
+}
+
+function ProgressBar({
+  value,
+  accent,
+}: {
+  value: number;
+  accent: "cyan" | "violet" | "amber";
+}) {
+  const pct = clamp01(value) * 100;
+
+  if (accent === "amber") {
+    return (
+      <div className="progressWrap">
+        <div
+          className="progressFill"
+          style={{
+            width: `${pct}%`,
+            background: `linear-gradient(90deg, #e4b73a, rgba(228,183,58,0.15))`,
+          }}
+        />
+      </div>
+    );
+  }
+
+  const from = accent === "cyan" ? "var(--cyan)" : "var(--violet)";
+  const to = accent === "cyan" ? "var(--violet)" : "var(--cyan)";
+
+  return (
+    <div className="progressWrap">
+      <div
+        className="progressFill"
+        style={{
+          width: `${pct}%`,
+          background: `linear-gradient(90deg, ${from}, ${to})`,
+        }}
+      />
+    </div>
+  );
+}
+
+function Chip({
+  children,
+  tone,
+}: {
+  children: React.ReactNode;
+  tone: "cyan" | "violet" | "neutral";
+}) {
+  const cls = `chip ${tone}`;
+  return <span className={cls}>{children}</span>;
+}
+
+function StatTile({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="statTile">
+      <div className="mono statLabel">{label}</div>
+      <div className="statValue">{value}</div>
+    </div>
+  );
 }
 
 function fmtEndsIn(endIso: string) {
@@ -58,37 +146,159 @@ function fmtEndsIn(endIso: string) {
   return `ENDS IN ${mins}M`;
 }
 
-function ProgressBar({ value }: { value: number }) {
-  const pct = clamp01(value) * 100;
-  return (
-    <div className="progressWrap">
-      <div
-        className="progressFill"
-        style={{
-          width: `${pct}%`,
-          background: `linear-gradient(90deg, var(--cyan), var(--violet))`,
-        }}
-      />
-    </div>
+function toRad(d: number) {
+  return (d * Math.PI) / 180;
+}
+function toDeg(r: number) {
+  return (r * 180) / Math.PI;
+}
+function wrap360(deg: number) {
+  let x = deg % 360;
+  if (x < 0) x += 360;
+  return x;
+}
+
+// Solar altitude (UI-grade; not observatory-grade)
+function solarAltitudeDeg(date: Date, latDeg: number, lonDeg: number) {
+  const ms = date.getTime();
+  const jd = ms / 86400000 + 2440587.5;
+  const n = jd - 2451545.0;
+
+  const L = wrap360(280.46 + 0.9856474 * n);
+  const g = wrap360(357.528 + 0.9856003 * n);
+  const lambda = wrap360(
+    L + 1.915 * Math.sin(toRad(g)) + 0.020 * Math.sin(toRad(2 * g))
   );
-}
+  const eps = 23.439 - 0.0000004 * n;
 
-function Chip({ children, tone }: { children: React.ReactNode; tone: "cyan" | "violet" | "neutral" }) {
-  return <span className={`chip ${tone}`}>{children}</span>;
-}
+  const sinDecl = Math.sin(toRad(eps)) * Math.sin(toRad(lambda));
+  const decl = Math.asin(sinDecl);
 
-function StatTile({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="statTile">
-      <div className="mono statLabel">{label}</div>
-      <div className="statValue">{value}</div>
-    </div>
+  const GMST = wrap360(
+    280.46061837 +
+      360.98564736629 * (jd - 2451545.0) +
+      0.000387933 * (n / 36525) ** 2
   );
+  const LST = wrap360(GMST + lonDeg);
+
+  const ra = Math.atan2(
+    Math.cos(toRad(eps)) * Math.sin(toRad(lambda)),
+    Math.cos(toRad(lambda))
+  );
+  const raDeg = wrap360(toDeg(ra));
+  const ha = wrap360(LST - raDeg);
+
+  const lat = toRad(latDeg);
+  const H = toRad(ha);
+
+  const alt = Math.asin(
+    Math.sin(lat) * Math.sin(decl) +
+      Math.cos(lat) * Math.cos(decl) * Math.cos(H)
+  );
+  return toDeg(alt);
 }
 
-function emptyStr(v: string | null | undefined, fallback: string) {
-  const s = (v ?? "").trim();
-  return s ? s : fallback;
+// Relative air mass approximation for zenith angle z
+function airmassKastenYoung(zDeg: number) {
+  if (zDeg >= 90) return null;
+  const cosZ = Math.cos(toRad(zDeg));
+  return 1 / (cosZ + 0.50572 * Math.pow(96.07995 - zDeg, -1.6364));
+}
+
+function skyStateFromSunAlt(altDeg: number): EarthTelemetry["skyState"] {
+  if (altDeg > 0) return "DAYLIGHT";
+  if (altDeg > -6) return "CIVIL";
+  if (altDeg > -12) return "NAUTICAL";
+  if (altDeg > -18) return "ASTRONOMICAL";
+  return "NIGHT";
+}
+
+function fmtHM(d: Date) {
+  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function fmtDuration(ms: number) {
+  const m = Math.max(0, Math.floor(ms / 60000));
+  const h = Math.floor(m / 60);
+  const mm = m % 60;
+  const hh = String(h).padStart(2, "0");
+  const m2 = String(mm).padStart(2, "0");
+  return `${hh}H ${m2}M`;
+}
+
+// Open-Meteo (no key). Current + hourly cloud cover for chart.
+async function fetchOpenMeteo(lat: number, lon: number) {
+  const url =
+    `https://api.open-meteo.com/v1/forecast` +
+    `?latitude=${encodeURIComponent(lat)}` +
+    `&longitude=${encodeURIComponent(lon)}` +
+    `&current=temperature_2m,cloud_cover,pressure_msl,wind_speed_10m` +
+    `&hourly=cloud_cover` +
+    `&forecast_hours=9` +
+    `&timezone=auto`;
+
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`Weather fetch failed: ${r.status}`);
+  const j = await r.json();
+
+  const cur = j?.current ?? {};
+  const hourly = j?.hourly ?? {};
+  const times: string[] = Array.isArray(hourly?.time) ? hourly.time : [];
+  const clouds: number[] = Array.isArray(hourly?.cloud_cover)
+    ? hourly.cloud_cover
+    : [];
+
+  return {
+    cloudCoverPct:
+      typeof cur?.cloud_cover === "number" ? cur.cloud_cover : undefined,
+    tempC: typeof cur?.temperature_2m === "number" ? cur.temperature_2m : undefined,
+    pressureHPa:
+      typeof cur?.pressure_msl === "number" ? cur.pressure_msl : undefined,
+    windMS:
+      typeof cur?.wind_speed_10m === "number"
+        ? cur.wind_speed_10m / 3.6
+        : undefined, // km/h -> m/s
+    hourlyTimes: times,
+    hourlyClouds: clouds,
+  };
+}
+
+// NOAA SWPC Kp (no key). If it fails, we just show UNKNOWN.
+async function fetchNOAAKp(): Promise<number | null> {
+  const url = `https://services.swpc.noaa.gov/json/planetary_k_index_1m.json`;
+  const r = await fetch(url, { cache: "no-store" });
+  if (!r.ok) return null;
+  const j = await r.json();
+  if (!Array.isArray(j) || j.length === 0) return null;
+  const last = j[j.length - 1];
+  const kp = Number(last?.kp_index);
+  return Number.isFinite(kp) ? kp : null;
+}
+
+function kpLabel(kp: number | null): EarthTelemetry["kpLabel"] {
+  if (kp == null) return "UNKNOWN";
+  if (kp < 4) return "LOW";
+  if (kp < 6) return "MODERATE";
+  if (kp < 8) return "HIGH";
+  return "SEVERE";
+}
+
+function rankFromOI(oi: number) {
+  const tiers = [
+    { at: 0, name: "FIELD OBSERVER" },
+    { at: 2500, name: "ARRAY OPERATOR" },
+    { at: 10000, name: "NETWORK SPECIALIST" },
+    { at: 25000, name: "SECTOR ANALYST" },
+    { at: 50000, name: "TELEMETRY COMMAND" },
+    { at: 100000, name: "GLOBAL COORDINATOR" },
+  ];
+  let i = 0;
+  while (i + 1 < tiers.length && oi >= tiers[i + 1].at) i++;
+  const cur = tiers[i];
+  const next = tiers[Math.min(i + 1, tiers.length - 1)];
+  const nextAt = next.at;
+  const remaining = Math.max(0, nextAt - oi);
+  return { cur: cur.name, next: next.name, nextAt, remaining };
 }
 
 export default function HomePage() {
@@ -98,66 +308,52 @@ export default function HomePage() {
   const [sessionUserId, setSessionUserId] = useState<string | null>(null);
 
   const [profile, setProfile] = useState<ProfileRow | null>(null);
-  const [campaigns, setCampaigns] = useState<CampaignRow[]>([]);
-  const [recent, setRecent] = useState<ObservationRow[]>([]);
-  const [netStats, setNetStats] = useState<{ submissions24h: number; contributors24h: number } | null>(null);
 
-  const [err, setErr] = useState<string | null>(null);
-  const [permMsg, setPermMsg] = useState<string | null>(null);
+  const [campaigns, setCampaigns] = useState<CampaignRow[]>([]);
+  const [campaignProgress, setCampaignProgress] = useState<Record<string, number>>({});
+
+  const [recentObs, setRecentObs] = useState<ObservationRow[]>([]);
+  const [submissions7d, setSubmissions7d] = useState<number[]>([0, 0, 0, 0, 0, 0, 0]);
+  const [reviews7d, setReviews7d] = useState<number[]>([0, 0, 0, 0, 0, 0, 0]);
+
+  const [userSubmissions, setUserSubmissions] = useState<number>(0);
+
+  const [earth, setEarth] = useState<EarthTelemetry | null>(null);
+  const [earthBusy, setEarthBusy] = useState(false);
+  const [earthErr, setEarthErr] = useState<string | null>(null);
 
   const realtimeRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
-  // --- Load session + core data
+  // --- session bootstrap
   useEffect(() => {
     let alive = true;
 
-    async function load() {
-      setErr(null);
+    async function boot() {
       setLoading(true);
 
-      const { data: sessData, error: sessErr } = await supabase.auth.getSession();
+      const { data } = await supabase.auth.getSession();
       if (!alive) return;
-
-      if (sessErr) {
-        setErr(sessErr.message);
-        setLoading(false);
-        return;
-      }
-
-      const uid = sessData.session?.user?.id ?? null;
+      const uid = data.session?.user?.id ?? null;
       setSessionUserId(uid);
 
-      // If not signed in, we still show campaigns + network activity.
-      const [campRes, recentRes, statsRes] = await Promise.all([
-        loadCampaigns(),
-        loadRecentObservations(),
-        loadNetworkStats(),
-      ]);
-
-      if (!alive) return;
-
-      if (!campRes.ok) setErr((e) => e ?? campRes.error);
-      if (!recentRes.ok) setErr((e) => e ?? recentRes.error);
-      if (!statsRes.ok) setErr((e) => e ?? statsRes.error);
+      await Promise.all([loadCampaigns(), loadRecent(), load7dCharts()]);
 
       if (uid) {
-        const profRes = await loadProfile(uid);
-        if (!alive) return;
-        if (!profRes.ok) setErr((e) => e ?? profRes.error);
+        await Promise.all([loadProfile(uid), loadUserSubmissionCount(uid)]);
       } else {
         setProfile(null);
+        setUserSubmissions(0);
       }
 
       setLoading(false);
     }
 
-    load();
+    boot();
 
     const { data: authSub } = supabase.auth.onAuthStateChange((_evt, s) => {
       const uid = s?.user?.id ?? null;
       setSessionUserId(uid);
-      // reload core data on sign in/out
-      load();
+      boot();
     });
 
     return () => {
@@ -167,181 +363,94 @@ export default function HomePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // --- Realtime recent activity
+  // --- realtime: prepend new observations to activity list
   useEffect(() => {
-    // tear down any existing channel
     realtimeRef.current?.unsubscribe();
 
     const ch = supabase
-      .channel("hga_observations_feed")
+      .channel("hga_home_feed")
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "observations" },
         (payload) => {
           const row = payload.new as ObservationRow;
-          setRecent((prev) => [row, ...prev].slice(0, 20));
-          // update counts lazily
-          loadNetworkStats().then((r) => {
-            if (r.ok) setNetStats(r.value);
-          });
+          setRecentObs((prev) => [row, ...prev].slice(0, 12));
+          // refresh chart counts lazily
+          load7dCharts();
         }
       )
       .subscribe();
 
     realtimeRef.current = ch;
-
     return () => {
       ch.unsubscribe();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function loadProfile(uid: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  async function loadProfile(uid: string) {
     const { data, error } = await supabase.from("profiles").select("*").eq("id", uid).maybeSingle();
-    if (error) return { ok: false, error: error.message };
-    setProfile((data as ProfileRow) ?? null);
-    return { ok: true };
+    if (!error) setProfile((data as ProfileRow) ?? null);
   }
 
-  async function loadCampaigns(): Promise<{ ok: true } | { ok: false; error: string }> {
+  async function loadCampaigns() {
     const { data, error } = await supabase
       .from("campaigns")
       .select("*")
       .eq("is_active", true)
-      .order("cadence", { ascending: true })
       .order("end_at", { ascending: true });
 
-    if (error) return { ok: false, error: error.message };
-    setCampaigns((data as CampaignRow[]) ?? []);
-    return { ok: true };
+    if (!error) setCampaigns((data as CampaignRow[]) ?? []);
   }
 
-  async function loadRecentObservations(): Promise<{ ok: true } | { ok: false; error: string }> {
+  async function loadRecent() {
     const { data, error } = await supabase
       .from("observations")
-      .select("id,user_id,created_at,mode,target,tags,image_url,ra,dec")
+      .select("id,user_id,created_at,mode,target,tags,image_url")
       .order("created_at", { ascending: false })
-      .limit(20);
+      .limit(12);
 
-    if (error) return { ok: false, error: error.message };
-    setRecent((data as ObservationRow[]) ?? []);
-    return { ok: true };
+    if (!error) setRecentObs((data as ObservationRow[]) ?? []);
   }
 
-  async function loadNetworkStats(): Promise<
-    { ok: true; value: { submissions24h: number; contributors24h: number } } | { ok: false; error: string }
-  > {
-    const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-
-    // count submissions in last 24h
-    const subQ = supabase.from("observations").select("id", { count: "exact", head: true }).gte("created_at", since);
-
-    // distinct contributors is trickier without RPC; we can approximate by pulling user_id list in a small window
-    const contribQ = supabase
+  async function loadUserSubmissionCount(uid: string) {
+    const { count } = await supabase
       .from("observations")
-      .select("user_id")
-      .gte("created_at", since)
-      .limit(1000);
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", uid);
 
-    const [{ count, error: e1 }, { data: contrib, error: e2 }] = await Promise.all([subQ, contribQ]);
-
-    if (e1) return { ok: false, error: e1.message };
-    if (e2) return { ok: false, error: e2.message };
-
-    const unique = new Set((contrib ?? []).map((r) => (r as any).user_id)).size;
-    const value = { submissions24h: count ?? 0, contributors24h: unique };
-    setNetStats(value);
-    return { ok: true, value };
+    setUserSubmissions(count ?? 0);
   }
 
-  async function requestGPS() {
-    setPermMsg(null);
-
-    if (!sessionUserId) {
-      setPermMsg("Sign in first, then you can attach location to your profile.");
-      return;
-    }
-    if (!("geolocation" in navigator)) {
-      setPermMsg("Geolocation isn’t available in this browser.");
-      return;
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        const lat = Number(pos.coords.latitude.toFixed(6));
-        const lon = Number(pos.coords.longitude.toFixed(6));
-
-        const { error } = await supabase.from("profiles").upsert({ id: sessionUserId, lat, lon }, { onConflict: "id" });
-        if (error) {
-          setPermMsg(`Could not save GPS: ${error.message}`);
-          return;
-        }
-        setPermMsg("GPS saved to your profile.");
-        loadProfile(sessionUserId);
-      },
-      (e) => {
-        setPermMsg(e.message || "GPS permission denied.");
-      },
-      { enableHighAccuracy: false, timeout: 10000 }
-    );
-  }
-
-  async function requestCameraPermission() {
-    setPermMsg(null);
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setPermMsg("Camera API isn’t available in this browser.");
-      return;
-    }
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      // stop immediately: we only want permission granted
-      stream.getTracks().forEach((t) => t.stop());
-      setPermMsg("Camera permission granted. You can now upload/capture in Submit.");
-    } catch (e: any) {
-      setPermMsg(e?.message ?? "Camera permission denied.");
-    }
-  }
-
-  // --- Campaign progress (real)
-  const campaignModels = useMemo(() => {
-    return campaigns.map((c) => ({
-      ...c,
-      endsIn: fmtEndsIn(c.end_at),
-    }));
-  }, [campaigns]);
-
-  const [campaignProgress, setCampaignProgress] = useState<Record<string, number>>({});
-
+  // campaigns progress (real)
   useEffect(() => {
     let alive = true;
 
-    async function computeProgress() {
+    async function compute() {
       const uid = sessionUserId;
-
       const next: Record<string, number> = {};
 
       await Promise.all(
         campaigns.map(async (c) => {
-          // Daily/Weekly = user progress, Global = everyone progress
           const isGlobal = c.cadence === "GLOBAL";
 
-          const base = supabase
+          let q = supabase
             .from("observations")
             .select("id", { count: "exact", head: true })
             .gte("created_at", c.start_at)
             .lte("created_at", c.end_at);
 
-          // Optional tag filtering
           const tags = (c.tags ?? []).filter(Boolean);
-          let q = base;
           if (tags.length) {
-            // requires tags column to be text[]; overlap operator is supported via `contains`/`overlaps` in postgrest:
-            // overlaps = "ov" filter, but supabase-js supports .overlaps(column, array)
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore
+            // @ts-ignore supabase-js has overlaps in recent versions
             q = q.overlaps("tags", tags);
           }
 
           if (!isGlobal && uid) q = q.eq("user_id", uid);
+          if (!isGlobal && !uid) {
+            next[c.id] = 0;
+            return;
+          }
 
           const { count, error } = await q;
           if (error) {
@@ -350,8 +459,7 @@ export default function HomePage() {
           }
 
           const goal = isGlobal ? (c.goal_global ?? 100) : (c.goal_user ?? 1);
-          const pct = goal > 0 ? (count ?? 0) / goal : 0;
-          next[c.id] = clamp01(pct);
+          next[c.id] = goal > 0 ? clamp01((count ?? 0) / goal) : 0;
         })
       );
 
@@ -359,7 +467,7 @@ export default function HomePage() {
       setCampaignProgress(next);
     }
 
-    if (campaigns.length) computeProgress();
+    if (campaigns.length) compute();
     else setCampaignProgress({});
 
     return () => {
@@ -367,82 +475,285 @@ export default function HomePage() {
     };
   }, [campaigns, sessionUserId]);
 
-  // --- Sector analysis for the signed-in user
-  const [sector, setSector] = useState<{
-    total: number;
-    byMode: { label: string; value: number }[];
-    byRA: { label: string; value: number }[];
-  } | null>(null);
-
-  useEffect(() => {
-    let alive = true;
-
-    async function loadSector() {
-      if (!sessionUserId) {
-        setSector(null);
-        return;
-      }
-
-      // Pull a reasonable amount for local aggregation
-      const { data, error } = await supabase
-        .from("observations")
-        .select("id,mode,ra,created_at")
-        .eq("user_id", sessionUserId)
-        .order("created_at", { ascending: false })
-        .limit(400);
-
-      if (!alive) return;
-
-      if (error) {
-        setSector(null);
-        return;
-      }
-
-      const rows = (data ?? []) as Array<{ id: string; mode: string | null; ra: number | null; created_at: string }>;
-      const total = rows.length;
-
-      // mode distribution
-      const modeMap = new Map<string, number>();
-      for (const r of rows) {
-        const m = (r.mode ?? "UNKNOWN").toUpperCase();
-        modeMap.set(m, (modeMap.get(m) ?? 0) + 1);
-      }
-      const byMode = [...modeMap.entries()]
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 4)
-        .map(([label, value]) => ({ label, value }));
-
-      // RA sectors: 6 bins (0-4h, 4-8h, ... 20-24h)
-      // RA can be in degrees (0..360) or hours (0..24). We normalize:
-      const raBins = new Array(6).fill(0);
-      for (const r of rows) {
-        if (r.ra == null) continue;
-        const ra = Number(r.ra);
-        const hours = ra > 24 ? (ra / 15) : ra; // deg->hours if looks like degrees
-        const h = ((hours % 24) + 24) % 24;
-        const idx = Math.min(5, Math.floor(h / 4));
-        raBins[idx] += 1;
-      }
-      const byRA = raBins.map((v, i) => ({
-        label: `${i * 4}-${i * 4 + 4}h`,
-        value: v,
-      }));
-
-      setSector({ total, byMode, byRA });
+  // 7-day charts for submissions + peer reviews
+  async function load7dCharts() {
+    // build daily windows (local time)
+    const now = new Date();
+    const days: { start: Date; end: Date }[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(now.getDate() - i);
+      d.setHours(0, 0, 0, 0);
+      const start = new Date(d);
+      const end = new Date(d);
+      end.setHours(23, 59, 59, 999);
+      days.push({ start, end });
     }
 
-    loadSector();
+    const subs: number[] = [];
+    for (const w of days) {
+      const { count } = await supabase
+        .from("observations")
+        .select("id", { count: "exact", head: true })
+        .gte("created_at", w.start.toISOString())
+        .lte("created_at", w.end.toISOString());
+      subs.push(count ?? 0);
+    }
+    setSubmissions7d(subs);
 
-    return () => {
-      alive = false;
-    };
-  }, [sessionUserId]);
+    // peer reviews (optional table)
+    try {
+      const revs: number[] = [];
+      for (const w of days) {
+        const { count, error } = await supabase
+          .from("peer_reviews")
+          .select("id", { count: "exact", head: true })
+          .gte("created_at", w.start.toISOString())
+          .lte("created_at", w.end.toISOString());
+        if (error) throw error;
+        revs.push(count ?? 0);
+      }
+      setReviews7d(revs);
+    } catch {
+      setReviews7d([0, 0, 0, 0, 0, 0, 0]);
+    }
+  }
 
-  const callsign = emptyStr(profile?.callsign, "Operator");
-  const role = emptyStr(profile?.role, sessionUserId ? "CONTRIBUTOR" : "GUEST");
+  async function loadEarthSector() {
+    setEarthErr(null);
+    setEarthBusy(true);
+
+    try {
+      if (!("geolocation" in navigator)) {
+        throw new Error("Geolocation isn’t available in this browser.");
+      }
+
+      const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: false,
+          timeout: 12000,
+        });
+      });
+
+      const lat = Number(pos.coords.latitude.toFixed(6));
+      const lon = Number(pos.coords.longitude.toFixed(6));
+
+      const now = new Date();
+      const sunAltNowDeg = solarAltitudeDeg(now, lat, lon);
+      const skyState = skyStateFromSunAlt(sunAltNowDeg);
+
+      // weather
+      let wx: Awaited<ReturnType<typeof fetchOpenMeteo>> | null = null;
+      try {
+        wx = await fetchOpenMeteo(lat, lon);
+      } catch {
+        wx = null;
+      }
+
+      // kp
+      let kp: number | null = null;
+      try {
+        kp = await fetchNOAAKp();
+      } catch {
+        kp = null;
+      }
+
+      // chart series (next 8 hours)
+      const hours: string[] = [];
+      const seeing: number[] = [];
+      const airm: number[] = [];
+
+      // If we have hourly cloud cover, use it; else derive a flat line
+      const times = wx?.hourlyTimes ?? [];
+      const clouds = wx?.hourlyClouds ?? [];
+
+      // Airmass “what not”: zenith itself is ~1, so we show a stable airmass proxy line
+      // representing a “high-altitude” target (~60° alt => z=30° => airmass ~1.15)
+      const airmassProxy = airmassKastenYoung(30) ?? 1.15;
+
+      for (let i = 0; i < 8; i++) {
+        const t = new Date(now.getTime() + i * 60 * 60 * 1000);
+        hours.push(t.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
+
+        const cc = clouds[i] ?? wx?.cloudCoverPct ?? 50;
+        // “Seeing” proxy: map cloud cover -> worse seeing (UI proxy, but tied to real cloud cover)
+        // 0% clouds ~ 1.0", 100% clouds ~ 3.5"
+        const seeingArcsec = 1.0 + (Math.max(0, Math.min(100, cc)) / 100) * 2.5;
+        seeing.push(seeingArcsec);
+
+        airm.push(airmassProxy);
+      }
+
+      // “photon flux stability” proxy: inverse of cloud cover
+      const ccNow = wx?.cloudCoverPct;
+      const photonFluxStabilityPct =
+        typeof ccNow === "number" ? Math.round(100 - Math.max(0, Math.min(100, ccNow))) : undefined;
+
+      // compute optimal collection start & night remaining:
+      // step forward in 5-minute increments until sun alt <= -18 (astro night)
+      const stepMs = 5 * 60 * 1000;
+      let startNight: Date | null = null;
+      let endNight: Date | null = null;
+
+      const horizon = now.getTime() + 24 * 60 * 60 * 1000;
+
+      // find first time sun <= -18 after now
+      for (let t = now.getTime(); t < horizon; t += stepMs) {
+        const alt = solarAltitudeDeg(new Date(t), lat, lon);
+        if (alt <= -18) {
+          startNight = new Date(t);
+          break;
+        }
+      }
+      // find end of astronomical night after startNight
+      if (startNight) {
+        for (let t = startNight.getTime(); t < horizon; t += stepMs) {
+          const alt = solarAltitudeDeg(new Date(t), lat, lon);
+          if (alt > -18) {
+            endNight = new Date(t);
+            break;
+          }
+        }
+      }
+
+      const optimalCollectionStartLocal = startNight ? fmtHM(startNight) : null;
+      const nightRemaining =
+        startNight && endNight
+          ? fmtDuration(endNight.getTime() - Math.max(now.getTime(), startNight.getTime()))
+          : null;
+
+      const tel: EarthTelemetry = {
+        lat,
+        lon,
+        elevM: pos.coords.altitude ?? null,
+        timeLocal: now.toLocaleString(),
+
+        cloudCoverPct: wx?.cloudCoverPct,
+        tempC: wx?.tempC,
+        pressureHPa: wx?.pressureHPa,
+        windMS: wx?.windMS,
+
+        kp,
+        kpLabel: kpLabel(kp),
+
+        photonFluxStabilityPct,
+
+        sunAltNowDeg,
+        skyState,
+
+        optimalCollectionStartLocal,
+        nightRemaining,
+
+        hours,
+        airmass: airm,
+        seeingArcsec: seeing,
+      };
+
+      setEarth(tel);
+
+      // Store coords to profile (optional)
+      if (sessionUserId) {
+        await supabase.from("profiles").upsert({ id: sessionUserId, lat, lon }, { onConflict: "id" });
+        // refresh profile to show coords in other places
+        loadProfile(sessionUserId);
+      }
+    } catch (e: any) {
+      setEarth(null);
+      setEarthErr(e?.message ?? "Could not load earth sector telemetry.");
+    } finally {
+      setEarthBusy(false);
+    }
+  }
+
+  // Derived UI values
+  const callsign = profile?.callsign?.trim() ? profile.callsign : sessionUserId ? "Operator" : "Guest";
+  const role = profile?.role?.trim() ? profile.role : sessionUserId ? "DEEP SPACE CONTRIBUTOR" : "UNAUTHENTICATED NODE";
+
   const oi = profile?.observation_index ?? 0;
   const ci = profile?.campaign_impact ?? 0;
   const streak = profile?.streak_days ?? 0;
+
+  const rank = useMemo(() => rankFromOI(oi), [oi]);
+  const progPct = rank.nextAt > 0 ? clamp01(oi / rank.nextAt) : 0;
+
+  // Campaign cards arranged like your UI (daily, weekly, global)
+  const campaignUI = useMemo(() => {
+    const pick = (cad: CampaignCadence) => campaigns.find((c) => c.cadence === cad) ?? null;
+
+    const daily = pick("DAILY");
+    const weekly = pick("WEEKLY");
+    const global = pick("GLOBAL");
+
+    function map(c: CampaignRow | null, accent: "cyan" | "violet") {
+      if (!c) return null;
+      return {
+        key: c.id,
+        cadence: c.cadence,
+        title: c.title,
+        desc: c.description ?? "",
+        endsIn: c.cadence === "GLOBAL" ? "ACTIVE" : fmtEndsIn(c.end_at),
+        progress: campaignProgress[c.id] ?? 0,
+        accent,
+      };
+    }
+
+    return [
+      map(daily, "cyan"),
+      map(weekly, "violet"),
+      map(global, "cyan"),
+    ].filter(Boolean) as Array<{
+      key: string;
+      cadence: CampaignCadence;
+      title: string;
+      desc: string;
+      endsIn: string;
+      progress: number;
+      accent: "cyan" | "violet";
+    }>;
+  }, [campaigns, campaignProgress]);
+
+  // Chart scaling (keeps your bar UI, but uses real numbers)
+  const maxSub = Math.max(1, ...submissions7d);
+  const maxRev = Math.max(1, ...reviews7d);
+
+  // Visible spectrum + peer validation
+  const visibleSpectrumPct = useMemo(() => {
+    // proxy: % observations in last 12 that are VISUAL
+    if (!recentObs.length) return 0;
+    const vis = recentObs.filter((o) => (o.mode ?? "").toUpperCase() === "VISUAL").length;
+    return Math.round((vis / recentObs.length) * 1000) / 10;
+  }, [recentObs]);
+
+  const avgPeerValidation = useMemo(() => {
+    const sumRev = reviews7d.reduce((a, b) => a + b, 0);
+    const sumSub = submissions7d.reduce((a, b) => a + b, 0);
+    if (!sumSub) return 0;
+    return Math.round((sumRev / sumSub) * 10) / 10;
+  }, [reviews7d, submissions7d]);
+
+  // Sector panel values in your style
+  const sectorCoords = useMemo(() => {
+    const lat = earth?.lat ?? profile?.lat;
+    const lon = earth?.lon ?? profile?.lon;
+    if (lat == null || lon == null) return "COORD: —";
+    const ns = lat >= 0 ? "N" : "S";
+    const ew = lon >= 0 ? "E" : "W";
+    return `${Math.abs(lat).toFixed(4)}${ns} / ${Math.abs(lon).toFixed(4)}${ew}`;
+  }, [earth, profile]);
+
+  const photonFlux = earth?.photonFluxStabilityPct;
+  const photonFluxProgress = photonFlux != null ? clamp01(photonFlux / 100) : 0;
+
+  const kpTxt = earth?.kpLabel ?? "UNKNOWN";
+  const kpProgress = useMemo(() => {
+    const kp = earth?.kp;
+    if (kp == null) return 0.18;
+    // map 0..9 => 0.10..0.95
+    return clamp01(0.10 + (kp / 9) * 0.85);
+  }, [earth]);
+
+  // Zenith chart lines: we use pseudo-lines via CSS but we can set “visual” widths by CSS vars if wanted.
+  // We keep your exact visuals; values appear in the tiles + chips.
 
   return (
     <div className="page">
@@ -464,7 +775,7 @@ export default function HomePage() {
 
             <div className="heroMeta">
               <div className="metaPill mono">STREAK: {streak}D</div>
-              <div className="metaPill mono">STATUS: {sessionUserId ? "AUTHENTICATED" : "SIGN IN REQUIRED"}</div>
+              <div className="metaPill mono">SUBMISSIONS: {sessionUserId ? userSubmissions : "—"}</div>
             </div>
           </div>
         </div>
@@ -478,39 +789,38 @@ export default function HomePage() {
 
         <div className="divider" />
 
-        <div style={{ display: "grid", gap: 10 }}>
+        <div className="progressBlock">
+          <div className="mono progressLabel">PROGRESSION PROTOCOL</div>
+          <div className="progressRow">
+            <div className="nextRank mono">Next: {rank.next}</div>
+            <div className="remaining mono" style={{ color: "var(--cyan)" }}>
+              {rank.remaining.toLocaleString()} OI REMAINING
+            </div>
+          </div>
+          <ProgressBar value={progPct} accent="violet" />
+        </div>
+
+        <div style={{ marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap" }}>
           {!sessionUserId ? (
-            <div style={{ display: "grid", gap: 10 }}>
-              <div style={{ color: "var(--muted)" }}>
-                Sign in to submit observations, track your progress, and generate your personal sector analysis.
-              </div>
-              <button className="btnPrimary" onClick={() => nav("/auth")} type="button">
-                Sign In / Create Account
-              </button>
-            </div>
+            <button className="btnPrimary" onClick={() => nav("/auth")} type="button">
+              SIGN IN / CREATE ACCOUNT
+            </button>
           ) : (
-            <div style={{ display: "grid", gap: 10 }}>
-              <div className="mono" style={{ color: "var(--muted2)" }}>
-                OPTIONAL PERMISSIONS (for better sector analysis + submissions)
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                <button className="btnGhost" onClick={requestGPS} type="button">
-                  Enable GPS
-                </button>
-                <button className="btnGhost" onClick={requestCameraPermission} type="button">
-                  Enable Camera
-                </button>
-              </div>
-              {permMsg && <div style={{ color: "rgba(41,217,255,0.86)" }}>{permMsg}</div>}
-            </div>
+            <>
+              <button className="btnGhost" onClick={() => nav("/submit")} type="button">
+                SUBMIT
+              </button>
+              <button className="btnGhost" onClick={loadEarthSector} type="button" disabled={earthBusy}>
+                {earthBusy ? "SCANNING…" : "LOAD EARTH SECTOR"}
+              </button>
+            </>
           )}
 
-          {err && <div style={{ color: "var(--danger)" }}>{err}</div>}
-          {loading && <div style={{ color: "var(--muted)" }}>Loading network telemetry…</div>}
+          {loading ? <span className="mono" style={{ opacity: 0.7 }}>SYNCING…</span> : null}
         </div>
       </div>
 
-      {/* CAMPAIGNS */}
+      {/* ACTIVE CAMPAIGNS */}
       <div className="sectionTitle">
         <span className="dot cyan" />
         <div>
@@ -521,49 +831,38 @@ export default function HomePage() {
 
       <div className="card">
         <div className="mono kicker">CAMPAIGN OPERATIONS</div>
-        <div className="h2">Live Campaigns</div>
+        <div className="h2">Active Campaigns</div>
         <div className="hr" />
 
-        {campaignModels.length === 0 ? (
-          <div style={{ color: "var(--muted)" }}>
-            No active campaigns yet. (Create rows in the <span className="mono">campaigns</span> table.)
+        {!campaignUI.length ? (
+          <div style={{ opacity: 0.75 }}>
+            No active campaigns found. Create rows in <span className="mono">campaigns</span> (Supabase).
           </div>
         ) : (
           <div className="stack">
-            {campaignModels.map((c) => {
-              const pct = campaignProgress[c.id] ?? 0;
-              const isGlobal = c.cadence === "GLOBAL";
-              return (
-                <div key={c.id} className="campaignCard">
-                  <div className="campaignTop">
-                    <div className="mono campaignCadence" style={{ color: c.cadence === "WEEKLY" ? "var(--violet)" : "var(--cyan)" }}>
-                      {c.cadence}
-                    </div>
-                    <div className="mono campaignEnds">{c.endsIn}</div>
+            {campaignUI.map((c) => (
+              <div key={c.key} className="campaignCard">
+                <div className="campaignTop">
+                  <div
+                    className="mono campaignCadence"
+                    style={{
+                      color:
+                        c.cadence === "WEEKLY" ? "var(--violet)" : "var(--cyan)",
+                    }}
+                  >
+                    {c.cadence}
                   </div>
-
-                  <div className="campaignTitle">{c.title}</div>
-                  <div className="campaignDesc">{c.description ?? ""}</div>
-
-                  <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    {isGlobal ? <Chip tone="violet">GLOBAL POOL</Chip> : <Chip tone="cyan">INDIVIDUAL</Chip>}
-                    {(c.tags ?? []).slice(0, 4).map((t) => (
-                      <Chip key={t} tone="neutral">
-                        {t}
-                      </Chip>
-                    ))}
-                  </div>
-
-                  <div style={{ marginTop: 14 }}>
-                    <div className="mono" style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, color: "var(--muted2)" }}>
-                      <span>PROGRESS</span>
-                      <span>{Math.round(pct * 100)}%</span>
-                    </div>
-                    <ProgressBar value={pct} />
-                  </div>
+                  <div className="mono campaignEnds">{c.endsIn}</div>
                 </div>
-              );
-            })}
+
+                <div className="campaignTitle">{c.title}</div>
+                <div className="campaignDesc">{c.desc}</div>
+
+                <div style={{ marginTop: 14 }}>
+                  <ProgressBar value={c.progress} accent={c.accent} />
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>
@@ -573,146 +872,278 @@ export default function HomePage() {
         <span className="dot violet" />
         <div>
           <div className="h1">NETWORK ACTIVITY</div>
-          <div className="mono sub">Live submissions • contributors • telemetry</div>
+          <div className="mono sub">Traffic analysis • submissions • peer review</div>
         </div>
       </div>
 
       <div className="card">
-        <div className="mono kicker">LIVE TELEMETRY</div>
-        <div className="h2">Network Pulse</div>
+        <div className="mono kicker">TRAFFIC ANALYSIS</div>
+        <div className="h2">Global Telemetry Flow</div>
         <div className="hr" />
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          <div className="statTile">
-            <div className="mono statLabel">SUBMISSIONS (24H)</div>
-            <div className="statValue">{(netStats?.submissions24h ?? 0).toLocaleString()}</div>
+        <div className="chartMock">
+          <div className="chartLegend mono">
+            <span className="legendDot violet" /> PEER REVIEWS
+            <span className="legendDot cyan" style={{ marginLeft: 16 }} /> SUBMISSIONS
           </div>
-          <div className="statTile">
-            <div className="mono statLabel">CONTRIBUTORS (24H)</div>
-            <div className="statValue">{(netStats?.contributors24h ?? 0).toLocaleString()}</div>
-          </div>
-        </div>
+          <div className="chartBars">
+            {["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"].map((d, i) => {
+              const r = reviews7d[i] ?? 0;
+              const s = submissions7d[i] ?? 0;
 
-        <div style={{ marginTop: 14 }} className="hr" />
+              // scale to % heights to preserve your existing visuals
+              const rPct = Math.round((r / maxRev) * 80 + 10); // 10..90
+              const sPct = Math.round((s / maxSub) * 80 + 10);
 
-        <div className="mono" style={{ color: "var(--muted2)", marginBottom: 8 }}>
-          RECENT OBSERVATIONS
-        </div>
-
-        {recent.length === 0 ? (
-          <div style={{ color: "var(--muted)" }}>No observations yet. Your first submissions will appear here.</div>
-        ) : (
-          <div style={{ display: "grid", gap: 10 }}>
-            {recent.map((r) => (
-              <div key={r.id} className="campaignCard" style={{ padding: 14 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                  <div style={{ display: "grid", gap: 4 }}>
-                    <div style={{ fontWeight: 800 }}>
-                      {emptyStr(r.target, "Untitled Observation")}
-                    </div>
-                    <div className="mono" style={{ color: "var(--muted2)" }}>
-                      {new Date(r.created_at).toLocaleString()}
-                    </div>
-                  </div>
-                  <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-                    <Chip tone="neutral">{(r.mode ?? "UNKNOWN").toUpperCase()}</Chip>
-                    {r.image_url ? <Chip tone="cyan">IMAGE</Chip> : <Chip tone="violet">DATA</Chip>}
-                  </div>
+              return (
+                <div className="barCol" key={d}>
+                  <div className="bar violet" style={{ height: `${rPct}%` }} />
+                  <div className="bar cyan" style={{ height: `${sPct}%` }} />
+                  <div className="mono barLabel">{d}</div>
                 </div>
-
-                {(r.tags ?? []).length ? (
-                  <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    {(r.tags ?? []).slice(0, 6).map((t) => (
-                      <Chip key={t} tone="neutral">
-                        {t}
-                      </Chip>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            ))}
+              );
+            })}
           </div>
-        )}
-      </div>
+        </div>
 
-      {/* SECTOR ANALYSIS */}
-      <div className="sectionTitle" style={{ marginTop: 22 }}>
-        <span className="dot cyan" />
-        <div>
-          <div className="h1">SECTOR ANALYSIS</div>
-          <div className="mono sub">Your personal observation footprint</div>
+        <div className="hr" />
+
+        <div className="twoCol">
+          <div className="miniPanel">
+            <div className="mono miniLabel">VISIBLE SPECTRUM</div>
+            <div className="miniValue">{visibleSpectrumPct.toFixed(1)}%</div>
+          </div>
+          <div className="miniPanel">
+            <div className="mono miniLabel">AVG PEER VALIDATION</div>
+            <div className="miniValue">{avgPeerValidation.toFixed(1)}x</div>
+          </div>
+        </div>
+
+        <div className="hr" />
+
+        {/* EARTH SECTOR PANEL (keeps your same UI shape, but real telemetry) */}
+        <div className="sectorPanel">
+          <div className="sectorHead">
+            <div className="mono sectorTitle">
+              <span className="diamond" /> SECTOR ANALYSIS
+            </div>
+            <div className="mono sectorCoords">{sectorCoords}</div>
+          </div>
+
+          <div className="sectorQuote">
+            <div className="quoteBar" />
+            <div className="quoteText">
+              {earth ? `“Local telemetry synchronized (${earth.skyState}).”` : "“Initializing localized telemetry stream…”"}
+            </div>
+          </div>
+
+          {earthErr ? (
+            <div style={{ color: "var(--danger)", marginTop: 10 }}>{earthErr}</div>
+          ) : null}
+
+          <div className="metricRow">
+            <div className="metricCard">
+              <div className="mono metricLabel">PHOTON FLUX STABILITY</div>
+              <div className="metricRight mono" style={{ color: "var(--cyan)" }}>
+                {photonFlux != null ? `${photonFlux}%` : "—"}
+              </div>
+              <ProgressBar value={photonFluxProgress} accent="cyan" />
+            </div>
+
+            <div className="metricCard">
+              <div className="mono metricLabel">MAGNETOSPHERIC INTERFERENCE</div>
+              <div className="metricRight mono" style={{ color: "#e4b73a" }}>
+                {kpTxt}
+              </div>
+              <ProgressBar value={kpProgress} accent="amber" />
+            </div>
+          </div>
+
+          <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10 }}>
+            <div className="miniPanel" style={{ padding: 12 }}>
+              <div className="mono miniLabel">CLOUD COVER</div>
+              <div className="miniValue">
+                {earth?.cloudCoverPct == null ? "—" : `${Math.round(earth.cloudCoverPct)}%`}
+              </div>
+            </div>
+            <div className="miniPanel" style={{ padding: 12 }}>
+              <div className="mono miniLabel">TEMP</div>
+              <div className="miniValue">
+                {earth?.tempC == null ? "—" : `${earth.tempC.toFixed(1)}°C`}
+              </div>
+            </div>
+            <div className="miniPanel" style={{ padding: 12 }}>
+              <div className="mono miniLabel">PRESSURE</div>
+              <div className="miniValue">
+                {earth?.pressureHPa == null ? "—" : `${Math.round(earth.pressureHPa)} hPa`}
+              </div>
+            </div>
+            <div className="miniPanel" style={{ padding: 12 }}>
+              <div className="mono miniLabel">WIND</div>
+              <div className="miniValue">
+                {earth?.windMS == null ? "—" : `${earth.windMS.toFixed(1)} m/s`}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="hr" />
+
+        {/* ZENITH / AIRMASS FORECAST (keeps your layout; values are real, chart lines remain stylistic) */}
+        <div className="zenith">
+          <div className="zenHead">
+            <div className="mono sectorTitle" style={{ color: "var(--violet)" }}>
+              <span className="diamond" /> ZENITH AIRMASS FORECAST
+            </div>
+            <div className="mono zenLegend">
+              <span className="legendDot cyan" /> SEEING (″)
+              <span className="legendDot violet" style={{ marginLeft: 12 }} /> AIRMASS
+            </div>
+          </div>
+
+          <div className="zenChart">
+            <div className="zenGrid" />
+            <div className="zenLine violet" />
+            <div className="zenLine cyan dashed" />
+            <div className="mono zenAxis">
+              {(earth?.hours?.length ? earth.hours : ["20:00", "21:00", "22:00", "23:00", "00:00", "01:00", "02:00"]).join("  ")}
+            </div>
+          </div>
+
+          <div className="zenFooter">
+            <div className="zenTile">
+              <div className="mono miniLabel">OPTIMAL COLLECTION START</div>
+              <div className="miniValue">
+                {earth?.optimalCollectionStartLocal ?? "—"}
+              </div>
+            </div>
+            <div className="zenTile">
+              <div className="mono miniLabel">PEAK ALTITUDE VISIBILITY</div>
+              <div className="miniValue">Zenith (90°)</div>
+            </div>
+            <div className="zenTile">
+              <div className="mono miniLabel">NIGHT DURATION REMAINING</div>
+              <div className="miniValue" style={{ color: "var(--cyan)" }}>
+                {earth?.nightRemaining ?? "—"}
+              </div>
+            </div>
+          </div>
+
+          <div className="hr" />
+
+          <div className="quickActions">
+            <Chip tone="cyan">GLOBAL ARRAY LINK: ESTABLISHED</Chip>
+            <Chip tone="neutral">COORD: {earth ? `${earth.lat.toFixed(4)}, ${earth.lon.toFixed(4)}` : "—"}</Chip>
+            <Chip tone="violet">
+              ELV: {earth?.elevM == null ? "—" : `${Math.round(earth.elevM)}m`}
+            </Chip>
+          </div>
         </div>
       </div>
 
-      <div className="card" style={{ marginBottom: 40 }}>
-        <div className="mono kicker">OPERATOR ANALYTICS</div>
-        <div className="h2">Your Sector Summary</div>
-        <div className="hr" />
-
-        {!sessionUserId ? (
-          <div style={{ color: "var(--muted)" }}>
-            Sign in to generate your sector analysis.
-          </div>
-        ) : !sector ? (
-          <div style={{ color: "var(--muted)" }}>
-            No sector data yet. Once you submit observations (especially with RA/Dec), your sector map will populate.
-          </div>
-        ) : (
-          <div style={{ display: "grid", gap: 14 }}>
-            <div className="statTile">
-              <div className="mono statLabel">OBSERVATIONS ANALYZED</div>
-              <div className="statValue">{sector.total.toLocaleString()}</div>
-            </div>
-
-            <div>
-              <div className="mono" style={{ color: "var(--muted2)", marginBottom: 8 }}>
-                BY MODE
-              </div>
-              <div style={{ display: "grid", gap: 10 }}>
-                {sector.byMode.map((m) => {
-                  const pct = sector.total ? m.value / sector.total : 0;
-                  return (
-                    <div key={m.label}>
-                      <div className="mono" style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, color: "var(--muted2)" }}>
-                        <span>{m.label}</span>
-                        <span>{Math.round(pct * 100)}%</span>
-                      </div>
-                      <ProgressBar value={pct} />
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div>
-              <div className="mono" style={{ color: "var(--muted2)", marginBottom: 8 }}>
-                RIGHT ASCENSION SECTORS (4H BINS)
-              </div>
-              <div style={{ display: "grid", gap: 10 }}>
-                {sector.byRA.map((b) => {
-                  const pct = sector.total ? b.value / sector.total : 0;
-                  return (
-                    <div key={b.label}>
-                      <div className="mono" style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, color: "var(--muted2)" }}>
-                        <span>{b.label}</span>
-                        <span>{b.value.toLocaleString()}</span>
-                      </div>
-                      <ProgressBar value={pct} />
-                    </div>
-                  );
-                })}
-              </div>
-              <div style={{ marginTop: 10, color: "var(--muted)", lineHeight: 1.45 }}>
-                Tip: your RA sectors become far more accurate if your submissions store RA/Dec metadata (or if you upload FITS and parse headers).
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
+      {/* Page-local CSS hooks: KEEPING your original UI */}
+      <style>{`
+        .page{display:flex;flex-direction:column;gap:18px;}
+        .heroCard{padding:22px;}
+        .heroTop{display:flex;gap:16px;align-items:center;}
+        .heroMark{width:74px;height:74px;border-radius:18px;position:relative;overflow:hidden;background:rgba(9,20,40,.55);border:1px solid rgba(0,255,255,.18);}
+        .markGrid{position:absolute;inset:-40%;background:
+          linear-gradient(rgba(0,255,255,.08) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(0,255,255,.08) 1px, transparent 1px);
+          background-size:14px 14px;transform:rotate(0.02turn);}
+        .markGlyph{position:absolute;inset:0;display:grid;place-items:center;}
+        .markGlyph:before{content:"";width:30px;height:30px;border-radius:999px;border:3px solid rgba(0,255,255,.65);box-shadow:0 0 22px rgba(0,255,255,.22);}
+        .markGlyph:after{content:"";position:absolute;width:50px;height:50px;border-radius:999px;border:2px dashed rgba(160,110,255,.35);}
+        .heroText{flex:1;min-width:0;}
+        .kickerRow{letter-spacing:.22em;font-weight:800;font-size:12px;color:rgba(0,255,255,.75);display:flex;align-items:center;gap:10px;}
+        .heroName{font-size:34px;font-weight:900;line-height:1.1;margin-top:6px;}
+        .heroRole{margin-top:4px;color:rgba(0,255,255,.75);letter-spacing:.35em;}
+        .heroMeta{margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;}
+        .metaPill{padding:8px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.08);background:rgba(10,16,28,.35);}
+        .divider{height:1px;background:rgba(255,255,255,.08);margin:16px 0;}
+        .heroStats{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+        .statTile{padding:14px;border-radius:16px;border:1px solid rgba(255,255,255,.08);background:rgba(10,16,28,.35);}
+        .statLabel{opacity:.7;letter-spacing:.22em;font-size:12px;}
+        .statValue{margin-top:8px;font-size:34px;font-weight:900;color:rgba(255,255,255,.92);}
+        .progressBlock{display:flex;flex-direction:column;gap:10px;}
+        .progressLabel{opacity:.7;letter-spacing:.22em;font-size:12px;}
+        .progressRow{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;}
+        .progressWrap{height:10px;border-radius:999px;background:rgba(255,255,255,.06);overflow:hidden;border:1px solid rgba(255,255,255,.06);}
+        .progressFill{height:100%;border-radius:999px;}
+        .sectionTitle{display:flex;gap:10px;align-items:flex-start;margin-top:6px;}
+        .h1{font-size:34px;font-weight:900;letter-spacing:.02em;}
+        .sub{opacity:.7;letter-spacing:.2em;text-transform:none;margin-top:6px;}
+        .card{border-radius:22px;border:1px solid rgba(255,255,255,.08);background:rgba(10,16,28,.35);backdrop-filter: blur(18px);box-shadow:0 18px 50px rgba(0,0,0,.35);padding:18px;}
+        .kicker{opacity:.75;letter-spacing:.24em;font-weight:800;font-size:12px;}
+        .h2{margin-top:6px;font-size:24px;font-weight:900;}
+        .hr{height:1px;background:rgba(255,255,255,.08);margin:14px 0;}
+        .stack{display:grid;gap:14px;}
+        .campaignCard{border-radius:18px;border:1px solid rgba(255,255,255,.08);background:rgba(6,10,18,.35);padding:18px;}
+        .campaignTop{display:flex;justify-content:space-between;align-items:center;gap:10px;}
+        .campaignCadence{letter-spacing:.38em;font-weight:900;font-size:12px;}
+        .campaignEnds{opacity:.6;letter-spacing:.3em;font-size:12px;}
+        .campaignTitle{margin-top:8px;font-size:28px;font-weight:900;}
+        .campaignDesc{opacity:.65;margin-top:6px;line-height:1.45;}
+        .chartMock{border-radius:18px;border:1px solid rgba(255,255,255,.08);background:rgba(6,10,18,.25);padding:16px;}
+        .chartLegend{opacity:.7;letter-spacing:.22em;font-weight:800;font-size:12px;display:flex;align-items:center;gap:10px;}
+        .legendDot{display:inline-block;width:10px;height:10px;border-radius:999px;margin-right:8px;}
+        .legendDot.violet{background:rgba(160,110,255,.8);box-shadow:0 0 18px rgba(160,110,255,.25);}
+        .legendDot.cyan{background:rgba(0,255,255,.75);box-shadow:0 0 18px rgba(0,255,255,.22);}
+        .chartBars{display:grid;grid-template-columns:repeat(7,1fr);gap:10px;margin-top:14px;align-items:end;height:220px;}
+        .barCol{display:flex;flex-direction:column;gap:8px;align-items:center;justify-content:flex-end;}
+        .bar{width:18px;border-radius:999px;}
+        .bar.violet{background:linear-gradient(180deg, rgba(160,110,255,.85), rgba(160,110,255,.15));box-shadow:0 0 22px rgba(160,110,255,.18);}
+        .bar.cyan{background:linear-gradient(180deg, rgba(0,255,255,.75), rgba(0,255,255,.12));box-shadow:0 0 22px rgba(0,255,255,.14);}
+        .barLabel{opacity:.55;letter-spacing:.26em;font-size:11px;}
+        .twoCol{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+        .miniPanel{border-radius:18px;border:1px solid rgba(255,255,255,.08);background:rgba(6,10,18,.25);padding:18px;text-align:center;}
+        .miniLabel{opacity:.65;letter-spacing:.28em;font-weight:900;font-size:12px;}
+        .miniValue{margin-top:10px;font-size:40px;font-weight:900;}
+        .sectorPanel{border-radius:18px;border:1px solid rgba(0,255,255,.12);background:rgba(6,10,18,.25);padding:18px;}
+        .sectorHead{display:flex;justify-content:space-between;gap:10px;align-items:center;}
+        .sectorTitle{opacity:.8;letter-spacing:.28em;font-weight:900;font-size:12px;display:flex;align-items:center;gap:10px;}
+        .diamond{display:inline-block;width:8px;height:8px;transform:rotate(45deg);background:rgba(0,255,255,.75);border-radius:2px;box-shadow:0 0 18px rgba(0,255,255,.18);}
+        .sectorCoords{opacity:.55;letter-spacing:.22em;font-size:12px;}
+        .sectorQuote{margin-top:12px;display:flex;gap:12px;align-items:flex-start;}
+        .quoteBar{width:4px;border-radius:999px;background:rgba(160,110,255,.7);box-shadow:0 0 18px rgba(160,110,255,.2);}
+        .quoteText{opacity:.7;font-style:italic;}
+        .metricRow{margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+        .metricCard{border-radius:18px;border:1px solid rgba(255,255,255,.08);background:rgba(6,10,18,.25);padding:14px;display:flex;flex-direction:column;gap:10px;}
+        .metricLabel{opacity:.65;letter-spacing:.28em;font-weight:900;font-size:11px;}
+        .metricRight{position:absolute;right:14px;margin-top:0;}
+        .metricCard{position:relative;}
+        .zenith{border-radius:18px;border:1px solid rgba(160,110,255,.12);background:rgba(6,10,18,.25);padding:18px;}
+        .zenHead{display:flex;justify-content:space-between;gap:10px;align-items:center;}
+        .zenLegend{opacity:.7;letter-spacing:.22em;font-weight:800;font-size:12px;display:flex;align-items:center;}
+        .zenChart{margin-top:12px;position:relative;height:240px;border-radius:18px;border:1px solid rgba(255,255,255,.08);background:rgba(0,0,0,.12);overflow:hidden;}
+        .zenGrid{position:absolute;inset:0;background:
+          linear-gradient(rgba(255,255,255,.06) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255,255,255,.04) 1px, transparent 1px);
+          background-size:32px 32px;opacity:.6;}
+        .zenLine{position:absolute;left:8%;right:8%;height:3px;border-radius:999px;top:32%;}
+        .zenLine.violet{background:linear-gradient(90deg, rgba(160,110,255,.15), rgba(160,110,255,.85), rgba(0,255,255,.35));}
+        .zenLine.cyan{top:48%;background:linear-gradient(90deg, rgba(0,255,255,.15), rgba(0,255,255,.8), rgba(160,110,255,.35));}
+        .zenLine.dashed{background-size:18px 3px;background-image:linear-gradient(90deg, rgba(0,255,255,.0) 0, rgba(0,255,255,.0) 40%, rgba(0,255,255,.9) 40%, rgba(0,255,255,.9) 60%, rgba(0,255,255,.0) 60%);opacity:.7;}
+        .zenAxis{position:absolute;left:0;right:0;bottom:10px;text-align:center;opacity:.55;letter-spacing:.22em;font-size:12px;}
+        .zenFooter{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-top:14px;}
+        .zenTile{border-radius:18px;border:1px solid rgba(255,255,255,.08);background:rgba(6,10,18,.25);padding:14px;text-align:center;}
+        .quickActions{display:flex;gap:10px;flex-wrap:wrap;}
+        .chip{display:inline-flex;align-items:center;gap:8px;padding:10px 12px;border-radius:999px;border:1px solid rgba(255,255,255,.08);background:rgba(10,16,28,.35);letter-spacing:.16em;font-weight:900;font-size:12px;}
+        .chip.cyan{border-color:rgba(0,255,255,.18);color:rgba(0,255,255,.85);}
+        .chip.violet{border-color:rgba(160,110,255,.18);color:rgba(160,110,255,.85);}
+        .chip.neutral{opacity:.75;}
+        .dot{width:10px;height:10px;border-radius:999px;display:inline-block;margin-top:10px;}
+        .dot.cyan{background:rgba(0,255,255,.8);box-shadow:0 0 18px rgba(0,255,255,.2);}
+        .dot.violet{background:rgba(160,110,255,.8);box-shadow:0 0 18px rgba(160,110,255,.2);}
+        @media (max-width: 860px){
+          .heroStats{grid-template-columns:1fr;}
+          .twoCol{grid-template-columns:1fr;}
+          .metricRow{grid-template-columns:1fr;}
+          .zenFooter{grid-template-columns:1fr;}
+          .campaignTitle{font-size:24px;}
+          .heroName{font-size:30px;}
+        }
+      `}</style>
     </div>
   );
 }
-
-// Optional: if your theme doesn’t already have danger, define it in CSS.
-// This is only used if missing.
-const _unused: CSSProperties = { color: "var(--danger)" };
