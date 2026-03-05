@@ -1,25 +1,72 @@
-import React, { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties } from "react";
+import { supabase } from "../lib/supabaseClient";
+import { useNavigate } from "react-router-dom";
 
-type Campaign = {
-  cadence: "DAILY" | "WEEKLY" | "GLOBAL";
+type CampaignCadence = "DAILY" | "WEEKLY" | "GLOBAL";
+
+type CampaignRow = {
+  id: string;
+  cadence: CampaignCadence;
   title: string;
-  desc: string;
-  endsIn: string;
-  progress: number; // 0..1
-  accent: "cyan" | "violet";
+  description: string | null;
+  start_at: string; // timestamptz
+  end_at: string; // timestamptz
+  goal_user: number | null; // daily/weekly user goal
+  goal_global: number | null; // global goal
+  tags: string[] | null;
+  is_active: boolean | null;
 };
 
-function ProgressBar({ value, accent }: { value: number; accent: "cyan" | "violet" }) {
-  const pct = Math.max(0, Math.min(1, value)) * 100;
-  const from = accent === "cyan" ? "var(--cyan)" : "var(--violet)";
-  const to = accent === "cyan" ? "var(--violet)" : "var(--cyan)";
+type ProfileRow = {
+  id: string;
+  callsign: string | null;
+  role: string | null;
+  observation_index: number | null;
+  campaign_impact: number | null;
+  streak_days: number | null;
+  lat: number | null;
+  lon: number | null;
+};
+
+type ObservationRow = {
+  id: string;
+  user_id: string;
+  created_at: string;
+  mode: string | null;
+  target: string | null;
+  tags: string[] | null;
+  image_url: string | null;
+  ra: number | null;
+  dec: number | null;
+};
+
+function clamp01(v: number) {
+  return Math.max(0, Math.min(1, v));
+}
+
+function fmtEndsIn(endIso: string) {
+  const end = new Date(endIso).getTime();
+  const now = Date.now();
+  const diff = end - now;
+  if (diff <= 0) return "ENDED";
+  const mins = Math.floor(diff / 60000);
+  const hrs = Math.floor(mins / 60);
+  const days = Math.floor(hrs / 24);
+  if (days >= 1) return `ENDS IN ${days}D`;
+  if (hrs >= 1) return `ENDS IN ${hrs}H`;
+  return `ENDS IN ${mins}M`;
+}
+
+function ProgressBar({ value }: { value: number }) {
+  const pct = clamp01(value) * 100;
   return (
     <div className="progressWrap">
       <div
         className="progressFill"
         style={{
           width: `${pct}%`,
-          background: `linear-gradient(90deg, ${from}, ${to})`,
+          background: `linear-gradient(90deg, var(--cyan), var(--violet))`,
         }}
       />
     </div>
@@ -27,8 +74,7 @@ function ProgressBar({ value, accent }: { value: number; accent: "cyan" | "viole
 }
 
 function Chip({ children, tone }: { children: React.ReactNode; tone: "cyan" | "violet" | "neutral" }) {
-  const cls = `chip ${tone}`;
-  return <span className={cls}>{children}</span>;
+  return <span className={`chip ${tone}`}>{children}</span>;
 }
 
 function StatTile({ label, value }: { label: string; value: string }) {
@@ -40,39 +86,367 @@ function StatTile({ label, value }: { label: string; value: string }) {
   );
 }
 
+function emptyStr(v: string | null | undefined, fallback: string) {
+  const s = (v ?? "").trim();
+  return s ? s : fallback;
+}
+
 export default function HomePage() {
-  const campaigns: Campaign[] = useMemo(
-    () => [
-      {
-        cadence: "DAILY",
-        title: "Capture Jupiter",
-        desc: "Submit high-resolution planetary imaging. Prioritize sharpness + color balance.",
-        endsIn: "ENDS IN 14H",
-        progress: 0.62,
-        accent: "cyan",
+  const nav = useNavigate();
+
+  const [loading, setLoading] = useState(true);
+  const [sessionUserId, setSessionUserId] = useState<string | null>(null);
+
+  const [profile, setProfile] = useState<ProfileRow | null>(null);
+  const [campaigns, setCampaigns] = useState<CampaignRow[]>([]);
+  const [recent, setRecent] = useState<ObservationRow[]>([]);
+  const [netStats, setNetStats] = useState<{ submissions24h: number; contributors24h: number } | null>(null);
+
+  const [err, setErr] = useState<string | null>(null);
+  const [permMsg, setPermMsg] = useState<string | null>(null);
+
+  const realtimeRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+
+  // --- Load session + core data
+  useEffect(() => {
+    let alive = true;
+
+    async function load() {
+      setErr(null);
+      setLoading(true);
+
+      const { data: sessData, error: sessErr } = await supabase.auth.getSession();
+      if (!alive) return;
+
+      if (sessErr) {
+        setErr(sessErr.message);
+        setLoading(false);
+        return;
+      }
+
+      const uid = sessData.session?.user?.id ?? null;
+      setSessionUserId(uid);
+
+      // If not signed in, we still show campaigns + network activity.
+      const [campRes, recentRes, statsRes] = await Promise.all([
+        loadCampaigns(),
+        loadRecentObservations(),
+        loadNetworkStats(),
+      ]);
+
+      if (!alive) return;
+
+      if (!campRes.ok) setErr((e) => e ?? campRes.error);
+      if (!recentRes.ok) setErr((e) => e ?? recentRes.error);
+      if (!statsRes.ok) setErr((e) => e ?? statsRes.error);
+
+      if (uid) {
+        const profRes = await loadProfile(uid);
+        if (!alive) return;
+        if (!profRes.ok) setErr((e) => e ?? profRes.error);
+      } else {
+        setProfile(null);
+      }
+
+      setLoading(false);
+    }
+
+    load();
+
+    const { data: authSub } = supabase.auth.onAuthStateChange((_evt, s) => {
+      const uid = s?.user?.id ?? null;
+      setSessionUserId(uid);
+      // reload core data on sign in/out
+      load();
+    });
+
+    return () => {
+      alive = false;
+      authSub.subscription.unsubscribe();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // --- Realtime recent activity
+  useEffect(() => {
+    // tear down any existing channel
+    realtimeRef.current?.unsubscribe();
+
+    const ch = supabase
+      .channel("hga_observations_feed")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "observations" },
+        (payload) => {
+          const row = payload.new as ObservationRow;
+          setRecent((prev) => [row, ...prev].slice(0, 20));
+          // update counts lazily
+          loadNetworkStats().then((r) => {
+            if (r.ok) setNetStats(r.value);
+          });
+        }
+      )
+      .subscribe();
+
+    realtimeRef.current = ch;
+
+    return () => {
+      ch.unsubscribe();
+    };
+  }, []);
+
+  async function loadProfile(uid: string): Promise<{ ok: true } | { ok: false; error: string }> {
+    const { data, error } = await supabase.from("profiles").select("*").eq("id", uid).maybeSingle();
+    if (error) return { ok: false, error: error.message };
+    setProfile((data as ProfileRow) ?? null);
+    return { ok: true };
+  }
+
+  async function loadCampaigns(): Promise<{ ok: true } | { ok: false; error: string }> {
+    const { data, error } = await supabase
+      .from("campaigns")
+      .select("*")
+      .eq("is_active", true)
+      .order("cadence", { ascending: true })
+      .order("end_at", { ascending: true });
+
+    if (error) return { ok: false, error: error.message };
+    setCampaigns((data as CampaignRow[]) ?? []);
+    return { ok: true };
+  }
+
+  async function loadRecentObservations(): Promise<{ ok: true } | { ok: false; error: string }> {
+    const { data, error } = await supabase
+      .from("observations")
+      .select("id,user_id,created_at,mode,target,tags,image_url,ra,dec")
+      .order("created_at", { ascending: false })
+      .limit(20);
+
+    if (error) return { ok: false, error: error.message };
+    setRecent((data as ObservationRow[]) ?? []);
+    return { ok: true };
+  }
+
+  async function loadNetworkStats(): Promise<
+    { ok: true; value: { submissions24h: number; contributors24h: number } } | { ok: false; error: string }
+  > {
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+    // count submissions in last 24h
+    const subQ = supabase.from("observations").select("id", { count: "exact", head: true }).gte("created_at", since);
+
+    // distinct contributors is trickier without RPC; we can approximate by pulling user_id list in a small window
+    const contribQ = supabase
+      .from("observations")
+      .select("user_id")
+      .gte("created_at", since)
+      .limit(1000);
+
+    const [{ count, error: e1 }, { data: contrib, error: e2 }] = await Promise.all([subQ, contribQ]);
+
+    if (e1) return { ok: false, error: e1.message };
+    if (e2) return { ok: false, error: e2.message };
+
+    const unique = new Set((contrib ?? []).map((r) => (r as any).user_id)).size;
+    const value = { submissions24h: count ?? 0, contributors24h: unique };
+    setNetStats(value);
+    return { ok: true, value };
+  }
+
+  async function requestGPS() {
+    setPermMsg(null);
+
+    if (!sessionUserId) {
+      setPermMsg("Sign in first, then you can attach location to your profile.");
+      return;
+    }
+    if (!("geolocation" in navigator)) {
+      setPermMsg("Geolocation isn’t available in this browser.");
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const lat = Number(pos.coords.latitude.toFixed(6));
+        const lon = Number(pos.coords.longitude.toFixed(6));
+
+        const { error } = await supabase.from("profiles").upsert({ id: sessionUserId, lat, lon }, { onConflict: "id" });
+        if (error) {
+          setPermMsg(`Could not save GPS: ${error.message}`);
+          return;
+        }
+        setPermMsg("GPS saved to your profile.");
+        loadProfile(sessionUserId);
       },
-      {
-        cadence: "WEEKLY",
-        title: "Globular Clusters",
-        desc: "Image M13 or M92 with clean stars and stable tracking.",
-        endsIn: "ENDS IN 3D",
-        progress: 0.48,
-        accent: "violet",
+      (e) => {
+        setPermMsg(e.message || "GPS permission denied.");
       },
-      {
-        cadence: "GLOBAL",
-        title: "Hydrogen Line Mapping Event",
-        desc: "Coordinated 21cm capture across many nodes. (Beta event placeholder.)",
-        endsIn: "ACTIVE",
-        progress: 0.31,
-        accent: "cyan",
-      },
-    ],
-    []
-  );
+      { enableHighAccuracy: false, timeout: 10000 }
+    );
+  }
+
+  async function requestCameraPermission() {
+    setPermMsg(null);
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setPermMsg("Camera API isn’t available in this browser.");
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      // stop immediately: we only want permission granted
+      stream.getTracks().forEach((t) => t.stop());
+      setPermMsg("Camera permission granted. You can now upload/capture in Submit.");
+    } catch (e: any) {
+      setPermMsg(e?.message ?? "Camera permission denied.");
+    }
+  }
+
+  // --- Campaign progress (real)
+  const campaignModels = useMemo(() => {
+    return campaigns.map((c) => ({
+      ...c,
+      endsIn: fmtEndsIn(c.end_at),
+    }));
+  }, [campaigns]);
+
+  const [campaignProgress, setCampaignProgress] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    let alive = true;
+
+    async function computeProgress() {
+      const uid = sessionUserId;
+
+      const next: Record<string, number> = {};
+
+      await Promise.all(
+        campaigns.map(async (c) => {
+          // Daily/Weekly = user progress, Global = everyone progress
+          const isGlobal = c.cadence === "GLOBAL";
+
+          const base = supabase
+            .from("observations")
+            .select("id", { count: "exact", head: true })
+            .gte("created_at", c.start_at)
+            .lte("created_at", c.end_at);
+
+          // Optional tag filtering
+          const tags = (c.tags ?? []).filter(Boolean);
+          let q = base;
+          if (tags.length) {
+            // requires tags column to be text[]; overlap operator is supported via `contains`/`overlaps` in postgrest:
+            // overlaps = "ov" filter, but supabase-js supports .overlaps(column, array)
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+            // @ts-ignore
+            q = q.overlaps("tags", tags);
+          }
+
+          if (!isGlobal && uid) q = q.eq("user_id", uid);
+
+          const { count, error } = await q;
+          if (error) {
+            next[c.id] = 0;
+            return;
+          }
+
+          const goal = isGlobal ? (c.goal_global ?? 100) : (c.goal_user ?? 1);
+          const pct = goal > 0 ? (count ?? 0) / goal : 0;
+          next[c.id] = clamp01(pct);
+        })
+      );
+
+      if (!alive) return;
+      setCampaignProgress(next);
+    }
+
+    if (campaigns.length) computeProgress();
+    else setCampaignProgress({});
+
+    return () => {
+      alive = false;
+    };
+  }, [campaigns, sessionUserId]);
+
+  // --- Sector analysis for the signed-in user
+  const [sector, setSector] = useState<{
+    total: number;
+    byMode: { label: string; value: number }[];
+    byRA: { label: string; value: number }[];
+  } | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+
+    async function loadSector() {
+      if (!sessionUserId) {
+        setSector(null);
+        return;
+      }
+
+      // Pull a reasonable amount for local aggregation
+      const { data, error } = await supabase
+        .from("observations")
+        .select("id,mode,ra,created_at")
+        .eq("user_id", sessionUserId)
+        .order("created_at", { ascending: false })
+        .limit(400);
+
+      if (!alive) return;
+
+      if (error) {
+        setSector(null);
+        return;
+      }
+
+      const rows = (data ?? []) as Array<{ id: string; mode: string | null; ra: number | null; created_at: string }>;
+      const total = rows.length;
+
+      // mode distribution
+      const modeMap = new Map<string, number>();
+      for (const r of rows) {
+        const m = (r.mode ?? "UNKNOWN").toUpperCase();
+        modeMap.set(m, (modeMap.get(m) ?? 0) + 1);
+      }
+      const byMode = [...modeMap.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 4)
+        .map(([label, value]) => ({ label, value }));
+
+      // RA sectors: 6 bins (0-4h, 4-8h, ... 20-24h)
+      // RA can be in degrees (0..360) or hours (0..24). We normalize:
+      const raBins = new Array(6).fill(0);
+      for (const r of rows) {
+        if (r.ra == null) continue;
+        const ra = Number(r.ra);
+        const hours = ra > 24 ? (ra / 15) : ra; // deg->hours if looks like degrees
+        const h = ((hours % 24) + 24) % 24;
+        const idx = Math.min(5, Math.floor(h / 4));
+        raBins[idx] += 1;
+      }
+      const byRA = raBins.map((v, i) => ({
+        label: `${i * 4}-${i * 4 + 4}h`,
+        value: v,
+      }));
+
+      setSector({ total, byMode, byRA });
+    }
+
+    loadSector();
+
+    return () => {
+      alive = false;
+    };
+  }, [sessionUserId]);
+
+  const callsign = emptyStr(profile?.callsign, "Operator");
+  const role = emptyStr(profile?.role, sessionUserId ? "CONTRIBUTOR" : "GUEST");
+  const oi = profile?.observation_index ?? 0;
+  const ci = profile?.campaign_impact ?? 0;
+  const streak = profile?.streak_days ?? 0;
 
   return (
     <div className="page">
+      {/* HERO */}
       <div className="card heroCard">
         <div className="heroTop">
           <div className="heroMark" aria-hidden>
@@ -84,12 +458,13 @@ export default function HomePage() {
             <div className="mono kickerRow">
               <span className="dot cyan" /> HELVARIX GLOBAL ARRAY
             </div>
-            <div className="heroName">Cmdr. Starlight</div>
-            <div className="mono heroRole">DEEP SPACE CONTRIBUTOR</div>
+
+            <div className="heroName">{callsign}</div>
+            <div className="mono heroRole">{role}</div>
 
             <div className="heroMeta">
-              <div className="metaPill mono">STREAK: 12D</div>
-              <div className="metaPill mono">SUBMISSIONS: 42</div>
+              <div className="metaPill mono">STREAK: {streak}D</div>
+              <div className="metaPill mono">STATUS: {sessionUserId ? "AUTHENTICATED" : "SIGN IN REQUIRED"}</div>
             </div>
           </div>
         </div>
@@ -97,24 +472,45 @@ export default function HomePage() {
         <div className="divider" />
 
         <div className="heroStats">
-          <StatTile label="OBSERVATION INDEX" value="24,500" />
-          <StatTile label="CAMPAIGN IMPACT" value="1,200" />
+          <StatTile label="OBSERVATION INDEX" value={oi.toLocaleString()} />
+          <StatTile label="CAMPAIGN IMPACT" value={ci.toLocaleString()} />
         </div>
 
         <div className="divider" />
 
-        <div className="progressBlock">
-          <div className="mono progressLabel">PROGRESSION PROTOCOL</div>
-          <div className="progressRow">
-            <div className="nextRank mono">Next: NETWORK SPECIALIST</div>
-            <div className="remaining mono" style={{ color: "var(--cyan)" }}>
-              25,500 OI REMAINING
+        <div style={{ display: "grid", gap: 10 }}>
+          {!sessionUserId ? (
+            <div style={{ display: "grid", gap: 10 }}>
+              <div style={{ color: "var(--muted)" }}>
+                Sign in to submit observations, track your progress, and generate your personal sector analysis.
+              </div>
+              <button className="btnPrimary" onClick={() => nav("/auth")} type="button">
+                Sign In / Create Account
+              </button>
             </div>
-          </div>
-          <ProgressBar value={0.22} accent="violet" />
+          ) : (
+            <div style={{ display: "grid", gap: 10 }}>
+              <div className="mono" style={{ color: "var(--muted2)" }}>
+                OPTIONAL PERMISSIONS (for better sector analysis + submissions)
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <button className="btnGhost" onClick={requestGPS} type="button">
+                  Enable GPS
+                </button>
+                <button className="btnGhost" onClick={requestCameraPermission} type="button">
+                  Enable Camera
+                </button>
+              </div>
+              {permMsg && <div style={{ color: "rgba(41,217,255,0.86)" }}>{permMsg}</div>}
+            </div>
+          )}
+
+          {err && <div style={{ color: "var(--danger)" }}>{err}</div>}
+          {loading && <div style={{ color: "var(--muted)" }}>Loading network telemetry…</div>}
         </div>
       </div>
 
+      {/* CAMPAIGNS */}
       <div className="sectionTitle">
         <span className="dot cyan" />
         <div>
@@ -125,248 +521,198 @@ export default function HomePage() {
 
       <div className="card">
         <div className="mono kicker">CAMPAIGN OPERATIONS</div>
-        <div className="h2">Active Campaigns</div>
+        <div className="h2">Live Campaigns</div>
         <div className="hr" />
 
-        <div className="stack">
-          {campaigns.map((c) => (
-            <div key={c.title} className="campaignCard">
-              <div className="campaignTop">
-                <div className="mono campaignCadence" style={{ color: c.cadence === "WEEKLY" ? "var(--violet)" : "var(--cyan)" }}>
-                  {c.cadence}
+        {campaignModels.length === 0 ? (
+          <div style={{ color: "var(--muted)" }}>
+            No active campaigns yet. (Create rows in the <span className="mono">campaigns</span> table.)
+          </div>
+        ) : (
+          <div className="stack">
+            {campaignModels.map((c) => {
+              const pct = campaignProgress[c.id] ?? 0;
+              const isGlobal = c.cadence === "GLOBAL";
+              return (
+                <div key={c.id} className="campaignCard">
+                  <div className="campaignTop">
+                    <div className="mono campaignCadence" style={{ color: c.cadence === "WEEKLY" ? "var(--violet)" : "var(--cyan)" }}>
+                      {c.cadence}
+                    </div>
+                    <div className="mono campaignEnds">{c.endsIn}</div>
+                  </div>
+
+                  <div className="campaignTitle">{c.title}</div>
+                  <div className="campaignDesc">{c.description ?? ""}</div>
+
+                  <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {isGlobal ? <Chip tone="violet">GLOBAL POOL</Chip> : <Chip tone="cyan">INDIVIDUAL</Chip>}
+                    {(c.tags ?? []).slice(0, 4).map((t) => (
+                      <Chip key={t} tone="neutral">
+                        {t}
+                      </Chip>
+                    ))}
+                  </div>
+
+                  <div style={{ marginTop: 14 }}>
+                    <div className="mono" style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, color: "var(--muted2)" }}>
+                      <span>PROGRESS</span>
+                      <span>{Math.round(pct * 100)}%</span>
+                    </div>
+                    <ProgressBar value={pct} />
+                  </div>
                 </div>
-                <div className="mono campaignEnds">{c.endsIn}</div>
-              </div>
-
-              <div className="campaignTitle">{c.title}</div>
-              <div className="campaignDesc">{c.desc}</div>
-
-              <div style={{ marginTop: 14 }}>
-                <ProgressBar value={c.progress} accent={c.accent} />
-              </div>
-            </div>
-          ))}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
+      {/* NETWORK ACTIVITY */}
       <div className="sectionTitle" style={{ marginTop: 22 }}>
         <span className="dot violet" />
         <div>
           <div className="h1">NETWORK ACTIVITY</div>
-          <div className="mono sub">Traffic analysis • submissions • peer review</div>
+          <div className="mono sub">Live submissions • contributors • telemetry</div>
         </div>
       </div>
 
       <div className="card">
-        <div className="mono kicker">TRAFFIC ANALYSIS</div>
-        <div className="h2">Global Telemetry Flow</div>
+        <div className="mono kicker">LIVE TELEMETRY</div>
+        <div className="h2">Network Pulse</div>
         <div className="hr" />
 
-        <div className="chartMock">
-          <div className="chartLegend mono">
-            <span className="legendDot violet" /> PEER REVIEWS
-            <span className="legendDot cyan" style={{ marginLeft: 16 }} /> SUBMISSIONS
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <div className="statTile">
+            <div className="mono statLabel">SUBMISSIONS (24H)</div>
+            <div className="statValue">{(netStats?.submissions24h ?? 0).toLocaleString()}</div>
           </div>
-          <div className="chartBars">
-            {["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"].map((d, i) => (
-              <div className="barCol" key={d}>
-                <div className="bar violet" style={{ height: `${22 + i * 7}%` }} />
-                <div className="bar cyan" style={{ height: `${34 + i * 6}%` }} />
-                <div className="mono barLabel">{d}</div>
+          <div className="statTile">
+            <div className="mono statLabel">CONTRIBUTORS (24H)</div>
+            <div className="statValue">{(netStats?.contributors24h ?? 0).toLocaleString()}</div>
+          </div>
+        </div>
+
+        <div style={{ marginTop: 14 }} className="hr" />
+
+        <div className="mono" style={{ color: "var(--muted2)", marginBottom: 8 }}>
+          RECENT OBSERVATIONS
+        </div>
+
+        {recent.length === 0 ? (
+          <div style={{ color: "var(--muted)" }}>No observations yet. Your first submissions will appear here.</div>
+        ) : (
+          <div style={{ display: "grid", gap: 10 }}>
+            {recent.map((r) => (
+              <div key={r.id} className="campaignCard" style={{ padding: 14 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                  <div style={{ display: "grid", gap: 4 }}>
+                    <div style={{ fontWeight: 800 }}>
+                      {emptyStr(r.target, "Untitled Observation")}
+                    </div>
+                    <div className="mono" style={{ color: "var(--muted2)" }}>
+                      {new Date(r.created_at).toLocaleString()}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                    <Chip tone="neutral">{(r.mode ?? "UNKNOWN").toUpperCase()}</Chip>
+                    {r.image_url ? <Chip tone="cyan">IMAGE</Chip> : <Chip tone="violet">DATA</Chip>}
+                  </div>
+                </div>
+
+                {(r.tags ?? []).length ? (
+                  <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {(r.tags ?? []).slice(0, 6).map((t) => (
+                      <Chip key={t} tone="neutral">
+                        {t}
+                      </Chip>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             ))}
           </div>
-        </div>
+        )}
+      </div>
 
-        <div className="hr" />
-
-        <div className="twoCol">
-          <div className="miniPanel">
-            <div className="mono miniLabel">VISIBLE SPECTRUM</div>
-            <div className="miniValue">92.1%</div>
-          </div>
-          <div className="miniPanel">
-            <div className="mono miniLabel">AVG PEER VALIDATION</div>
-            <div className="miniValue">1.4x</div>
-          </div>
-        </div>
-
-        <div className="hr" />
-
-        <div className="sectorPanel">
-          <div className="sectorHead">
-            <div className="mono sectorTitle">
-              <span className="diamond" /> SECTOR ANALYSIS
-            </div>
-            <div className="mono sectorCoords">40.7128N / -74.0060W</div>
-          </div>
-
-          <div className="sectorQuote">
-            <div className="quoteBar" />
-            <div className="quoteText">“Initializing localized telemetry stream…”</div>
-          </div>
-
-          <div className="metricRow">
-            <div className="metricCard">
-              <div className="mono metricLabel">PHOTON FLUX STABILITY</div>
-              <div className="metricRight mono" style={{ color: "var(--cyan)" }}>
-                98.2%
-              </div>
-              <ProgressBar value={0.982} accent="cyan" />
-            </div>
-
-            <div className="metricCard">
-              <div className="mono metricLabel">MAGNETOSPHERIC INTERFERENCE</div>
-              <div className="metricRight mono" style={{ color: "#e4b73a" }}>
-                LOW
-              </div>
-              <div className="progressWrap">
-                <div className="progressFill" style={{ width: `18%`, background: `linear-gradient(90deg, #e4b73a, rgba(228,183,58,0.15))` }} />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="hr" />
-
-        <div className="zenith">
-          <div className="zenHead">
-            <div className="mono sectorTitle" style={{ color: "var(--violet)" }}>
-              <span className="diamond" /> ZENITH AIRMASS FORECAST
-            </div>
-            <div className="mono zenLegend">
-              <span className="legendDot cyan" /> SEEING (″)
-              <span className="legendDot violet" style={{ marginLeft: 12 }} /> AIRMASS
-            </div>
-          </div>
-
-          <div className="zenChart">
-            <div className="zenGrid" />
-            <div className="zenLine violet" />
-            <div className="zenLine cyan dashed" />
-            <div className="mono zenAxis">20:00&nbsp;&nbsp;21:00&nbsp;&nbsp;22:00&nbsp;&nbsp;23:00&nbsp;&nbsp;00:00&nbsp;&nbsp;01:00&nbsp;&nbsp;02:00</div>
-          </div>
-
-          <div className="zenFooter">
-            <div className="zenTile">
-              <div className="mono miniLabel">OPTIMAL COLLECTION START</div>
-              <div className="miniValue">22:45 UTC</div>
-            </div>
-            <div className="zenTile">
-              <div className="mono miniLabel">PEAK ALTITUDE VISIBILITY</div>
-              <div className="miniValue">Zenith (90°)</div>
-            </div>
-            <div className="zenTile">
-              <div className="mono miniLabel">NIGHT DURATION REMAINING</div>
-              <div className="miniValue" style={{ color: "var(--cyan)" }}>
-                06H 12M
-              </div>
-            </div>
-          </div>
-
-          <div className="hr" />
-
-          <div className="quickActions">
-            <Chip tone="cyan">GLOBAL ARRAY LINK: ESTABLISHED</Chip>
-            <Chip tone="neutral">COORD: 40.7128N, 74.0060W</Chip>
-            <Chip tone="violet">ELV: 12m</Chip>
-          </div>
+      {/* SECTOR ANALYSIS */}
+      <div className="sectionTitle" style={{ marginTop: 22 }}>
+        <span className="dot cyan" />
+        <div>
+          <div className="h1">SECTOR ANALYSIS</div>
+          <div className="mono sub">Your personal observation footprint</div>
         </div>
       </div>
 
-      {/* Minimal page-local CSS hooks (uses your existing theme vars) */}
-      <style>{`
-        .page{display:flex;flex-direction:column;gap:18px;}
-        .heroCard{padding:22px;}
-        .heroTop{display:flex;gap:16px;align-items:center;}
-        .heroMark{width:74px;height:74px;border-radius:18px;position:relative;overflow:hidden;background:rgba(9,20,40,.55);border:1px solid rgba(0,255,255,.18);}
-        .markGrid{position:absolute;inset:-40%;background:
-          linear-gradient(rgba(0,255,255,.08) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(0,255,255,.08) 1px, transparent 1px);
-          background-size:14px 14px;transform:rotate(0.02turn);}
-        .markGlyph{position:absolute;inset:0;display:grid;place-items:center;}
-        .markGlyph:before{content:"";width:30px;height:30px;border-radius:999px;border:3px solid rgba(0,255,255,.65);box-shadow:0 0 22px rgba(0,255,255,.22);}
-        .markGlyph:after{content:"";position:absolute;width:50px;height:50px;border-radius:999px;border:2px dashed rgba(160,110,255,.35);}
-        .heroText{flex:1;min-width:0;}
-        .kickerRow{letter-spacing:.22em;font-weight:800;font-size:12px;color:rgba(0,255,255,.75);display:flex;align-items:center;gap:10px;}
-        .heroName{font-size:34px;font-weight:900;line-height:1.1;margin-top:6px;}
-        .heroRole{margin-top:4px;color:rgba(0,255,255,.75);letter-spacing:.35em;}
-        .heroMeta{margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;}
-        .metaPill{padding:8px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.08);background:rgba(10,16,28,.35);}
-        .divider{height:1px;background:rgba(255,255,255,.08);margin:16px 0;}
-        .heroStats{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
-        .statTile{padding:14px;border-radius:16px;border:1px solid rgba(255,255,255,.08);background:rgba(10,16,28,.35);}
-        .statLabel{opacity:.7;letter-spacing:.22em;font-size:12px;}
-        .statValue{margin-top:8px;font-size:34px;font-weight:900;color:rgba(255,255,255,.92);}
-        .progressBlock{display:flex;flex-direction:column;gap:10px;}
-        .progressLabel{opacity:.7;letter-spacing:.22em;font-size:12px;}
-        .progressRow{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;}
-        .progressWrap{height:10px;border-radius:999px;background:rgba(255,255,255,.06);overflow:hidden;border:1px solid rgba(255,255,255,.06);}
-        .progressFill{height:100%;border-radius:999px;}
-        .sectionTitle{display:flex;gap:10px;align-items:flex-start;margin-top:8px;}
-        .dot{width:8px;height:8px;border-radius:999px;margin-top:10px;}
-        .dot.cyan{background:var(--cyan);box-shadow:0 0 18px rgba(0,255,255,.25);}
-        .dot.violet{background:var(--violet);box-shadow:0 0 18px rgba(160,110,255,.25);}
-        .stack{display:flex;flex-direction:column;gap:12px;margin-top:12px;}
-        .campaignCard{padding:16px;border-radius:18px;border:1px solid rgba(255,255,255,.08);background:rgba(10,16,28,.28);}
-        .campaignTop{display:flex;justify-content:space-between;align-items:center;gap:10px;}
-        .campaignCadence{letter-spacing:.32em;font-weight:900;font-size:12px;}
-        .campaignEnds{opacity:.55;letter-spacing:.22em;font-size:12px;}
-        .campaignTitle{font-size:22px;font-weight:900;margin-top:8px;}
-        .campaignDesc{margin-top:6px;opacity:.72;line-height:1.5;}
-        .chartMock{padding:16px;border-radius:18px;border:1px solid rgba(255,255,255,.08);background:rgba(10,16,28,.24);}
-        .chartLegend{opacity:.8;letter-spacing:.18em;font-size:12px;display:flex;align-items:center;gap:8px;margin-bottom:14px;}
-        .legendDot{width:10px;height:10px;border-radius:999px;display:inline-block;vertical-align:middle;}
-        .legendDot.cyan{background:var(--cyan);}
-        .legendDot.violet{background:var(--violet);}
-        .chartBars{display:grid;grid-template-columns:repeat(7,1fr);gap:10px;align-items:end;height:220px;padding:8px 6px;}
-        .barCol{display:flex;flex-direction:column;align-items:center;gap:6px;}
-        .bar{width:18px;border-radius:10px;opacity:.92;}
-        .bar.cyan{background:rgba(0,255,255,.75);box-shadow:0 0 18px rgba(0,255,255,.12);}
-        .bar.violet{background:rgba(160,110,255,.75);box-shadow:0 0 18px rgba(160,110,255,.12);}
-        .barLabel{opacity:.55;letter-spacing:.18em;font-size:11px;margin-top:6px;}
-        .twoCol{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
-        .miniPanel{padding:16px;border-radius:18px;border:1px solid rgba(255,255,255,.08);background:rgba(10,16,28,.24);text-align:center;}
-        .miniLabel{opacity:.65;letter-spacing:.22em;font-size:12px;}
-        .miniValue{margin-top:8px;font-size:30px;font-weight:900;}
-        .sectorPanel{padding:16px;border-radius:18px;border:1px solid rgba(0,255,255,.18);background:rgba(10,16,28,.22);}
-        .sectorHead{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;}
-        .sectorTitle{opacity:.85;letter-spacing:.22em;font-size:12px;font-weight:900;}
-        .diamond{display:inline-block;width:8px;height:8px;background:var(--cyan);transform:rotate(45deg);margin-right:10px;border-radius:2px;box-shadow:0 0 16px rgba(0,255,255,.25);}
-        .sectorCoords{opacity:.55;letter-spacing:.18em;font-size:12px;}
-        .sectorQuote{display:flex;gap:12px;align-items:center;margin:14px 0 10px;}
-        .quoteBar{width:4px;height:34px;background:var(--violet);border-radius:999px;box-shadow:0 0 18px rgba(160,110,255,.2);}
-        .quoteText{opacity:.7;font-style:italic;}
-        .metricRow{display:grid;grid-template-columns:1fr;gap:12px;margin-top:12px;}
-        .metricCard{padding:14px;border-radius:16px;border:1px solid rgba(255,255,255,.08);background:rgba(10,16,28,.24);}
-        .metricLabel{opacity:.65;letter-spacing:.22em;font-size:12px;}
-        .metricRight{float:right;margin-top:-16px;}
-        .zenith{padding-top:6px;}
-        .zenHead{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;}
-        .zenLegend{opacity:.7;letter-spacing:.18em;font-size:12px;}
-        .zenChart{position:relative;height:260px;border-radius:18px;margin-top:12px;overflow:hidden;border:1px solid rgba(255,255,255,.08);background:rgba(10,16,28,.22);}
-        .zenGrid{position:absolute;inset:0;background:
-          linear-gradient(rgba(255,255,255,.06) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(255,255,255,.06) 1px, transparent 1px);
-          background-size:32px 32px;opacity:.35;}
-        .zenLine{position:absolute;left:8%;right:8%;top:28%;height:3px;border-radius:999px;}
-        .zenLine.violet{background:rgba(160,110,255,.75);box-shadow:0 0 18px rgba(160,110,255,.14);transform:skewX(-10deg);top:30%;}
-        .zenLine.cyan{background:rgba(0,255,255,.7);box-shadow:0 0 18px rgba(0,255,255,.12);top:44%;}
-        .zenLine.cyan.dashed{mask:linear-gradient(90deg,#000 60%,transparent 0);mask-size:18px 100%;}
-        .zenAxis{position:absolute;left:0;right:0;bottom:10px;text-align:center;opacity:.55;letter-spacing:.18em;font-size:11px;}
-        .zenFooter{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:12px;}
-        .zenTile{padding:14px;border-radius:16px;border:1px solid rgba(255,255,255,.08);background:rgba(10,16,28,.24);text-align:center;}
-        .quickActions{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;}
-        .chip{padding:10px 12px;border-radius:14px;border:1px solid rgba(255,255,255,.08);background:rgba(10,16,28,.28);font-size:12px;letter-spacing:.18em}
-        .chip.cyan{border-color:rgba(0,255,255,.18);color:rgba(0,255,255,.85);}
-        .chip.violet{border-color:rgba(160,110,255,.18);color:rgba(160,110,255,.85);}
-        .chip.neutral{opacity:.8;}
-        @media (max-width: 820px){
-          .heroStats{grid-template-columns:1fr;}
-          .zenFooter{grid-template-columns:1fr;}
-          .twoCol{grid-template-columns:1fr;}
-        }
-      `}</style>
+      <div className="card" style={{ marginBottom: 40 }}>
+        <div className="mono kicker">OPERATOR ANALYTICS</div>
+        <div className="h2">Your Sector Summary</div>
+        <div className="hr" />
+
+        {!sessionUserId ? (
+          <div style={{ color: "var(--muted)" }}>
+            Sign in to generate your sector analysis.
+          </div>
+        ) : !sector ? (
+          <div style={{ color: "var(--muted)" }}>
+            No sector data yet. Once you submit observations (especially with RA/Dec), your sector map will populate.
+          </div>
+        ) : (
+          <div style={{ display: "grid", gap: 14 }}>
+            <div className="statTile">
+              <div className="mono statLabel">OBSERVATIONS ANALYZED</div>
+              <div className="statValue">{sector.total.toLocaleString()}</div>
+            </div>
+
+            <div>
+              <div className="mono" style={{ color: "var(--muted2)", marginBottom: 8 }}>
+                BY MODE
+              </div>
+              <div style={{ display: "grid", gap: 10 }}>
+                {sector.byMode.map((m) => {
+                  const pct = sector.total ? m.value / sector.total : 0;
+                  return (
+                    <div key={m.label}>
+                      <div className="mono" style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, color: "var(--muted2)" }}>
+                        <span>{m.label}</span>
+                        <span>{Math.round(pct * 100)}%</span>
+                      </div>
+                      <ProgressBar value={pct} />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div>
+              <div className="mono" style={{ color: "var(--muted2)", marginBottom: 8 }}>
+                RIGHT ASCENSION SECTORS (4H BINS)
+              </div>
+              <div style={{ display: "grid", gap: 10 }}>
+                {sector.byRA.map((b) => {
+                  const pct = sector.total ? b.value / sector.total : 0;
+                  return (
+                    <div key={b.label}>
+                      <div className="mono" style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, color: "var(--muted2)" }}>
+                        <span>{b.label}</span>
+                        <span>{b.value.toLocaleString()}</span>
+                      </div>
+                      <ProgressBar value={pct} />
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{ marginTop: 10, color: "var(--muted)", lineHeight: 1.45 }}>
+                Tip: your RA sectors become far more accurate if your submissions store RA/Dec metadata (or if you upload FITS and parse headers).
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
+
+// Optional: if your theme doesn’t already have danger, define it in CSS.
+// This is only used if missing.
+const _unused: CSSProperties = { color: "var(--danger)" };
