@@ -685,8 +685,6 @@ export default function HomePage() {
     }>;
   }, [campaigns, campaignProgress]);
 
-  const maxSub = Math.max(1, ...submissions7d);
-
   const visibleSpectrumPct = useMemo(() => {
     if (!recentObs.length) return 0;
     const vis = recentObs.filter(
@@ -875,29 +873,6 @@ export default function HomePage() {
         <div className="h2">Global Telemetry Flow</div>
         <div className="hr" />
 
-        <div className="chartMock">
-          {/* ✅ Peer reviews removed: legend + bars show submissions only */}
-          <div className="chartLegend mono">
-            <span className="legendDot cyan" /> SUBMISSIONS
-          </div>
-
-          <div className="chartBars">
-            {["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"].map((d, i) => {
-              const s = submissions7d[i] ?? 0;
-              const sPct = Math.round((s / maxSub) * 80 + 10);
-
-              return (
-                <div className="barCol" key={d}>
-                  <div className="bar cyan" style={{ height: `${sPct}%` }} />
-                  <div className="mono barLabel">{d}</div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="hr" />
-
         <div className="twoCol">
           <div className="miniPanel">
             <div className="mono miniLabel">VISIBLE SPECTRUM</div>
@@ -1068,17 +1043,9 @@ export default function HomePage() {
         .campaignEnds{opacity:.6;letter-spacing:.3em;font-size:12px;}
         .campaignTitle{margin-top:8px;font-size:28px;font-weight:900;}
         .campaignDesc{opacity:.65;margin-top:6px;line-height:1.45;}
-        .chartMock{border-radius:18px;border:1px solid rgba(255,255,255,.08);background:rgba(6,10,18,.25);padding:16px;}
-        .chartLegend{opacity:.7;letter-spacing:.22em;font-weight:800;font-size:12px;display:flex;align-items:center;gap:10px;}
         .legendDot{display:inline-block;width:10px;height:10px;border-radius:999px;margin-right:8px;}
         .legendDot.violet{background:rgba(160,110,255,.8);box-shadow:0 0 18px rgba(160,110,255,.25);}
         .legendDot.cyan{background:rgba(0,255,255,.75);box-shadow:0 0 18px rgba(0,255,255,.22);}
-        .chartBars{display:grid;grid-template-columns:repeat(7,1fr);gap:10px;margin-top:14px;align-items:end;height:220px;}
-        .barCol{display:flex;flex-direction:column;gap:8px;align-items:center;justify-content:flex-end;}
-        .bar{width:18px;border-radius:999px;}
-        .bar.violet{background:linear-gradient(180deg, rgba(160,110,255,.85), rgba(160,110,255,.15));box-shadow:0 0 22px rgba(160,110,255,.18);}
-        .bar.cyan{background:linear-gradient(180deg, rgba(0,255,255,.75), rgba(0,255,255,.12));box-shadow:0 0 22px rgba(0,255,255,.14);}
-        .barLabel{opacity:.55;letter-spacing:.26em;font-size:11px;}
         .twoCol{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
         .miniPanel{border-radius:18px;border:1px solid rgba(255,255,255,.08);background:rgba(6,10,18,.25);padding:18px;text-align:center;}
         .miniLabel{opacity:.65;letter-spacing:.28em;font-weight:900;font-size:12px;}
