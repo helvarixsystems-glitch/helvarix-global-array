@@ -15,9 +15,13 @@ export function normalizeSupabaseUrl(url: string) {
   return trimmed;
 }
 
+function get(name: string) {
+  return ((import.meta as any).env?.[name] as string | undefined)?.trim() || undefined;
+}
+
 function mustGet(name: string) {
-  const v = (import.meta as any).env?.[name] as string | undefined;
-  if (!v || !String(v).trim()) {
+  const v = get(name);
+  if (!v) {
     throw new Error(
       `Missing environment variable ${name}. Set it in Cloudflare Pages (Production + Preview).`
     );
@@ -26,6 +30,11 @@ function mustGet(name: string) {
 }
 
 export const env = {
+  // Supabase (required)
   supabaseUrl: normalizeSupabaseUrl(mustGet("VITE_SUPABASE_URL")),
   supabaseAnonKey: mustGet("VITE_SUPABASE_ANON_KEY"),
+
+  // Stripe (public key; can be required if your app depends on it)
+  // If your app should still build without Stripe configured, leave it optional.
+  stripePk: get("VITE_STRIPE_PK") ?? get("VITE_STRIPE_PUBLISHABLE_KEY"),
 };
