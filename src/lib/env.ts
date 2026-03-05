@@ -3,15 +3,9 @@
 export function normalizeSupabaseUrl(url: string) {
   const trimmed = (url ?? "").trim();
 
-  // Already good
   if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) return trimmed;
-
-  // If they pasted just the project ref
   if (trimmed && !trimmed.includes(".")) return `https://${trimmed}.supabase.co`;
-
-  // If they pasted "<ref>.supabase.co" without protocol
   if (trimmed) return `https://${trimmed}`;
-
   return trimmed;
 }
 
@@ -34,7 +28,7 @@ export const env = {
   supabaseUrl: normalizeSupabaseUrl(mustGet("VITE_SUPABASE_URL")),
   supabaseAnonKey: mustGet("VITE_SUPABASE_ANON_KEY"),
 
-  // Stripe (public key; can be required if your app depends on it)
-  // If your app should still build without Stripe configured, leave it optional.
-  stripePk: get("VITE_STRIPE_PK") ?? get("VITE_STRIPE_PUBLISHABLE_KEY"),
+  // Stripe (required)
+  // Use ONE of these names; VITE_STRIPE_PK is the recommended canonical name.
+  stripePk: get("VITE_STRIPE_PK") ?? get("VITE_STRIPE_PUBLISHABLE_KEY") ?? mustGet("VITE_STRIPE_PK"),
 };
