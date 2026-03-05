@@ -301,15 +301,12 @@ export default function HomePage() {
   const [profile, setProfile] = useState<ProfileRow | null>(null);
 
   const [campaigns, setCampaigns] = useState<CampaignRow[]>([]);
-  const [campaignProgress, setCampaignProgress] = useState<
-    Record<string, number>
-  >({});
+  const [campaignProgress, setCampaignProgress] = useState<Record<string, number>>(
+    {}
+  );
 
   const [recentObs, setRecentObs] = useState<ObservationRow[]>([]);
   const [submissions7d, setSubmissions7d] = useState<number[]>([
-    0, 0, 0, 0, 0, 0, 0,
-  ]);
-  const [reviews7d, setReviews7d] = useState<number[]>([
     0, 0, 0, 0, 0, 0, 0,
   ]);
 
@@ -472,7 +469,7 @@ export default function HomePage() {
     };
   }, [campaigns, sessionUserId]);
 
-  // ✅ FIXED: single, non-duplicated function
+  // ✅ Peer review removed: submissions-only 7-day chart
   async function load7dCharts() {
     const now = new Date();
     const days: { start: Date; end: Date }[] = [];
@@ -487,7 +484,6 @@ export default function HomePage() {
       days.push({ start, end });
     }
 
-    // submissions
     const subs: number[] = [];
     for (const w of days) {
       const { count } = await supabase
@@ -498,34 +494,6 @@ export default function HomePage() {
       subs.push(count ?? 0);
     }
     setSubmissions7d(subs);
-
-    // peer reviews (optional). If table/view doesn't exist, PostgREST returns 404.
-    try {
-      const revs: number[] = [];
-
-      for (const w of days) {
-        const { count, error } = await supabase
-          .from("peer_reviews")
-          .select("id", { count: "exact", head: true })
-          .gte("created_at", w.start.toISOString())
-          .lte("created_at", w.end.toISOString());
-
-        if (error) {
-          const status = (error as any)?.status;
-          if (status === 404) {
-            setReviews7d([0, 0, 0, 0, 0, 0, 0]);
-            return;
-          }
-          throw error;
-        }
-
-        revs.push(count ?? 0);
-      }
-
-      setReviews7d(revs);
-    } catch {
-      setReviews7d([0, 0, 0, 0, 0, 0, 0]);
-    }
   }
 
   async function loadEarthSector() {
@@ -718,7 +686,6 @@ export default function HomePage() {
   }, [campaigns, campaignProgress]);
 
   const maxSub = Math.max(1, ...submissions7d);
-  const maxRev = Math.max(1, ...reviews7d);
 
   const visibleSpectrumPct = useMemo(() => {
     if (!recentObs.length) return 0;
@@ -728,12 +695,11 @@ export default function HomePage() {
     return Math.round((vis / recentObs.length) * 1000) / 10;
   }, [recentObs]);
 
-  const avgPeerValidation = useMemo(() => {
-    const sumRev = reviews7d.reduce((a, b) => a + b, 0);
-    const sumSub = submissions7d.reduce((a, b) => a + b, 0);
-    if (!sumSub) return 0;
-    return Math.round((sumRev / sumSub) * 10) / 10;
-  }, [reviews7d, submissions7d]);
+  // ✅ Replacement metric keeps UI intact without peer reviews
+  const submissionsTotal7d = useMemo(
+    () => submissions7d.reduce((a, b) => a + b, 0),
+    [submissions7d]
+  );
 
   const sectorCoords = useMemo(() => {
     const lat = earth?.lat ?? profile?.lat;
@@ -801,17 +767,37 @@ export default function HomePage() {
           <ProgressBar value={progPct} accent="violet" />
         </div>
 
-        <div style={{ marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <div
+          style={{
+            marginTop: 14,
+            display: "flex",
+            gap: 10,
+            flexWrap: "wrap",
+          }}
+        >
           {!sessionUserId ? (
-            <button className="btnPrimary" onClick={() => nav("/auth")} type="button">
+            <button
+              className="btnPrimary"
+              onClick={() => nav("/auth")}
+              type="button"
+            >
               SIGN IN / CREATE ACCOUNT
             </button>
           ) : (
             <>
-              <button className="btnGhost" onClick={() => nav("/submit")} type="button">
+              <button
+                className="btnGhost"
+                onClick={() => nav("/submit")}
+                type="button"
+              >
                 SUBMIT
               </button>
-              <button className="btnGhost" onClick={loadEarthSector} type="button" disabled={earthBusy}>
+              <button
+                className="btnGhost"
+                onClick={loadEarthSector}
+                type="button"
+                disabled={earthBusy}
+              >
                 {earthBusy ? "SCANNING…" : "LOAD EARTH SECTOR"}
               </button>
             </>
@@ -852,7 +838,10 @@ export default function HomePage() {
                   <div
                     className="mono campaignCadence"
                     style={{
-                      color: c.cadence === "WEEKLY" ? "var(--violet)" : "var(--cyan)",
+                      color:
+                        c.cadence === "WEEKLY"
+                          ? "var(--violet)"
+                          : "var(--cyan)",
                     }}
                   >
                     {c.cadence}
@@ -887,21 +876,18 @@ export default function HomePage() {
         <div className="hr" />
 
         <div className="chartMock">
+          {/* ✅ Peer reviews removed: legend + bars show submissions only */}
           <div className="chartLegend mono">
-            <span className="legendDot violet" /> PEER REVIEWS
-            <span className="legendDot cyan" style={{ marginLeft: 16 }} /> SUBMISSIONS
+            <span className="legendDot cyan" /> SUBMISSIONS
           </div>
+
           <div className="chartBars">
             {["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"].map((d, i) => {
-              const r = reviews7d[i] ?? 0;
               const s = submissions7d[i] ?? 0;
-
-              const rPct = Math.round((r / maxRev) * 80 + 10);
               const sPct = Math.round((s / maxSub) * 80 + 10);
 
               return (
                 <div className="barCol" key={d}>
-                  <div className="bar violet" style={{ height: `${rPct}%` }} />
                   <div className="bar cyan" style={{ height: `${sPct}%` }} />
                   <div className="mono barLabel">{d}</div>
                 </div>
@@ -917,9 +903,11 @@ export default function HomePage() {
             <div className="mono miniLabel">VISIBLE SPECTRUM</div>
             <div className="miniValue">{visibleSpectrumPct.toFixed(1)}%</div>
           </div>
+
+          {/* ✅ Keeps UI intact: replace peer metric with a submission metric */}
           <div className="miniPanel">
-            <div className="mono miniLabel">AVG PEER VALIDATION</div>
-            <div className="miniValue">{avgPeerValidation.toFixed(1)}x</div>
+            <div className="mono miniLabel">SUBMISSIONS (7D)</div>
+            <div className="miniValue">{submissionsTotal7d.toLocaleString()}</div>
           </div>
         </div>
 
@@ -944,20 +932,27 @@ export default function HomePage() {
           </div>
 
           {earthErr ? (
-            <div style={{ color: "var(--danger)", marginTop: 10 }}>{earthErr}</div>
+            <div style={{ color: "var(--danger)", marginTop: 10 }}>
+              {earthErr}
+            </div>
           ) : null}
 
           <div className="metricRow">
             <div className="metricCard">
               <div className="mono metricLabel">PHOTON FLUX STABILITY</div>
-              <div className="metricRight mono" style={{ color: "var(--cyan)" }}>
+              <div
+                className="metricRight mono"
+                style={{ color: "var(--cyan)" }}
+              >
                 {photonFlux != null ? `${photonFlux}%` : "—"}
               </div>
               <ProgressBar value={photonFluxProgress} accent="cyan" />
             </div>
 
             <div className="metricCard">
-              <div className="mono metricLabel">MAGNETOSPHERIC INTERFERENCE</div>
+              <div className="mono metricLabel">
+                MAGNETOSPHERIC INTERFERENCE
+              </div>
               <div className="metricRight mono" style={{ color: "#e4b73a" }}>
                 {kpTxt}
               </div>
@@ -971,12 +966,16 @@ export default function HomePage() {
         {/* ZENITH */}
         <div className="zenith">
           <div className="zenHead">
-            <div className="mono sectorTitle" style={{ color: "var(--violet)" }}>
+            <div
+              className="mono sectorTitle"
+              style={{ color: "var(--violet)" }}
+            >
               <span className="diamond" /> ZENITH AIRMASS FORECAST
             </div>
             <div className="mono zenLegend">
               <span className="legendDot cyan" /> SEEING (″)
-              <span className="legendDot violet" style={{ marginLeft: 12 }} /> AIRMASS
+              <span className="legendDot violet" style={{ marginLeft: 12 }} />{" "}
+              AIRMASS
             </div>
           </div>
 
@@ -995,7 +994,9 @@ export default function HomePage() {
           <div className="zenFooter">
             <div className="zenTile">
               <div className="mono miniLabel">OPTIMAL COLLECTION START</div>
-              <div className="miniValue">{earth?.optimalCollectionStartLocal ?? "—"}</div>
+              <div className="miniValue">
+                {earth?.optimalCollectionStartLocal ?? "—"}
+              </div>
             </div>
             <div className="zenTile">
               <div className="mono miniLabel">PEAK ALTITUDE VISIBILITY</div>
@@ -1014,7 +1015,8 @@ export default function HomePage() {
           <div className="quickActions">
             <Chip tone="cyan">GLOBAL ARRAY LINK: ESTABLISHED</Chip>
             <Chip tone="neutral">
-              COORD: {earth ? `${earth.lat.toFixed(4)}, ${earth.lon.toFixed(4)}` : "—"}
+              COORD:{" "}
+              {earth ? `${earth.lat.toFixed(4)}, ${earth.lon.toFixed(4)}` : "—"}
             </Chip>
             <Chip tone="violet">
               ELV: {earth?.elevM == null ? "—" : `${Math.round(earth.elevM)}m`}
@@ -1023,7 +1025,7 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* ✅ FIXED STYLE WRAP */}
+      {/* ✅ Styles kept intact. Peer-review-related styles can remain safely. */}
       <style>{`
         .page{display:flex;flex-direction:column;gap:18px;}
         .heroCard{padding:22px;}
