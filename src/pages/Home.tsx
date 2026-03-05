@@ -477,18 +477,62 @@ export default function HomePage() {
 
   // 7-day charts for submissions + peer reviews
   async function load7dCharts() {
-    // build daily windows (local time)
-    const now = new Date();
-    const days: { start: Date; end: Date }[] = [];
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(now);
-      d.setDate(now.getDate() - i);
-      d.setHours(0, 0, 0, 0);
-      const start = new Date(d);
-      const end = new Date(d);
-      end.setHours(23, 59, 59, 999);
-      days.push({ start, end });
+  // build daily windows (local time)
+  const now = new Date();
+  const days: { start: Date; end: Date }[] = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(now.getDate() - i);
+    d.setHours(0, 0, 0, 0);
+    const start = new Date(d);
+    const end = new Date(d);
+    end.setHours(23, 59, 59, 999);
+    days.push({ start, end });
+  }
+
+  // submissions
+  const subs: number[] = [];
+  for (const w of days) {
+    const { count } = await supabase
+      .from("observations")
+      .select("id", { count: "exact", head: true })
+      .gte("created_at", w.start.toISOString())
+      .lte("created_at", w.end.toISOString());
+    subs.push(count ?? 0);
+  }
+  setSubmissions7d(subs);
+
+  // peer reviews (optional table)
+  // If the table doesn't exist, Supabase PostgREST returns 404.
+  // We detect that once and stop querying to avoid console spam.
+  try {
+    const revs: number[] = [];
+
+    for (const w of days) {
+      const { count, error } = await supabase
+        .from("peer_reviews")
+        .select("id", { count: "exact", head: true })
+        .gte("created_at", w.start.toISOString())
+        .lte("created_at", w.end.toISOString());
+
+      if (error) {
+        const status = (error as any)?.status;
+        if (status === 404) {
+          // table/view doesn't exist or isn't exposed -> stop trying
+          setReviews7d([0, 0, 0, 0, 0, 0, 0]);
+          return;
+        }
+        throw error;
+      }
+
+      revs.push(count ?? 0);
     }
+
+    setReviews7d(revs);
+  } catch {
+    setReviews7d([0, 0, 0, 0, 0, 0, 0]);
+  }
+}
 
     const subs: number[] = [];
     for (const w of days) {
