@@ -258,6 +258,7 @@ export default function Home() {
     return () => {
       alive = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -439,24 +440,24 @@ export default function Home() {
     }
   }
 
-  const campaignsSorted = useMemo(() => {
+  // ✅ FIX: flatten the arrays so this is CampaignVM[], not CampaignVM[][]
+  type CampaignVM = {
+    key: string;
+    cadence: CampaignCadence;
+    title: string;
+    desc: string;
+    endsIn: string;
+    progress: number;
+    accent: "cyan" | "violet";
+  };
+
+  const campaignsSorted = useMemo<CampaignVM[]>(() => {
     const daily = campaigns.filter((c) => c.cadence === "DAILY" && c.is_active);
     const weekly = campaigns.filter((c) => c.cadence === "WEEKLY" && c.is_active);
     const global = campaigns.filter((c) => c.cadence === "GLOBAL" && c.is_active);
 
-    const map = (
-      list: CampaignRow[],
-      accent: "cyan" | "violet"
-    ): Array<{
-      key: string;
-      cadence: CampaignCadence;
-      title: string;
-      desc: string;
-      endsIn: string;
-      progress: number;
-      accent: "cyan" | "violet";
-    }> => {
-      return list.map((c) => ({
+    const map = (list: CampaignRow[], accent: "cyan" | "violet"): CampaignVM[] =>
+      list.map((c) => ({
         key: c.id,
         cadence: c.cadence,
         title: c.title,
@@ -465,19 +466,8 @@ export default function Home() {
         progress: campaignProgress[c.id] ?? 0,
         accent,
       }));
-    };
 
-    return [map(daily, "cyan"), map(weekly, "violet"), map(global, "cyan")].filter(
-      Boolean
-    ) as Array<{
-      key: string;
-      cadence: CampaignCadence;
-      title: string;
-      desc: string;
-      endsIn: string;
-      progress: number;
-      accent: "cyan" | "violet";
-    }>;
+    return [...map(daily, "cyan"), ...map(weekly, "violet"), ...map(global, "cyan")];
   }, [campaigns, campaignProgress]);
 
   const sectorCoords = useMemo(() => {
@@ -1031,7 +1021,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* LOCAL SECTOR DATA (traffic analysis removed) */}
+        {/* LOCAL SECTOR DATA */}
         <div className="sectionTitle" style={{ marginTop: 22 }}>
           <span className="dot violet" />
           <div>
