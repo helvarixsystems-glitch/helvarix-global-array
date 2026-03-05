@@ -297,9 +297,6 @@ export default function HomePage() {
   );
 
   const [recentObs, setRecentObs] = useState<ObservationRow[]>([]);
-  const [submissions7d, setSubmissions7d] = useState<number[]>([
-    0, 0, 0, 0, 0, 0, 0,
-  ]);
 
   const [userSubmissions, setUserSubmissions] = useState<number>(0);
 
@@ -320,7 +317,7 @@ export default function HomePage() {
       const uid = data.session?.user?.id ?? null;
       setSessionUserId(uid);
 
-      await Promise.all([loadCampaigns(), loadRecent(), load7dCharts()]);
+      await Promise.all([loadCampaigns(), loadRecent()]);
 
       if (uid) {
         await Promise.all([loadProfile(uid), loadUserSubmissionCount(uid)]);
@@ -358,7 +355,6 @@ export default function HomePage() {
         (payload) => {
           const row = payload.new as ObservationRow;
           setRecentObs((prev) => [row, ...prev].slice(0, 12));
-          load7dCharts();
         }
       )
       .subscribe();
@@ -460,32 +456,7 @@ export default function HomePage() {
     };
   }, [campaigns, sessionUserId]);
 
-  // ✅ Peer review removed: submissions-only 7-day chart
-  async function load7dCharts() {
-    const now = new Date();
-    const days: { start: Date; end: Date }[] = [];
 
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(now);
-      d.setDate(now.getDate() - i);
-      d.setHours(0, 0, 0, 0);
-      const start = new Date(d);
-      const end = new Date(d);
-      end.setHours(23, 59, 59, 999);
-      days.push({ start, end });
-    }
-
-    const subs: number[] = [];
-    for (const w of days) {
-      const { count } = await supabase
-        .from("observations")
-        .select("id", { count: "exact", head: true })
-        .gte("created_at", w.start.toISOString())
-        .lte("created_at", w.end.toISOString());
-      subs.push(count ?? 0);
-    }
-    setSubmissions7d(subs);
-  }
 
   async function loadEarthSector() {
     setEarthErr(null);
@@ -683,12 +654,6 @@ export default function HomePage() {
     return Math.round((vis / recentObs.length) * 1000) / 10;
   }, [recentObs]);
 
-  // 7-day activity total from recent observations
-  const submissionsTotal7d = useMemo(
-    () => submissions7d.reduce((a, b) => a + b, 0),
-    [submissions7d]
-  );
-
   const sectorCoords = useMemo(() => {
     const lat = earth?.lat ?? profile?.lat;
     const lon = earth?.lon ?? profile?.lon;
@@ -864,8 +829,8 @@ export default function HomePage() {
 
           {/* ✅ Keeps UI intact: replace peer metric with a submission metric */}
           <div className="miniPanel">
-            <div className="mono miniLabel">ACTIVITY (7D)</div>
-            <div className="miniValue">{submissionsTotal7d.toLocaleString()}</div>
+            <div className="mono miniLabel">CURRENT SKY STATE</div>
+            <div className="miniValue">{earth?.skyState ?? "—"}</div>
           </div>
         </div>
 
