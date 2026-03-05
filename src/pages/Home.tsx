@@ -827,7 +827,7 @@ export default function HomePage() {
             <div className="miniValue">{visibleSpectrumPct.toFixed(1)}%</div>
           </div>
 
-          {/* ✅ Keeps UI intact: replace peer metric with a submission metric */}
+          {/* Secondary telemetry metric (non-7-day) */}
           <div className="miniPanel">
             <div className="mono miniLabel">CURRENT SKY STATE</div>
             <div className="miniValue">{earth?.skyState ?? "—"}</div>
