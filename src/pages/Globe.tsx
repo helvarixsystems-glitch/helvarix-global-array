@@ -20,7 +20,13 @@ type SafeNode = {
   lat: number;
   lon: number;
   active: boolean;
+  isCurrentUser: boolean;
 };
+
+type FocusNode = {
+  lat: number;
+  lon: number;
+} | null;
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
@@ -90,10 +96,7 @@ function loadScript(src: string) {
       resolve();
     };
 
-    script.onerror = () => {
-      reject(new Error(`Failed to load ${src}`));
-    };
-
+    script.onerror = () => reject(new Error(`Failed to load ${src}`));
     document.head.appendChild(script);
   });
 }
@@ -109,58 +112,87 @@ function latLonToVector3(THREE: any, lat: number, lon: number, radius: number) {
   return new THREE.Vector3(x, y, z);
 }
 
-function makeLineFromLatLon(THREE: any, points: Array<[number, number]>, radius: number) {
-  const vectors = points.map(([lat, lon]) => latLonToVector3(THREE, lat, lon, radius));
-  return new THREE.BufferGeometry().setFromPoints(vectors);
+function createEarthTextureDataUrl() {
+  const svg = `
+  <svg xmlns="http://www.w3.org/2000/svg" width="2048" height="1024" viewBox="0 0 2048 1024">
+    <defs>
+      <radialGradient id="oceanGlow" cx="50%" cy="45%" r="60%">
+        <stop offset="0%" stop-color="#133f7b"/>
+        <stop offset="55%" stop-color="#0b2850"/>
+        <stop offset="100%" stop-color="#081a34"/>
+      </radialGradient>
+
+      <filter id="softGlow" x="-30%" y="-30%" width="160%" height="160%">
+        <feGaussianBlur stdDeviation="3" result="blur"/>
+        <feMerge>
+          <feMergeNode in="blur"/>
+          <feMergeNode in="SourceGraphic"/>
+        </feMerge>
+      </filter>
+    </defs>
+
+    <rect width="2048" height="1024" fill="url(#oceanGlow)"/>
+
+    <!-- Land fill -->
+    <g fill="#113560" opacity="0.94">
+      <!-- North America -->
+      <path d="M180 210 L250 160 L340 135 L430 140 L510 175 L560 220 L600 285 L585 350 L530 392 L470 430 L420 470 L360 505 L300 525 L235 500 L190 445 L155 365 L145 285 Z"/>
+      <!-- Greenland -->
+      <path d="M520 95 L570 78 L640 86 L688 118 L660 155 L605 165 L555 145 Z"/>
+      <!-- South America -->
+      <path d="M470 555 L530 600 L560 680 L552 782 L515 868 L468 925 L430 895 L413 815 L420 730 L438 660 Z"/>
+      <!-- Europe / Asia -->
+      <path d="M780 190 L850 165 L930 155 L1000 165 L1080 182 L1160 205 L1245 190 L1350 205 L1450 245 L1545 300 L1630 368 L1698 438 L1738 505 L1712 552 L1655 585 L1580 568 L1518 520 L1450 490 L1362 485 L1272 455 L1210 460 L1135 430 L1040 445 L972 425 L915 382 L860 330 L790 282 Z"/>
+      <!-- Africa -->
+      <path d="M1020 470 L1095 515 L1145 585 L1175 680 L1158 792 L1090 900 L1008 930 L945 870 L918 792 L935 705 L968 615 Z"/>
+      <!-- Arabian peninsula / India -->
+      <path d="M1182 490 L1238 525 L1272 575 L1262 628 L1228 648 L1188 620 L1160 558 Z"/>
+      <path d="M1292 580 L1342 610 L1376 660 L1362 720 L1325 748 L1292 705 L1278 640 Z"/>
+      <!-- SE Asia -->
+      <path d="M1405 560 L1455 580 L1505 625 L1492 672 L1452 700 L1410 675 L1388 628 Z"/>
+      <!-- Australia -->
+      <path d="M1560 758 L1625 778 L1692 820 L1705 876 L1652 914 L1568 928 L1498 902 L1478 848 L1500 798 Z"/>
+      <!-- Antarctica -->
+      <path d="M650 965 L810 948 L1010 954 L1210 946 L1380 968 L1410 1008 L1320 1024 L740 1024 L670 1006 Z"/>
+      <!-- Japan -->
+      <path d="M1580 470 L1600 505 L1594 540 L1570 560 L1550 525 Z"/>
+      <!-- UK / Scandinavia -->
+      <path d="M905 210 L945 205 L960 238 L930 260 L895 248 Z"/>
+      <path d="M990 165 L1035 145 L1085 148 L1115 182 L1088 215 L1038 228 L1000 205 Z"/>
+      <!-- Madagascar -->
+      <path d="M1188 825 L1215 845 L1222 892 L1195 930 L1168 898 Z"/>
+      <!-- New Zealand -->
+      <path d="M1768 905 L1790 925 L1780 955 L1752 972 L1732 948 Z"/>
+    </g>
+
+    <!-- Coastlines -->
+    <g fill="none" stroke="#8feaff" stroke-width="4.5" stroke-linejoin="round" stroke-linecap="round" opacity="0.98" filter="url(#softGlow)">
+      <path d="M180 210 L250 160 L340 135 L430 140 L510 175 L560 220 L600 285 L585 350 L530 392 L470 430 L420 470 L360 505 L300 525 L235 500 L190 445 L155 365 L145 285 Z"/>
+      <path d="M520 95 L570 78 L640 86 L688 118 L660 155 L605 165 L555 145 Z"/>
+      <path d="M470 555 L530 600 L560 680 L552 782 L515 868 L468 925 L430 895 L413 815 L420 730 L438 660 Z"/>
+      <path d="M780 190 L850 165 L930 155 L1000 165 L1080 182 L1160 205 L1245 190 L1350 205 L1450 245 L1545 300 L1630 368 L1698 438 L1738 505 L1712 552 L1655 585 L1580 568 L1518 520 L1450 490 L1362 485 L1272 455 L1210 460 L1135 430 L1040 445 L972 425 L915 382 L860 330 L790 282 Z"/>
+      <path d="M1020 470 L1095 515 L1145 585 L1175 680 L1158 792 L1090 900 L1008 930 L945 870 L918 792 L935 705 L968 615 Z"/>
+      <path d="M1182 490 L1238 525 L1272 575 L1262 628 L1228 648 L1188 620 L1160 558 Z"/>
+      <path d="M1292 580 L1342 610 L1376 660 L1362 720 L1325 748 L1292 705 L1278 640 Z"/>
+      <path d="M1405 560 L1455 580 L1505 625 L1492 672 L1452 700 L1410 675 L1388 628 Z"/>
+      <path d="M1560 758 L1625 778 L1692 820 L1705 876 L1652 914 L1568 928 L1498 902 L1478 848 L1500 798 Z"/>
+      <path d="M650 965 L810 948 L1010 954 L1210 946 L1380 968"/>
+      <path d="M1580 470 L1600 505 L1594 540 L1570 560 L1550 525 Z"/>
+      <path d="M905 210 L945 205 L960 238 L930 260 L895 248 Z"/>
+      <path d="M990 165 L1035 145 L1085 148 L1115 182 L1088 215 L1038 228 L1000 205 Z"/>
+      <path d="M1188 825 L1215 845 L1222 892 L1195 930 L1168 898 Z"/>
+      <path d="M1768 905 L1790 925 L1780 955 L1752 972 L1732 948 Z"/>
+    </g>
+  </svg>`;
+
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
-
-const CONTINENT_OUTLINES: Array<Array<[number, number]>> = [
-  [
-    [72, -165], [68, -145], [62, -125], [56, -110], [52, -96], [48, -84], [42, -74],
-    [34, -80], [24, -97], [20, -108], [24, -116], [33, -122], [44, -128], [56, -145],
-    [66, -160], [72, -165],
-  ],
-  [
-    [12, -80], [7, -75], [-4, -72], [-16, -68], [-28, -64], [-40, -60], [-52, -67],
-    [-55, -74], [-45, -74], [-28, -70], [-10, -74], [2, -79], [12, -80],
-  ],
-  [
-    [72, -10], [68, 14], [62, 35], [56, 56], [54, 78], [48, 98], [44, 118], [40, 138],
-    [30, 148], [18, 126], [12, 108], [8, 90], [16, 72], [22, 58], [30, 42], [38, 28],
-    [44, 16], [50, 4], [58, -6], [66, -14], [72, -10],
-  ],
-  [
-    [35, -16], [30, -6], [24, 8], [16, 24], [6, 34], [-10, 40], [-24, 32], [-34, 22],
-    [-32, 8], [-18, -2], [-4, -10], [10, -14], [24, -16], [35, -16],
-  ],
-  [
-    [-10, 112], [-18, 126], [-26, 138], [-36, 147], [-42, 140], [-39, 124], [-30, 114],
-    [-20, 111], [-10, 112],
-  ],
-  [
-    [82, -56], [78, -36], [72, -28], [66, -40], [62, -50], [66, -58], [74, -62], [82, -56],
-  ],
-  [
-    [-72, -180], [-74, -140], [-75, -100], [-74, -60], [-75, -20], [-74, 20], [-75, 60],
-    [-74, 100], [-75, 140], [-72, 180],
-  ],
-];
-
-const LANDMARKS: Array<{ lat: number; lon: number }> = [
-  { lat: 51.48, lon: 0 },
-  { lat: 18.34, lon: -66.75 },
-  { lat: 19.7, lon: -155.5 },
-  { lat: 28.3, lon: -16.5 },
-  { lat: -23.0, lon: -67.8 },
-  { lat: -32.4, lon: 20.8 },
-  { lat: -31.3, lon: 149.1 },
-  { lat: 35.7, lon: 139.7 },
-];
 
 export default function Globe() {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const [nodes, setNodes] = useState<SafeNode[]>([]);
   const [loadingNodes, setLoadingNodes] = useState(true);
+  const [focusNode, setFocusNode] = useState<FocusNode>(null);
 
   useEffect(() => {
     let alive = true;
@@ -169,6 +201,12 @@ export default function Globe() {
       setLoadingNodes(true);
 
       try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        const currentUserId = session?.user?.id ?? null;
+
         let rows: RawProfile[] = [];
 
         const primary = await supabase
@@ -210,13 +248,20 @@ export default function Globe() {
               lat: safe.lat,
               lon: safe.lon,
               active: isActiveNow(row),
+              isCurrentUser: row.id === currentUserId,
             };
           });
 
+        const currentNode =
+          safeNodes.find((node) => node.isCurrentUser) ??
+          (safeNodes.length > 0 ? safeNodes[0] : null);
+
         setNodes(safeNodes);
+        setFocusNode(currentNode ? { lat: currentNode.lat, lon: currentNode.lon } : null);
       } catch (error) {
         console.error("Failed to load globe nodes:", error);
         setNodes([]);
+        setFocusNode(null);
       } finally {
         if (alive) setLoadingNodes(false);
       }
@@ -243,7 +288,6 @@ export default function Globe() {
 
   useEffect(() => {
     let cancelled = false;
-
     let frameId = 0;
     let renderer: any = null;
     let scene: any = null;
@@ -278,26 +322,29 @@ export default function Globe() {
 
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         renderer.setSize(width, height);
+        renderer.setClearColor(0x000000, 0);
         container.appendChild(renderer.domElement);
 
         controls = new THREE.OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
         controls.dampingFactor = 0.06;
         controls.enablePan = false;
-        controls.minDistance = 7.25;
-        controls.maxDistance = 18;
+        controls.enableZoom = true;
         controls.autoRotate = false;
         controls.rotateSpeed = 0.72;
+        controls.minDistance = 7.2;
+        controls.maxDistance = 18;
+        controls.target.set(0, 0, 0);
 
-        const ambient = new THREE.AmbientLight(0x9fd8ff, 0.92);
+        const ambient = new THREE.AmbientLight(0xb3dcff, 0.92);
         scene.add(ambient);
 
-        const keyLight = new THREE.PointLight(0x79d1ff, 2.4, 120);
-        keyLight.position.set(8, 4, 10);
+        const keyLight = new THREE.PointLight(0x7bcfff, 1.9, 120);
+        keyLight.position.set(9, 4, 10);
         scene.add(keyLight);
 
-        const fillLight = new THREE.PointLight(0x7b60ff, 1.35, 120);
-        fillLight.position.set(-10, -4, -8);
+        const fillLight = new THREE.PointLight(0x6f5cff, 0.85, 120);
+        fillLight.position.set(-8, -3, -8);
         scene.add(fillLight);
 
         const globeGroup = new THREE.Group();
@@ -305,90 +352,40 @@ export default function Globe() {
 
         const radius = 3.36;
 
-        const globeGeometry = new THREE.SphereGeometry(radius, 72, 72);
+        const textureLoader = new THREE.TextureLoader();
+        const mapTexture = textureLoader.load(createEarthTextureDataUrl());
+        mapTexture.wrapS = THREE.RepeatWrapping;
+        mapTexture.wrapT = THREE.ClampToEdgeWrapping;
+        mapTexture.anisotropy = 4;
+
+        const globeGeometry = new THREE.SphereGeometry(radius, 96, 96);
         const globeMaterial = new THREE.MeshPhongMaterial({
-          color: 0x0a2347,
-          transparent: true,
-          opacity: 0.88,
+          map: mapTexture,
+          color: 0xffffff,
+          transparent: false,
+          opacity: 1,
           shininess: 10,
           emissive: 0x06101d,
+          emissiveIntensity: 0.35,
         });
 
         const globeMesh = new THREE.Mesh(globeGeometry, globeMaterial);
         globeGroup.add(globeMesh);
 
-        const atmosphereGeometry = new THREE.SphereGeometry(radius * 1.022, 72, 72);
+        const atmosphereGeometry = new THREE.SphereGeometry(radius * 1.02, 72, 72);
         const atmosphereMaterial = new THREE.MeshBasicMaterial({
           color: 0x59ccff,
           transparent: true,
-          opacity: 0.07,
+          opacity: 0.06,
+          side: THREE.BackSide,
         });
         const atmosphere = new THREE.Mesh(atmosphereGeometry, atmosphereMaterial);
         globeGroup.add(atmosphere);
 
-        const meridianMaterial = new THREE.LineBasicMaterial({
-          color: 0x173759,
-          transparent: true,
-          opacity: 0.18,
-        });
-
-        for (let lat = -60; lat <= 60; lat += 30) {
-          const ringPoints: any[] = [];
-          for (let lon = -180; lon <= 180; lon += 4) {
-            ringPoints.push(latLonToVector3(THREE, lat, lon, radius * 1.001));
-          }
-          const geometry = new THREE.BufferGeometry().setFromPoints(ringPoints);
-          const ring = new THREE.Line(geometry, meridianMaterial);
-          globeGroup.add(ring);
-        }
-
-        for (let lon = -150; lon <= 180; lon += 30) {
-          const linePoints: any[] = [];
-          for (let lat = -90; lat <= 90; lat += 3) {
-            linePoints.push(latLonToVector3(THREE, lat, lon, radius * 1.001));
-          }
-          const geometry = new THREE.BufferGeometry().setFromPoints(linePoints);
-          const line = new THREE.Line(geometry, meridianMaterial);
-          globeGroup.add(line);
-        }
-
-        const continentMaterial = new THREE.LineBasicMaterial({
-          color: 0x7fe7ff,
-          transparent: true,
-          opacity: 0.98,
-          depthTest: false,
-        });
-
-        CONTINENT_OUTLINES.forEach((outline) => {
-          const geometry = makeLineFromLatLon(THREE, outline, radius * 1.02);
-          const line = new THREE.Line(geometry, continentMaterial);
-          line.renderOrder = 10;
-          globeGroup.add(line);
-        });
-
-        const landmarkGroup = new THREE.Group();
-        globeGroup.add(landmarkGroup);
-
-        const landmarkGeometry = new THREE.SphereGeometry(0.04, 10, 10);
-        const landmarkMaterial = new THREE.MeshBasicMaterial({
-          color: 0xb8f1ff,
-          transparent: true,
-          opacity: 1,
-          depthTest: false,
-        });
-
-        LANDMARKS.forEach((landmark) => {
-          const pos = latLonToVector3(THREE, landmark.lat, landmark.lon, radius * 1.03);
-          const marker = new THREE.Mesh(landmarkGeometry, landmarkMaterial);
-          marker.position.copy(pos);
-          marker.renderOrder = 11;
-          landmarkGroup.add(marker);
-        });
-
         const starsGeometry = new THREE.BufferGeometry();
         const stars: number[] = [];
 
-        for (let i = 0; i < 320; i += 1) {
+        for (let i = 0; i < 280; i += 1) {
           const range = 58;
           stars.push(
             (Math.random() - 0.5) * range,
@@ -401,13 +398,43 @@ export default function Globe() {
 
         const starsMaterial = new THREE.PointsMaterial({
           color: 0x78ddff,
-          size: 0.07,
+          size: 0.06,
           transparent: true,
-          opacity: 0.72,
+          opacity: 0.7,
         });
 
         const starField = new THREE.Points(starsGeometry, starsMaterial);
         scene.add(starField);
+
+        const landmarkGroup = new THREE.Group();
+        globeGroup.add(landmarkGroup);
+
+        const landmarkGeometry = new THREE.SphereGeometry(0.03, 10, 10);
+        const landmarkMaterial = new THREE.MeshBasicMaterial({
+          color: 0xb8f1ff,
+          transparent: true,
+          opacity: 0.95,
+          depthTest: false,
+        });
+
+        const landmarkCoords = [
+          { lat: 51.48, lon: 0 },
+          { lat: 18.34, lon: -66.75 },
+          { lat: 19.7, lon: -155.5 },
+          { lat: 28.3, lon: -16.5 },
+          { lat: -23.0, lon: -67.8 },
+          { lat: -32.4, lon: 20.8 },
+          { lat: -31.3, lon: 149.1 },
+          { lat: 35.7, lon: 139.7 },
+        ];
+
+        landmarkCoords.forEach((landmark) => {
+          const pos = latLonToVector3(THREE, landmark.lat, landmark.lon, radius * 1.012);
+          const marker = new THREE.Mesh(landmarkGeometry, landmarkMaterial);
+          marker.position.copy(pos);
+          marker.renderOrder = 9;
+          landmarkGroup.add(marker);
+        });
 
         const nodeGroup = new THREE.Group();
         globeGroup.add(nodeGroup);
@@ -421,6 +448,13 @@ export default function Globe() {
 
         const activeNodeMaterial = new THREE.MeshBasicMaterial({
           color: 0x8f6cff,
+          transparent: true,
+          opacity: 1,
+          depthTest: false,
+        });
+
+        const currentNodeMaterial = new THREE.MeshBasicMaterial({
+          color: 0xffffff,
           transparent: true,
           opacity: 1,
           depthTest: false,
@@ -440,34 +474,72 @@ export default function Globe() {
           depthTest: false,
         });
 
+        const currentGlowMaterial = new THREE.MeshBasicMaterial({
+          color: 0x8feaff,
+          transparent: true,
+          opacity: 0.24,
+          depthTest: false,
+        });
+
         const nodeGeometry = new THREE.SphereGeometry(0.045, 12, 12);
-        const nodeGlowGeometry = new THREE.SphereGeometry(0.095, 12, 12);
+        const nodeGlowGeometry = new THREE.SphereGeometry(0.1, 12, 12);
 
         nodes.forEach((node) => {
-          const pos = latLonToVector3(THREE, node.lat, node.lon, radius * 1.04);
+          const pos = latLonToVector3(THREE, node.lat, node.lon, radius * 1.025);
 
           const glow = new THREE.Mesh(
             nodeGlowGeometry,
-            node.active ? activeGlowMaterial : idleGlowMaterial
+            node.isCurrentUser
+              ? currentGlowMaterial
+              : node.active
+              ? activeGlowMaterial
+              : idleGlowMaterial
           );
           glow.position.copy(pos);
-          glow.renderOrder = 12;
+          glow.renderOrder = 10;
 
           const marker = new THREE.Mesh(
             nodeGeometry,
-            node.active ? activeNodeMaterial : idleNodeMaterial
+            node.isCurrentUser
+              ? currentNodeMaterial
+              : node.active
+              ? activeNodeMaterial
+              : idleNodeMaterial
           );
           marker.position.copy(pos);
-          marker.renderOrder = 13;
+          marker.renderOrder = 11;
 
           nodeGroup.add(glow);
           nodeGroup.add(marker);
+
+          if (node.isCurrentUser) {
+            const ringGeo = new THREE.RingGeometry(0.075, 0.1, 32);
+            const ringMat = new THREE.MeshBasicMaterial({
+              color: 0x8feaff,
+              transparent: true,
+              opacity: 0.75,
+              side: THREE.DoubleSide,
+              depthTest: false,
+            });
+            const ring = new THREE.Mesh(ringGeo, ringMat);
+            ring.position.copy(pos.clone().multiplyScalar(1.002));
+            ring.lookAt(pos.clone().multiplyScalar(2));
+            ring.renderOrder = 12;
+            nodeGroup.add(ring);
+          }
         });
+
+        if (focusNode) {
+          globeGroup.rotation.y = ((-focusNode.lon + 90) * Math.PI) / 180;
+          globeGroup.rotation.x = (focusNode.lat * Math.PI) / 180 * 0.35;
+        } else {
+          globeGroup.rotation.y = 0.6;
+          globeGroup.rotation.x = 0.15;
+        }
 
         const animate = () => {
           if (cancelled) return;
           frameId = window.requestAnimationFrame(animate);
-          globeGroup.rotation.y += 0.0012;
           controls.update();
           renderer.render(scene, camera);
         };
@@ -525,7 +597,7 @@ export default function Globe() {
         }
       }
     };
-  }, [nodes]);
+  }, [nodes, focusNode]);
 
   const cards = useMemo(() => {
     const activeNodes = nodes.length;
@@ -565,7 +637,7 @@ export default function Globe() {
           position:relative;
           overflow:hidden;
           background:
-            radial-gradient(circle at 50% 42%, rgba(126,175,255,.10), transparent 22%),
+            radial-gradient(circle at 50% 42%, rgba(126,175,255,.08), transparent 22%),
             linear-gradient(180deg, rgba(3,9,22,.96), rgba(2,7,18,.98));
           border:1px solid rgba(95,177,255,.1);
           box-shadow:
@@ -679,8 +751,9 @@ export default function Globe() {
           <div ref={mountRef} className="arrayGlobeCanvas" />
 
           <div className="arrayGlobeFooter">
-            Drag to rotate. Scroll to zoom. Locations are rounded and slightly offset so users
-            cannot derive exact home addresses from the display.
+            Drag to rotate. Scroll to zoom. The globe opens centered on your current node when
+            location data is available. Locations are rounded and slightly offset so users cannot
+            derive exact home addresses from the display.
           </div>
         </div>
       </section>
