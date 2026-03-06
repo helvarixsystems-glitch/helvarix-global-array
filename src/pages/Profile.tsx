@@ -83,7 +83,15 @@ export default function Profile() {
           <button className="primaryBtn" type="button" onClick={saveProfile} disabled={saving}>
             {saving ? "Saving…" : "Save profile"}
           </button>
-          <button className="ghostBtn" type="button" onClick={() => openCustomerPortal().catch((err) => setError(err.message))}>
+          <button
+  className="ghostBtn"
+  type="button"
+  onClick={() =>
+    openCustomerPortal().catch((err: Error) =>
+      setError(err.message)
+    )
+  }
+>
             Open billing portal
           </button>
         </div>
