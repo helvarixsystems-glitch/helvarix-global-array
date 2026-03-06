@@ -353,12 +353,12 @@ export function Auth() {
 
         .formGrid{
           display:grid;
-          gap: 16px;
+          gap: 18px;
         }
 
         .fieldGroup{
           display:grid;
-          gap: 8px;
+          gap: 10px;
         }
 
         .fieldLabel{
@@ -376,13 +376,13 @@ export function Auth() {
 
         .input{
           width:100%;
-          min-height: 60px;
+          min-height: 72px;
           border-radius: 18px;
           border:1px solid rgba(255,255,255,.08);
           background: rgba(0,0,0,.28);
           color: var(--auth-text);
-          font-size: 18px;
-          padding: 0 18px;
+          font-size: 20px;
+          padding: 0 20px;
           outline:none;
           transition: border-color .14s ease, box-shadow .14s ease, background .14s ease;
           box-sizing:border-box;
@@ -398,26 +398,21 @@ export function Auth() {
           background: rgba(0,0,0,.34);
         }
 
-        .passwordRow{
-          display:grid;
-          grid-template-columns: 1fr auto;
-          gap: 10px;
-        }
-
-        .ghostBtn{
-          min-height: 60px;
+        .pwToggle{
+          min-height: 54px;
           padding: 0 18px;
-          border-radius: 18px;
+          border-radius: 16px;
           border:1px solid rgba(255,255,255,.08);
           background: rgba(255,255,255,.035);
           color: var(--auth-text);
-          font-size: 17px;
+          font-size: 15px;
           font-weight: 700;
           cursor:pointer;
           transition: .14s ease;
+          width: fit-content;
         }
 
-        .ghostBtn:hover{
+        .pwToggle:hover{
           background: rgba(255,255,255,.055);
           border-color: rgba(255,255,255,.14);
         }
@@ -540,17 +535,15 @@ export function Auth() {
             min-height: 52px;
           }
 
-          .passwordRow{
-            grid-template-columns: 1fr;
-          }
-
-          .ghostBtn{
-            min-height: 52px;
-          }
-
           .input{
-            min-height: 56px;
-            font-size: 16px;
+            min-height: 64px;
+            font-size: 17px;
+            padding: 0 16px;
+          }
+
+          .pwToggle{
+            min-height: 48px;
+            font-size: 14px;
           }
 
           .primaryBtn{
@@ -662,24 +655,22 @@ export function Auth() {
 
                 <div className="fieldGroup">
                   <label className="fieldLabel">Password</label>
-                  <div className="passwordRow">
-                    <input
-                      className="input"
-                      type={showPw ? "text" : "password"}
-                      placeholder={mode === "signin" ? "Enter your password" : "Minimum 6 characters"}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      autoComplete={mode === "signin" ? "current-password" : "new-password"}
-                      onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
-                    />
-                    <button
-                      type="button"
-                      className="ghostBtn"
-                      onClick={() => setShowPw((v) => !v)}
-                    >
-                      {showPw ? "Hide" : "Show"}
-                    </button>
-                  </div>
+                  <input
+                    className="input"
+                    type={showPw ? "text" : "password"}
+                    placeholder={mode === "signin" ? "Enter your password" : "Minimum 6 characters"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    autoComplete={mode === "signin" ? "current-password" : "new-password"}
+                    onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+                  />
+                  <button
+                    type="button"
+                    className="pwToggle"
+                    onClick={() => setShowPw((v) => !v)}
+                  >
+                    {showPw ? "Hide password" : "Show password"}
+                  </button>
                 </div>
 
                 {error ? <div className="alert error">{error}</div> : null}
