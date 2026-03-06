@@ -48,11 +48,10 @@ export function Auth() {
   }
 
   return (
-    <div className="authPageV2">
+    <div className="authPageV3">
       <style>{`
         :root{
           --auth-bg:#050914;
-          --auth-bg-2:#08101d;
           --auth-panel:rgba(10,16,30,.78);
           --auth-panel-2:rgba(8,13,24,.92);
           --auth-stroke:rgba(255,255,255,.09);
@@ -69,7 +68,7 @@ export function Auth() {
           --auth-radius:28px;
         }
 
-        .authPageV2{
+        .authPageV3{
           min-height:100vh;
           color:var(--auth-text);
           background:
@@ -129,11 +128,11 @@ export function Auth() {
           display:inline-flex;
           align-items:center;
           justify-content:center;
-          min-height: 46px;
-          padding: 0 18px;
-          border-radius: 999px;
+          min-height:46px;
+          padding:0 18px;
+          border-radius:999px;
           border:1px solid rgba(255,255,255,.08);
-          background: rgba(255,255,255,.04);
+          background:rgba(255,255,255,.04);
           color:var(--auth-text);
           font-weight:700;
           box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
@@ -142,31 +141,31 @@ export function Auth() {
         .authGrid{
           display:grid;
           grid-template-columns: 1.12fr .88fr;
-          gap: 22px;
+          gap:22px;
           align-items:stretch;
         }
 
         @media (max-width: 1040px){
           .authGrid{
-            grid-template-columns: 1fr;
+            grid-template-columns:1fr;
           }
         }
 
         .authPanel{
           position:relative;
           overflow:hidden;
-          border-radius: var(--auth-radius);
+          border-radius:var(--auth-radius);
           border:1px solid var(--auth-stroke);
           background:
             linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.015)),
             var(--auth-panel);
-          box-shadow: var(--auth-shadow);
+          box-shadow:var(--auth-shadow);
           backdrop-filter: blur(16px);
         }
 
         .heroPanel{
-          padding: 34px 30px 30px;
-          min-height: 100%;
+          padding:34px 30px 30px;
+          min-height:100%;
         }
 
         .heroPanel::before{
@@ -199,45 +198,45 @@ export function Auth() {
         }
 
         .heroKicker{
-          margin-bottom: 18px;
+          margin-bottom:18px;
         }
 
         .heroTitle{
           margin:0;
-          max-width: 740px;
+          max-width:740px;
           font-size: clamp(38px, 5.2vw, 68px);
-          line-height: .98;
-          letter-spacing: -.045em;
-          font-weight: 900;
+          line-height:.98;
+          letter-spacing:-.045em;
+          font-weight:900;
         }
 
         .heroText{
-          margin: 20px 0 0;
-          max-width: 760px;
-          font-size: 20px;
-          line-height: 1.55;
-          color: var(--auth-muted);
+          margin:20px 0 0;
+          max-width:760px;
+          font-size:20px;
+          line-height:1.55;
+          color:var(--auth-muted);
         }
 
         .heroMeta{
-          margin-top: 26px;
+          margin-top:26px;
           display:grid;
           grid-template-columns: repeat(3, 1fr);
-          gap: 14px;
+          gap:14px;
         }
 
         @media (max-width: 680px){
           .heroMeta{
-            grid-template-columns: 1fr;
+            grid-template-columns:1fr;
           }
         }
 
         .metaCard{
-          border-radius: 22px;
+          border-radius:22px;
           border:1px solid rgba(255,255,255,.06);
-          background: rgba(255,255,255,.03);
-          padding: 18px 18px 20px;
-          min-height: 120px;
+          background:rgba(255,255,255,.03);
+          padding:18px 18px 20px;
+          min-height:120px;
           display:flex;
           flex-direction:column;
           justify-content:space-between;
@@ -250,34 +249,34 @@ export function Auth() {
         }
 
         .metaValue{
-          margin-top: 10px;
-          font-size: 28px;
-          line-height: 1.05;
-          font-weight: 850;
-          letter-spacing: -.03em;
+          margin-top:10px;
+          font-size:28px;
+          line-height:1.05;
+          font-weight:850;
+          letter-spacing:-.03em;
         }
 
         .metaSub{
-          margin-top: 12px;
-          font-size: 13px;
-          color: var(--auth-dim);
-          line-height: 1.4;
+          margin-top:12px;
+          font-size:13px;
+          color:var(--auth-dim);
+          line-height:1.4;
         }
 
         .authCard{
-          padding: 20px;
+          padding:20px;
           display:flex;
           align-items:center;
         }
 
         .authCardInner{
           width:100%;
-          border-radius: 24px;
+          border-radius:24px;
           border:1px solid rgba(255,255,255,.07);
           background:
             linear-gradient(180deg, rgba(255,255,255,.02), rgba(255,255,255,.01)),
             var(--auth-panel-2);
-          padding: 22px;
+          padding:22px;
           box-shadow: inset 0 1px 0 rgba(255,255,255,.03);
         }
 
@@ -286,155 +285,155 @@ export function Auth() {
           align-items:flex-start;
           justify-content:space-between;
           gap:16px;
-          margin-bottom: 18px;
+          margin-bottom:18px;
         }
 
         .authTitle{
           margin:6px 0 0;
-          font-size: 28px;
+          font-size:28px;
           line-height:1.05;
-          font-weight: 900;
+          font-weight:900;
           letter-spacing:-.03em;
         }
 
         .authSubtext{
-          margin-top: 8px;
-          color: var(--auth-muted);
-          font-size: 14px;
-          line-height: 1.5;
-          max-width: 420px;
+          margin-top:8px;
+          color:var(--auth-muted);
+          font-size:14px;
+          line-height:1.5;
+          max-width:420px;
         }
 
         .statusDot{
           width:10px;
           height:10px;
           border-radius:50%;
-          background: var(--auth-success);
-          box-shadow: 0 0 16px rgba(103,232,165,.55);
-          margin-top: 8px;
+          background:var(--auth-success);
+          box-shadow:0 0 16px rgba(103,232,165,.55);
+          margin-top:8px;
           flex-shrink:0;
         }
 
         .modeSwitch{
           display:grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 10px;
-          padding: 6px;
-          border-radius: 18px;
-          background: rgba(255,255,255,.03);
+          grid-template-columns:1fr 1fr;
+          gap:10px;
+          padding:6px;
+          border-radius:18px;
+          background:rgba(255,255,255,.03);
           border:1px solid rgba(255,255,255,.06);
-          margin-bottom: 18px;
+          margin-bottom:22px;
         }
 
         .modeBtn{
-          min-height: 56px;
+          min-height:56px;
           border:none;
-          border-radius: 14px;
-          background: transparent;
-          color: var(--auth-muted);
-          font-weight: 800;
-          font-size: 18px;
+          border-radius:14px;
+          background:transparent;
+          color:var(--auth-muted);
+          font-weight:800;
+          font-size:18px;
           cursor:pointer;
-          transition: .16s ease;
+          transition:.16s ease;
         }
 
         .modeBtn:hover{
-          color: var(--auth-text);
-          background: rgba(255,255,255,.03);
+          color:var(--auth-text);
+          background:rgba(255,255,255,.03);
         }
 
         .modeBtn.active{
-          color: var(--auth-text);
-          background:
-            linear-gradient(180deg, rgba(57,231,255,.12), rgba(57,231,255,.06));
+          color:var(--auth-text);
+          background:linear-gradient(180deg, rgba(57,231,255,.12), rgba(57,231,255,.06));
           border:1px solid var(--auth-stroke-strong);
           box-shadow: inset 0 1px 0 rgba(255,255,255,.05);
         }
 
-        .formGrid{
-          display:grid;
-          gap: 18px;
+        .formStack{
+          display:flex;
+          flex-direction:column;
+          gap:18px;
+          width:100%;
         }
 
         .fieldGroup{
-          display:grid;
-          gap: 10px;
+          display:flex;
+          flex-direction:column;
+          gap:10px;
+          width:100%;
         }
 
         .fieldLabel{
-          font-size: 12px;
-          text-transform: uppercase;
-          letter-spacing: .2em;
-          color: var(--auth-cyan);
-          font-weight: 800;
-          padding-left: 2px;
-        }
-
-        .inputWrap{
-          position:relative;
+          font-size:12px;
+          text-transform:uppercase;
+          letter-spacing:.2em;
+          color:var(--auth-cyan);
+          font-weight:800;
+          padding-left:2px;
         }
 
         .input{
           width:100%;
-          min-height: 72px;
-          border-radius: 18px;
+          min-height:72px;
+          border-radius:18px;
           border:1px solid rgba(255,255,255,.08);
-          background: rgba(0,0,0,.28);
-          color: var(--auth-text);
-          font-size: 20px;
-          padding: 0 20px;
+          background:rgba(0,0,0,.28);
+          color:var(--auth-text);
+          font-size:20px;
+          padding:0 20px;
           outline:none;
-          transition: border-color .14s ease, box-shadow .14s ease, background .14s ease;
+          transition:border-color .14s ease, box-shadow .14s ease, background .14s ease;
           box-sizing:border-box;
+          display:block;
         }
 
         .input::placeholder{
-          color: rgba(255,255,255,.28);
+          color:rgba(255,255,255,.28);
         }
 
         .input:focus{
-          border-color: rgba(57,231,255,.3);
-          box-shadow: 0 0 0 4px rgba(57,231,255,.08);
-          background: rgba(0,0,0,.34);
+          border-color:rgba(57,231,255,.3);
+          box-shadow:0 0 0 4px rgba(57,231,255,.08);
+          background:rgba(0,0,0,.34);
         }
 
         .pwToggle{
-          min-height: 54px;
-          padding: 0 18px;
-          border-radius: 16px;
+          min-height:54px;
+          padding:0 18px;
+          border-radius:16px;
           border:1px solid rgba(255,255,255,.08);
-          background: rgba(255,255,255,.035);
-          color: var(--auth-text);
-          font-size: 15px;
-          font-weight: 700;
+          background:rgba(255,255,255,.035);
+          color:var(--auth-text);
+          font-size:15px;
+          font-weight:700;
           cursor:pointer;
-          transition: .14s ease;
-          width: fit-content;
+          transition:.14s ease;
+          align-self:flex-start;
         }
 
         .pwToggle:hover{
-          background: rgba(255,255,255,.055);
-          border-color: rgba(255,255,255,.14);
+          background:rgba(255,255,255,.055);
+          border-color:rgba(255,255,255,.14);
         }
 
         .primaryBtn{
           width:100%;
-          min-height: 60px;
+          min-height:60px;
           border:none;
-          border-radius: 18px;
-          background: linear-gradient(135deg, var(--auth-violet), var(--auth-violet-2));
+          border-radius:18px;
+          background:linear-gradient(135deg, var(--auth-violet), var(--auth-violet-2));
           color:#fff;
-          font-size: 19px;
-          font-weight: 900;
-          letter-spacing: -.01em;
+          font-size:19px;
+          font-weight:900;
+          letter-spacing:-.01em;
           cursor:pointer;
-          transition: transform .14s ease, filter .14s ease, opacity .14s ease;
-          box-shadow: 0 12px 34px rgba(111,92,255,.28);
+          transition:transform .14s ease, filter .14s ease, opacity .14s ease;
+          box-shadow:0 12px 34px rgba(111,92,255,.28);
         }
 
         .primaryBtn:hover:not(:disabled){
-          transform: translateY(-1px);
-          filter: brightness(1.04);
+          transform:translateY(-1px);
+          filter:brightness(1.04);
         }
 
         .primaryBtn:disabled{
@@ -444,39 +443,39 @@ export function Auth() {
         }
 
         .alert{
-          border-radius: 18px;
-          padding: 14px 15px;
-          font-size: 14px;
-          line-height: 1.5;
+          border-radius:18px;
+          padding:14px 15px;
+          font-size:14px;
+          line-height:1.5;
           border:1px solid transparent;
         }
 
         .alert.error{
-          background: rgba(255,122,146,.08);
-          border-color: rgba(255,122,146,.2);
-          color: #ffc0cc;
+          background:rgba(255,122,146,.08);
+          border-color:rgba(255,122,146,.2);
+          color:#ffc0cc;
         }
 
         .alert.info{
-          background: rgba(57,231,255,.08);
-          border-color: rgba(57,231,255,.18);
-          color: #b8f7ff;
+          background:rgba(57,231,255,.08);
+          border-color:rgba(57,231,255,.18);
+          color:#b8f7ff;
         }
 
         .helperBlock{
-          margin-top: 14px;
-          padding-top: 14px;
-          border-top: 1px solid rgba(255,255,255,.06);
+          margin-top:16px;
+          padding-top:16px;
+          border-top:1px solid rgba(255,255,255,.06);
         }
 
         .helperText{
-          font-size: 14px;
-          line-height: 1.55;
-          color: var(--auth-muted);
+          font-size:14px;
+          line-height:1.55;
+          color:var(--auth-muted);
         }
 
         .helperCaps{
-          margin-top: 12px;
+          margin-top:12px;
           display:flex;
           flex-wrap:wrap;
           gap:8px;
@@ -485,25 +484,25 @@ export function Auth() {
         .helperChip{
           display:inline-flex;
           align-items:center;
-          min-height: 30px;
-          padding: 0 10px;
-          border-radius: 999px;
+          min-height:30px;
+          padding:0 10px;
+          border-radius:999px;
           border:1px solid rgba(255,255,255,.08);
-          background: rgba(255,255,255,.03);
-          color: var(--auth-dim);
-          font-size: 11px;
-          font-weight: 800;
-          letter-spacing: .14em;
-          text-transform: uppercase;
+          background:rgba(255,255,255,.03);
+          color:var(--auth-dim);
+          font-size:11px;
+          font-weight:800;
+          letter-spacing:.14em;
+          text-transform:uppercase;
         }
 
         @media (max-width: 640px){
-          .authPageV2{
-            padding: 20px 14px 26px;
+          .authPageV3{
+            padding:20px 14px 26px;
           }
 
           .authTopbar{
-            margin-bottom: 18px;
+            margin-bottom:18px;
           }
 
           .topPill{
@@ -511,44 +510,44 @@ export function Auth() {
           }
 
           .heroPanel{
-            padding: 24px 20px 22px;
+            padding:24px 20px 22px;
           }
 
           .authCard{
-            padding: 14px;
+            padding:14px;
           }
 
           .authCardInner{
-            padding: 16px;
+            padding:16px;
           }
 
           .heroText{
-            font-size: 16px;
+            font-size:16px;
           }
 
           .authTitle{
-            font-size: 24px;
+            font-size:24px;
           }
 
           .modeBtn{
-            font-size: 16px;
-            min-height: 52px;
+            font-size:16px;
+            min-height:52px;
           }
 
           .input{
-            min-height: 64px;
-            font-size: 17px;
-            padding: 0 16px;
+            min-height:64px;
+            font-size:17px;
+            padding:0 16px;
           }
 
           .pwToggle{
-            min-height: 48px;
-            font-size: 14px;
+            min-height:48px;
+            font-size:14px;
           }
 
           .primaryBtn{
-            min-height: 56px;
-            font-size: 17px;
+            min-height:56px;
+            font-size:17px;
           }
         }
       `}</style>
@@ -638,19 +637,17 @@ export function Auth() {
                 </button>
               </div>
 
-              <div className="formGrid">
+              <div className="formStack">
                 <div className="fieldGroup">
                   <label className="fieldLabel">Email</label>
-                  <div className="inputWrap">
-                    <input
-                      className="input"
-                      type="email"
-                      placeholder="operator@helvarix.com"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      autoComplete="email"
-                    />
-                  </div>
+                  <input
+                    className="input"
+                    type="email"
+                    placeholder="operator@helvarix.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    autoComplete="email"
+                  />
                 </div>
 
                 <div className="fieldGroup">
