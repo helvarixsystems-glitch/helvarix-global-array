@@ -1,24 +1,70 @@
-import { loadStripe } from "@stripe/stripe-js";
-import { env } from "./env";
+import { loadStripe } from "@stripe/stripe-js"
+import { env } from "./env"
 
-export async function startCheckout(priceId: string) {
-  const res = await fetch("/api/stripe/checkout", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ priceId }),
-  });
-  if (!res.ok) throw new Error("Checkout session failed");
-  const { sessionId } = await res.json();
+/**
+ * Lazy Stripe loader
+ * Prevents app from crashing if Stripe isn't configured.
+ */
 
-  const stripe = await loadStripe(env.stripePk);
-  if (!stripe) throw new Error("Stripe failed to load");
+let stripePromise: Promise<any> | null = null
 
-  await stripe.redirectToCheckout({ sessionId });
+export function getStripe() {
+  if (!env.STRIPE_PK) {
+    throw new Error(
+      "Stripe is not configured. Please set VITE_STRIPE_PK in your environment variables."
+    )
+  }
+
+  if (!stripePromise) {
+    stripePromise = loadStripe(env.STRIPE_PK)
+  }
+
+  return stripePromise
 }
 
-export async function openCustomerPortal() {
-  const res = await fetch("/api/stripe/portal", { method: "POST" });
-  if (!res.ok) throw new Error("Portal failed");
-  const { url } = await res.json();
-  window.location.href = url;
+/**
+ * Redirect user to Stripe Checkout
+ */
+
+export async function redirectToCheckout({
+  priceId,
+  userId,
+  email
+}: {
+  priceId: string
+  userId: string
+  email: string
+}) {
+  const stripe = await getStripe()
+
+  const response = await fetch("/api/stripe/checkout", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      priceId,
+      userId,
+      email
+    })
+  })
+
+  if (!response.ok) {
+    const text = await response.text()
+    throw new Error(`Stripe checkout failed: ${text}`)
+  }
+
+  const data = await response.json()
+
+  if (!data.sessionId) {
+    throw new Error("Stripe session ID missing from response")
+  }
+
+  const { error } = await stripe.redirectToCheckout({
+    sessionId: data.sessionId
+  })
+
+  if (error) {
+    throw error
+  }
 }
