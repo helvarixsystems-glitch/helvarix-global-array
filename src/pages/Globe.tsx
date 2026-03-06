@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 
+declare global {
+  interface Window {
+    THREE?: any;
+  }
+}
+
 type RawProfile = {
   id: string;
   lat: number | null;
@@ -45,10 +51,7 @@ function obfuscateNodeLocation(lat: number, lon: number, seed: string) {
   const safeLat = clamp(roundedLat + seededOffset(`${seed}-lat`, 0.8), -72, 72);
   const safeLon = roundedLon + seededOffset(`${seed}-lon`, 0.8);
 
-  return {
-    lat: safeLat,
-    lon: safeLon,
-  };
+  return { lat: safeLat, lon: safeLon };
 }
 
 function isActiveNow(row: RawProfile) {
@@ -59,6 +62,40 @@ function isActiveNow(row: RawProfile) {
   if (Number.isNaN(lastSeen)) return false;
 
   return Date.now() - lastSeen <= 5 * 60 * 1000;
+}
+
+function loadScript(src: string) {
+  return new Promise<void>((resolve, reject) => {
+    const existing = document.querySelector(`script[src="${src}"]`) as HTMLScriptElement | null;
+
+    if (existing) {
+      if (existing.dataset.loaded === "true") {
+        resolve();
+        return;
+      }
+
+      existing.addEventListener("load", () => resolve(), { once: true });
+      existing.addEventListener("error", () => reject(new Error(`Failed to load ${src}`)), {
+        once: true,
+      });
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = src;
+    script.async = true;
+
+    script.onload = () => {
+      script.dataset.loaded = "true";
+      resolve();
+    };
+
+    script.onerror = () => {
+      reject(new Error(`Failed to load ${src}`));
+    };
+
+    document.head.appendChild(script);
+  });
 }
 
 function latLonToVector3(THREE: any, lat: number, lon: number, radius: number) {
@@ -215,20 +252,13 @@ export default function Globe() {
 
     async function buildGlobe() {
       try {
-        const THREE = await import(
-          /* @vite-ignore */
-          "https://cdn.jsdelivr.net/npm/three@0.148.0/build/three.module.js"
-        );
+        // Use a matching older pair where OrbitControls is available as a classic global script.
+        await loadScript("https://cdn.jsdelivr.net/npm/three@0.124.0/build/three.min.js");
+        await loadScript("https://cdn.jsdelivr.net/npm/three@0.124.0/examples/js/controls/OrbitControls.js");
 
-        const controlsModule = await import(
-          /* @vite-ignore */
-          "https://cdn.jsdelivr.net/npm/three@0.148.0/examples/jsm/controls/OrbitControls.js"
-        );
+        if (cancelled || !mountRef.current || !window.THREE) return;
 
-        const OrbitControls = controlsModule.OrbitControls;
-
-        if (cancelled || !mountRef.current) return;
-
+        const THREE = window.THREE;
         const container = mountRef.current;
         container.innerHTML = "";
 
@@ -250,7 +280,7 @@ export default function Globe() {
         renderer.setSize(width, height);
         container.appendChild(renderer.domElement);
 
-        controls = new OrbitControls(camera, renderer.domElement);
+        controls = new THREE.OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
         controls.dampingFactor = 0.06;
         controls.enablePan = false;
@@ -276,16 +306,12 @@ export default function Globe() {
         const radius = 3.36;
 
         const globeGeometry = new THREE.SphereGeometry(radius, 72, 72);
-        const globeMaterial = new THREE.MeshPhysicalMaterial({
+        const globeMaterial = new THREE.MeshPhongMaterial({
           color: 0x08172b,
-          roughness: 0.82,
-          metalness: 0.08,
           transparent: true,
           opacity: 0.97,
-          clearcoat: 0.45,
-          clearcoatRoughness: 0.88,
+          shininess: 18,
           emissive: 0x07111e,
-          emissiveIntensity: 0.88,
         });
 
         const globeMesh = new THREE.Mesh(globeGeometry, globeMaterial);
@@ -357,6 +383,7 @@ export default function Globe() {
 
         const starsGeometry = new THREE.BufferGeometry();
         const stars: number[] = [];
+
         for (let i = 0; i < 320; i += 1) {
           const range = 58;
           stars.push(
@@ -365,6 +392,7 @@ export default function Globe() {
             (Math.random() - 0.5) * range
           );
         }
+
         starsGeometry.setAttribute("position", new THREE.Float32BufferAttribute(stars, 3));
 
         const starsMaterial = new THREE.PointsMaterial({
@@ -455,9 +483,10 @@ export default function Globe() {
 
     return () => {
       cancelled = true;
+
       if (frameId) cancelAnimationFrame(frameId);
       if (resizeHandler) window.removeEventListener("resize", resizeHandler);
-      if (controls) controls.dispose?.();
+      if (controls && typeof controls.dispose === "function") controls.dispose();
 
       if (scene) {
         scene.traverse((object: any) => {
@@ -480,7 +509,7 @@ export default function Globe() {
       }
 
       if (renderer) {
-        renderer.dispose?.();
+        if (typeof renderer.dispose === "function") renderer.dispose();
         if (renderer.domElement && renderer.domElement.parentNode) {
           renderer.domElement.parentNode.removeChild(renderer.domElement);
         }
