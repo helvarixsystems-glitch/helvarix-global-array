@@ -114,114 +114,115 @@ function latLonToVector3(THREE: any, lat: number, lon: number, radius: number) {
 
 function createEarthTextureDataUrl() {
   const svg = `
-  <svg xmlns="http://www.w3.org/2000/svg" width="2048" height="1024" viewBox="0 0 2048 1024">
+  <svg xmlns="http://www.w3.org/2000/svg" width="4096" height="2048" viewBox="0 0 4096 2048">
     <defs>
-      <linearGradient id="ocean" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" stop-color="#163e79"/>
-        <stop offset="45%" stop-color="#0f2f5f"/>
-        <stop offset="100%" stop-color="#0a2347"/>
+      <linearGradient id="ocean" x1="18%" y1="10%" x2="82%" y2="90%">
+        <stop offset="0%" stop-color="#143b75"/>
+        <stop offset="35%" stop-color="#0d2f60"/>
+        <stop offset="70%" stop-color="#0a244c"/>
+        <stop offset="100%" stop-color="#081b38"/>
       </linearGradient>
-      <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
-        <feGaussianBlur stdDeviation="1.4"/>
+      <radialGradient id="polarGlow" cx="50%" cy="50%" r="62%">
+        <stop offset="0%" stop-color="#7fd8ff" stop-opacity="0.13"/>
+        <stop offset="60%" stop-color="#7fd8ff" stop-opacity="0.03"/>
+        <stop offset="100%" stop-color="#7fd8ff" stop-opacity="0"/>
+      </radialGradient>
+      <linearGradient id="landFill" x1="10%" y1="10%" x2="90%" y2="90%">
+        <stop offset="0%" stop-color="#2ca6a4"/>
+        <stop offset="45%" stop-color="#1f807b"/>
+        <stop offset="100%" stop-color="#195d5d"/>
+      </linearGradient>
+      <filter id="softGlow" x="-20%" y="-20%" width="140%" height="140%">
+        <feGaussianBlur stdDeviation="4"/>
       </filter>
     </defs>
 
-    <rect width="2048" height="1024" fill="url(#ocean)"/>
+    <rect width="4096" height="2048" fill="url(#ocean)"/>
+    <rect width="4096" height="2048" fill="url(#polarGlow)"/>
 
-    <!-- subtle ocean shading -->
-    <ellipse cx="1050" cy="420" rx="620" ry="290" fill="#2d69b9" opacity="0.10"/>
-    <ellipse cx="1450" cy="540" rx="460" ry="240" fill="#6d55ff" opacity="0.05"/>
+    <g opacity="0.13" stroke="#8fcfff" stroke-width="2" fill="none">
+      <path d="M0 512 H4096"/>
+      <path d="M0 768 H4096"/>
+      <path d="M0 1024 H4096"/>
+      <path d="M0 1280 H4096"/>
+      <path d="M0 1536 H4096"/>
+      <path d="M512 0 V2048"/>
+      <path d="M1024 0 V2048"/>
+      <path d="M1536 0 V2048"/>
+      <path d="M2048 0 V2048"/>
+      <path d="M2560 0 V2048"/>
+      <path d="M3072 0 V2048"/>
+      <path d="M3584 0 V2048"/>
+    </g>
 
-    <!-- land masses -->
-    <g fill="#1f5d56" opacity="0.98">
+    <g fill="#74d8d3" opacity="0.10" filter="url(#softGlow)">
+      <ellipse cx="1180" cy="760" rx="760" ry="310"/>
+      <ellipse cx="3030" cy="880" rx="980" ry="360"/>
+      <ellipse cx="3350" cy="1450" rx="480" ry="160"/>
+    </g>
+
+    <g fill="url(#landFill)" stroke="#b5f6ff" stroke-width="8" stroke-linejoin="round" stroke-linecap="round">
       <!-- North America -->
-      <path d="M185 185
-               L260 145 L360 125 L470 135 L565 170 L625 228 L660 292
-               L648 345 L598 385 L540 420 L486 450 L438 498 L386 530
-               L315 525 L248 485 L206 425 L170 345 L165 260 Z"/>
-
+      <path d="M241 430
+               L314 382 L410 325 L528 289 L674 255 L842 263 L1000 312 L1080 376 L1144 447
+               L1172 526 L1137 598 L1074 664 L998 711 L911 768 L863 838 L802 889 L730 909
+               L652 886 L596 854 L560 798 L505 781 L452 726 L395 663 L348 586 L304 508 Z"/>
       <!-- Greenland -->
-      <path d="M560 78
-               L622 64 L700 78 L748 114 L728 160 L660 176 L592 154 L548 118 Z"/>
-
+      <path d="M1036 154
+               L1118 124 L1229 126 L1325 170 L1364 238 L1314 314 L1209 350 L1098 321 L1017 248 Z"/>
+      <!-- Central America -->
+      <path d="M857 851 L917 867 L982 898 L1009 940 L975 978 L910 958 L848 909 Z"/>
       <!-- South America -->
-      <path d="M485 560
-               L532 598 L570 665 L580 750 L558 838 L520 918
-               L472 968 L430 948 L404 885 L402 795 L425 705 L450 628 Z"/>
-
+      <path d="M962 964
+               L1040 1006 L1110 1104 L1157 1236 L1156 1362 L1124 1496 L1056 1627 L983 1737
+               L910 1800 L847 1751 L809 1647 L788 1514 L786 1374 L814 1244 L861 1128 L904 1034 Z"/>
       <!-- Europe -->
-      <path d="M855 185
-               L905 165 L975 162 L1045 178 L1074 214 L1048 250 L980 262 L920 242 L868 220 Z"/>
-
+      <path d="M1643 378
+               L1715 340 L1808 323 L1910 334 L1996 365 L2048 418 L2028 468 L1948 491 L1851 472
+               L1770 460 L1698 433 Z"/>
+      <!-- North Africa / Mediterranean bridge -->
+      <path d="M1700 498 L1814 510 L1939 528 L2044 557 L2088 609 L2014 643 L1882 636 L1767 614 L1678 574 Z"/>
       <!-- Africa -->
-      <path d="M990 340
-               L1070 380 L1138 470 L1155 582 L1120 710 L1055 838 L985 900
-               L930 842 L900 740 L894 635 L920 518 L952 430 Z"/>
-
-      <!-- Asia main -->
-      <path d="M1040 180
-               L1140 162 L1265 175 L1390 210 L1520 220 L1648 278 L1748 356
-               L1815 440 L1825 520 L1778 572 L1705 540 L1658 492 L1586 458
-               L1498 446 L1390 414 L1270 398 L1160 370 L1090 315 L1028 245 Z"/>
-
+      <path d="M1771 589
+               L1879 623 L1968 689 L2051 814 L2089 957 L2087 1091 L2047 1224 L1970 1369 L1882 1486
+               L1793 1560 L1726 1523 L1683 1425 L1657 1296 L1647 1147 L1658 1008 L1686 881 L1719 764 Z"/>
+      <!-- Asia -->
+      <path d="M1986 353
+               L2113 316 L2267 300 L2442 315 L2615 350 L2760 389 L2910 407 L3056 444 L3202 521
+               L3339 622 L3451 739 L3519 850 L3538 935 L3502 1003 L3417 1039 L3324 1024 L3234 973
+               L3123 928 L3002 902 L2865 881 L2720 846 L2559 824 L2400 806 L2263 768 L2141 692
+               L2047 605 L1986 487 Z"/>
       <!-- India -->
-      <path d="M1322 455
-               L1388 488 L1432 548 L1418 628 L1372 680 L1316 648 L1290 575 Z"/>
-
-      <!-- SE Asia -->
-      <path d="M1448 468
-               L1505 495 L1550 552 L1542 615 L1495 655 L1448 628 L1426 562 Z"/>
-
-      <!-- Arabia -->
-      <path d="M1186 432
-               L1245 464 L1288 540 L1262 610 L1200 596 L1162 534 Z"/>
-
-      <!-- Australia -->
-      <path d="M1568 760
-               L1640 780 L1728 822 L1740 884 L1686 930 L1602 936 L1520 904 L1500 838 Z"/>
-
-      <!-- Antarctica -->
-      <path d="M620 950
-               L770 940 L980 948 L1215 944 L1420 958 L1490 988 L1430 1024 L660 1024 L610 994 Z"/>
-
+      <path d="M2572 887 L2650 922 L2713 1011 L2718 1106 L2654 1174 L2578 1142 L2527 1053 L2521 948 Z"/>
+      <!-- Arabian Peninsula -->
+      <path d="M2263 784 L2353 815 L2432 892 L2413 984 L2314 987 L2237 926 L2205 852 Z"/>
+      <!-- Southeast Asia -->
+      <path d="M2759 886 L2840 925 L2918 1004 L2932 1099 L2869 1159 L2787 1124 L2729 1048 L2716 957 Z"/>
       <!-- Japan -->
-      <path d="M1742 395 L1760 438 L1750 482 L1722 455 Z"/>
-
-      <!-- UK -->
-      <path d="M875 180 L900 172 L910 200 L892 220 L868 208 Z"/>
-
+      <path d="M3290 694 L3332 741 L3343 798 L3318 849 L3275 809 L3260 748 Z"/>
+      <!-- Indonesia -->
+      <path d="M2824 1185 L2925 1211 L3028 1244 L3090 1293 L3008 1315 L2896 1292 L2812 1242 Z"/>
+      <!-- Australia -->
+      <path d="M3059 1356
+               L3166 1371 L3294 1415 L3393 1488 L3420 1573 L3377 1647 L3277 1694 L3154 1690
+               L3031 1648 L2948 1579 L2928 1489 L2970 1416 Z"/>
       <!-- Madagascar -->
-      <path d="M1165 810 L1192 838 L1198 888 L1172 930 L1148 892 Z"/>
-
+      <path d="M2096 1470 L2141 1514 L2154 1604 L2119 1679 L2072 1629 L2064 1541 Z"/>
+      <!-- UK / Ireland -->
+      <path d="M1712 313 L1750 304 L1772 339 L1753 377 L1715 366 Z"/>
       <!-- New Zealand -->
-      <path d="M1808 905 L1830 932 L1812 968 L1788 948 Z"/>
+      <path d="M3494 1677 L3540 1718 L3522 1784 L3474 1749 Z"/>
+      <!-- Antarctica -->
+      <path d="M493 1834
+               L756 1808 L1095 1798 L1452 1815 L1810 1810 L2175 1798 L2517 1810 L2865 1839
+               L3198 1868 L3507 1897 L3671 1948 L3590 1993 L516 1993 L426 1899 Z"/>
     </g>
 
-    <!-- coastlines -->
-    <g fill="none" stroke="#9ceeff" stroke-width="4" stroke-linejoin="round" stroke-linecap="round" opacity="0.95">
-      <path d="M185 185 L260 145 L360 125 L470 135 L565 170 L625 228 L660 292 L648 345 L598 385 L540 420 L486 450 L438 498 L386 530 L315 525 L248 485 L206 425 L170 345 L165 260 Z"/>
-      <path d="M560 78 L622 64 L700 78 L748 114 L728 160 L660 176 L592 154 L548 118 Z"/>
-      <path d="M485 560 L532 598 L570 665 L580 750 L558 838 L520 918 L472 968 L430 948 L404 885 L402 795 L425 705 L450 628 Z"/>
-      <path d="M855 185 L905 165 L975 162 L1045 178 L1074 214 L1048 250 L980 262 L920 242 L868 220 Z"/>
-      <path d="M990 340 L1070 380 L1138 470 L1155 582 L1120 710 L1055 838 L985 900 L930 842 L900 740 L894 635 L920 518 L952 430 Z"/>
-      <path d="M1040 180 L1140 162 L1265 175 L1390 210 L1520 220 L1648 278 L1748 356 L1815 440 L1825 520 L1778 572 L1705 540 L1658 492 L1586 458 L1498 446 L1390 414 L1270 398 L1160 370 L1090 315 L1028 245 Z"/>
-      <path d="M1322 455 L1388 488 L1432 548 L1418 628 L1372 680 L1316 648 L1290 575 Z"/>
-      <path d="M1448 468 L1505 495 L1550 552 L1542 615 L1495 655 L1448 628 L1426 562 Z"/>
-      <path d="M1186 432 L1245 464 L1288 540 L1262 610 L1200 596 L1162 534 Z"/>
-      <path d="M1568 760 L1640 780 L1728 822 L1740 884 L1686 930 L1602 936 L1520 904 L1500 838 Z"/>
-      <path d="M620 950 L770 940 L980 948 L1215 944 L1420 958"/>
-      <path d="M1742 395 L1760 438 L1750 482 L1722 455 Z"/>
-      <path d="M875 180 L900 172 L910 200 L892 220 L868 208 Z"/>
-      <path d="M1165 810 L1192 838 L1198 888 L1172 930 L1148 892 Z"/>
-      <path d="M1808 905 L1830 932 L1812 968 L1788 948 Z"/>
-    </g>
-
-    <!-- soft glow coastline pass -->
-    <g fill="none" stroke="#67d8ff" stroke-width="10" opacity="0.18" filter="url(#soft)">
-      <path d="M185 185 L260 145 L360 125 L470 135 L565 170 L625 228 L660 292 L648 345 L598 385 L540 420 L486 450 L438 498 L386 530 L315 525 L248 485 L206 425 L170 345 L165 260 Z"/>
-      <path d="M1040 180 L1140 162 L1265 175 L1390 210 L1520 220 L1648 278 L1748 356 L1815 440 L1825 520 L1778 572 L1705 540 L1658 492 L1586 458 L1498 446 L1390 414 L1270 398 L1160 370 L1090 315 L1028 245 Z"/>
-      <path d="M990 340 L1070 380 L1138 470 L1155 582 L1120 710 L1055 838 L985 900 L930 842 L900 740 L894 635 L920 518 L952 430 Z"/>
-      <path d="M1568 760 L1640 780 L1728 822 L1740 884 L1686 930 L1602 936 L1520 904 L1500 838 Z"/>
+    <g opacity="0.18" fill="none" stroke="#d9ffff" stroke-width="18" filter="url(#softGlow)">
+      <path d="M241 430 L314 382 L410 325 L528 289 L674 255 L842 263 L1000 312 L1080 376 L1144 447 L1172 526 L1137 598 L1074 664 L998 711 L911 768 L863 838 L802 889 L730 909 L652 886 L596 854 L560 798 L505 781 L452 726 L395 663 L348 586 L304 508 Z"/>
+      <path d="M1986 353 L2113 316 L2267 300 L2442 315 L2615 350 L2760 389 L2910 407 L3056 444 L3202 521 L3339 622 L3451 739 L3519 850 L3538 935 L3502 1003 L3417 1039 L3324 1024 L3234 973 L3123 928 L3002 902 L2865 881 L2720 846 L2559 824 L2400 806 L2263 768 L2141 692 L2047 605 L1986 487 Z"/>
+      <path d="M1771 589 L1879 623 L1968 689 L2051 814 L2089 957 L2087 1091 L2047 1224 L1970 1369 L1882 1486 L1793 1560 L1726 1523 L1683 1425 L1657 1296 L1647 1147 L1658 1008 L1686 881 L1719 764 Z"/>
+      <path d="M3059 1356 L3166 1371 L3294 1415 L3393 1488 L3420 1573 L3377 1647 L3277 1694 L3154 1690 L3031 1648 L2948 1579 L2928 1489 L2970 1416 Z"/>
     </g>
   </svg>`;
 
@@ -319,7 +320,9 @@ export default function Globe() {
     async function buildGlobe() {
       try {
         await loadScript("https://cdn.jsdelivr.net/npm/three@0.124.0/build/three.min.js");
-        await loadScript("https://cdn.jsdelivr.net/npm/three@0.124.0/examples/js/controls/OrbitControls.js");
+        await loadScript(
+          "https://cdn.jsdelivr.net/npm/three@0.124.0/examples/js/controls/OrbitControls.js"
+        );
 
         if (cancelled || !mountRef.current || !window.THREE) return;
 
@@ -328,83 +331,103 @@ export default function Globe() {
         container.innerHTML = "";
 
         scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(0x020915, 0.018);
 
         const width = container.clientWidth || 800;
         const height = container.clientHeight || 440;
 
-        camera = new THREE.PerspectiveCamera(42, width / height, 0.1, 1000);
-        camera.position.set(0, 0, 10.8);
+        camera = new THREE.PerspectiveCamera(38, width / height, 0.1, 1000);
+        camera.position.set(0, 0, 11.2);
 
         renderer = new THREE.WebGLRenderer({
           antialias: true,
-          alpha: true,
+          alpha: false,
           powerPreference: "high-performance",
         });
 
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         renderer.setSize(width, height);
-        renderer.setClearColor(0x000000, 0);
+        renderer.setClearColor(0x020915, 1);
+        renderer.outputEncoding = THREE.sRGBEncoding;
         container.appendChild(renderer.domElement);
 
         controls = new THREE.OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
-        controls.dampingFactor = 0.06;
+        controls.dampingFactor = 0.055;
         controls.enablePan = false;
         controls.enableZoom = true;
+        controls.enableRotate = true;
         controls.autoRotate = false;
         controls.rotateSpeed = 0.72;
+        controls.zoomSpeed = 0.82;
         controls.minDistance = 7.1;
-        controls.maxDistance = 18;
+        controls.maxDistance = 17;
         controls.target.set(0, 0, 0);
 
-        const ambient = new THREE.AmbientLight(0xc7e8ff, 0.95);
+        const ambient = new THREE.AmbientLight(0xa4d7ff, 0.6);
         scene.add(ambient);
 
-        const keyLight = new THREE.PointLight(0x7ecfff, 1.7, 100);
-        keyLight.position.set(8, 4, 10);
+        const hemisphere = new THREE.HemisphereLight(0x8fdcff, 0x08111f, 0.95);
+        scene.add(hemisphere);
+
+        const keyLight = new THREE.DirectionalLight(0xffffff, 1.35);
+        keyLight.position.set(8, 3, 10);
         scene.add(keyLight);
 
-        const rimLight = new THREE.PointLight(0x6f5cff, 0.65, 100);
-        rimLight.position.set(-8, -3, -8);
-        scene.add(rimLight);
+        const fillLight = new THREE.DirectionalLight(0x5a7dff, 0.45);
+        fillLight.position.set(-7, -2, -8);
+        scene.add(fillLight);
 
         const globeGroup = new THREE.Group();
         scene.add(globeGroup);
 
-        const radius = 3.38;
-
+        const radius = 3.45;
         const textureLoader = new THREE.TextureLoader();
         const earthTexture = textureLoader.load(createEarthTextureDataUrl());
+        earthTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
 
-        const globeGeometry = new THREE.SphereGeometry(radius, 96, 96);
-        const globeMaterial = new THREE.MeshPhongMaterial({
+        const globeGeometry = new THREE.SphereGeometry(radius, 128, 128);
+        const globeMaterial = new THREE.MeshStandardMaterial({
           map: earthTexture,
           color: 0xffffff,
+          roughness: 0.95,
+          metalness: 0.02,
+          emissive: 0x05111d,
+          emissiveIntensity: 0.22,
           transparent: false,
           opacity: 1,
-          shininess: 8,
-          emissive: 0x06101d,
-          emissiveIntensity: 0.28,
         });
 
         const globeMesh = new THREE.Mesh(globeGeometry, globeMaterial);
         globeGroup.add(globeMesh);
 
-        const atmosphereGeometry = new THREE.SphereGeometry(radius * 1.025, 72, 72);
-        const atmosphereMaterial = new THREE.MeshBasicMaterial({
-          color: 0x59ccff,
+        const atmosphereGeometry = new THREE.SphereGeometry(radius * 1.035, 96, 96);
+        const atmosphereMaterial = new THREE.MeshPhongMaterial({
+          color: 0x6ecbff,
           transparent: true,
-          opacity: 0.05,
+          opacity: 0.075,
           side: THREE.BackSide,
+          shininess: 0,
         });
         const atmosphere = new THREE.Mesh(atmosphereGeometry, atmosphereMaterial);
         globeGroup.add(atmosphere);
 
+        const haloGeometry = new THREE.SphereGeometry(radius * 1.11, 64, 64);
+        const haloMaterial = new THREE.MeshBasicMaterial({
+          color: 0x4aa6ff,
+          transparent: true,
+          opacity: 0.035,
+          side: THREE.BackSide,
+          depthWrite: false,
+        });
+        const halo = new THREE.Mesh(haloGeometry, haloMaterial);
+        globeGroup.add(halo);
+
         const starsGeometry = new THREE.BufferGeometry();
         const stars: number[] = [];
 
-        for (let i = 0; i < 260; i += 1) {
-          const range = 58;
+        for (let i = 0; i < 420; i += 1) {
+          const range = 60;
           stars.push(
             (Math.random() - 0.5) * range,
             (Math.random() - 0.5) * range,
@@ -415,10 +438,11 @@ export default function Globe() {
         starsGeometry.setAttribute("position", new THREE.Float32BufferAttribute(stars, 3));
 
         const starsMaterial = new THREE.PointsMaterial({
-          color: 0x78ddff,
-          size: 0.05,
+          color: 0xa7dcff,
+          size: 0.045,
           transparent: true,
-          opacity: 0.7,
+          opacity: 0.82,
+          depthWrite: false,
         });
 
         const starField = new THREE.Points(starsGeometry, starsMaterial);
@@ -427,12 +451,13 @@ export default function Globe() {
         const landmarkGroup = new THREE.Group();
         globeGroup.add(landmarkGroup);
 
-        const landmarkGeometry = new THREE.SphereGeometry(0.03, 10, 10);
+        const landmarkGeometry = new THREE.SphereGeometry(0.022, 10, 10);
         const landmarkMaterial = new THREE.MeshBasicMaterial({
           color: 0xbaf3ff,
           transparent: true,
-          opacity: 0.9,
+          opacity: 0.44,
           depthTest: false,
+          depthWrite: false,
         });
 
         const landmarkCoords = [
@@ -447,10 +472,10 @@ export default function Globe() {
         ];
 
         landmarkCoords.forEach((landmark) => {
-          const pos = latLonToVector3(THREE, landmark.lat, landmark.lon, radius * 1.012);
+          const pos = latLonToVector3(THREE, landmark.lat, landmark.lon, radius * 1.01);
           const marker = new THREE.Mesh(landmarkGeometry, landmarkMaterial);
           marker.position.copy(pos);
-          marker.renderOrder = 9;
+          marker.renderOrder = 6;
           landmarkGroup.add(marker);
         });
 
@@ -460,8 +485,9 @@ export default function Globe() {
         const idleNodeMaterial = new THREE.MeshBasicMaterial({
           color: 0x57d9ff,
           transparent: true,
-          opacity: 0.96,
+          opacity: 0.97,
           depthTest: false,
+          depthWrite: false,
         });
 
         const activeNodeMaterial = new THREE.MeshBasicMaterial({
@@ -469,6 +495,7 @@ export default function Globe() {
           transparent: true,
           opacity: 1,
           depthTest: false,
+          depthWrite: false,
         });
 
         const currentNodeMaterial = new THREE.MeshBasicMaterial({
@@ -476,34 +503,38 @@ export default function Globe() {
           transparent: true,
           opacity: 1,
           depthTest: false,
+          depthWrite: false,
         });
 
         const idleGlowMaterial = new THREE.MeshBasicMaterial({
           color: 0x57d9ff,
           transparent: true,
-          opacity: 0.14,
+          opacity: 0.15,
           depthTest: false,
+          depthWrite: false,
         });
 
         const activeGlowMaterial = new THREE.MeshBasicMaterial({
           color: 0x8f6cff,
           transparent: true,
-          opacity: 0.24,
+          opacity: 0.26,
           depthTest: false,
+          depthWrite: false,
         });
 
         const currentGlowMaterial = new THREE.MeshBasicMaterial({
           color: 0x9deeff,
           transparent: true,
-          opacity: 0.22,
+          opacity: 0.24,
           depthTest: false,
+          depthWrite: false,
         });
 
-        const nodeGeometry = new THREE.SphereGeometry(0.045, 12, 12);
-        const nodeGlowGeometry = new THREE.SphereGeometry(0.1, 12, 12);
+        const nodeGeometry = new THREE.SphereGeometry(0.045, 14, 14);
+        const nodeGlowGeometry = new THREE.SphereGeometry(0.11, 14, 14);
 
         nodes.forEach((node) => {
-          const pos = latLonToVector3(THREE, node.lat, node.lon, radius * 1.022);
+          const pos = latLonToVector3(THREE, node.lat, node.lon, radius * 1.018);
 
           const glow = new THREE.Mesh(
             nodeGlowGeometry,
@@ -531,16 +562,17 @@ export default function Globe() {
           nodeGroup.add(marker);
 
           if (node.isCurrentUser) {
-            const ringGeo = new THREE.RingGeometry(0.075, 0.1, 32);
+            const ringGeo = new THREE.RingGeometry(0.082, 0.112, 40);
             const ringMat = new THREE.MeshBasicMaterial({
               color: 0x9deeff,
               transparent: true,
-              opacity: 0.72,
+              opacity: 0.74,
               side: THREE.DoubleSide,
               depthTest: false,
+              depthWrite: false,
             });
             const ring = new THREE.Mesh(ringGeo, ringMat);
-            ring.position.copy(pos.clone().multiplyScalar(1.001));
+            ring.position.copy(pos.clone().multiplyScalar(1.0015));
             ring.lookAt(pos.clone().multiplyScalar(2));
             ring.renderOrder = 12;
             nodeGroup.add(ring);
@@ -549,10 +581,10 @@ export default function Globe() {
 
         if (focusNode) {
           globeGroup.rotation.y = ((-focusNode.lon + 90) * Math.PI) / 180;
-          globeGroup.rotation.x = ((focusNode.lat || 0) * Math.PI) / 180 * 0.25;
+          globeGroup.rotation.x = ((focusNode.lat || 0) * Math.PI) / 180 * 0.24;
         } else {
-          globeGroup.rotation.y = 0.55;
-          globeGroup.rotation.x = 0.12;
+          globeGroup.rotation.y = 0.62;
+          globeGroup.rotation.x = 0.13;
         }
 
         camera.lookAt(0, 0, 0);
@@ -561,6 +593,7 @@ export default function Globe() {
           if (cancelled) return;
           frameId = window.requestAnimationFrame(animate);
           controls.update();
+          starField.rotation.y += 0.00012;
           renderer.render(scene, camera);
         };
 
@@ -657,18 +690,26 @@ export default function Globe() {
           position:relative;
           overflow:hidden;
           background:
-            radial-gradient(circle at 50% 42%, rgba(126,175,255,.08), transparent 22%),
-            linear-gradient(180deg, rgba(3,9,22,.96), rgba(2,7,18,.98));
-          border:1px solid rgba(95,177,255,.1);
+            radial-gradient(circle at 50% 42%, rgba(126,175,255,.09), transparent 24%),
+            linear-gradient(180deg, rgba(3,9,22,.98), rgba(2,7,18,1));
+          border:1px solid rgba(95,177,255,.12);
           box-shadow:
             inset 0 0 0 1px rgba(255,255,255,.02),
-            inset 0 0 120px rgba(87,160,255,.045);
+            inset 0 0 140px rgba(87,160,255,.05),
+            0 22px 50px rgba(0,0,0,.34);
         }
 
         .arrayGlobeCanvas{
           width:100%;
           height:100%;
           position:relative;
+          background:linear-gradient(180deg, rgba(2,8,18,1), rgba(1,5,12,1));
+        }
+
+        .arrayGlobeCanvas canvas{
+          display:block;
+          width:100%;
+          height:100%;
         }
 
         .arrayGlobeHud{
@@ -689,7 +730,7 @@ export default function Globe() {
           min-height:34px;
           padding:0 12px;
           border-radius:999px;
-          background:rgba(6,12,24,.68);
+          background:rgba(6,12,24,.72);
           border:1px solid rgba(255,255,255,.06);
           color:rgba(255,255,255,.84);
           font-size:12px;
@@ -723,7 +764,7 @@ export default function Globe() {
           z-index:2;
           padding:10px 12px;
           border-radius:14px;
-          background:rgba(6,12,24,.68);
+          background:rgba(6,12,24,.72);
           border:1px solid rgba(255,255,255,.06);
           color:rgba(255,255,255,.72);
           font-size:12px;
