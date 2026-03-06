@@ -166,7 +166,9 @@ export default function Home() {
 
     realtimeRef.current = channel;
 
-    return () => channel.unsubscribe();
+   return () => {
+  channel.unsubscribe();
+};
   }, []);
 
   /* ------------------------------------------------ */
