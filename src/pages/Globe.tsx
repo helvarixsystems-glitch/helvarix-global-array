@@ -439,15 +439,21 @@ export default function Globe() {
       window.removeEventListener("resize", handleResize);
       controls.dispose();
       renderer.dispose();
-      scene.traverse((object) => {
-        const mesh = object as THREE.Mesh;
-        if (mesh.geometry) mesh.geometry.dispose?.();
-        if (Array.isArray(mesh.material)) {
-          mesh.material.forEach((material) => material.dispose?.());
-        } else {
-          mesh.material?.dispose?.();
-        }
-      });
+      scene.traverse((object: THREE.Object3D) => {
+  const mesh = object as THREE.Mesh;
+
+  if ("geometry" in mesh && mesh.geometry) {
+    mesh.geometry.dispose?.();
+  }
+
+  if ("material" in mesh && mesh.material) {
+    if (Array.isArray(mesh.material)) {
+      mesh.material.forEach((material: THREE.Material) => material.dispose?.());
+    } else {
+      (mesh.material as THREE.Material).dispose?.();
+    }
+  }
+});
       if (renderer.domElement.parentNode === container) {
         container.removeChild(renderer.domElement);
       }
