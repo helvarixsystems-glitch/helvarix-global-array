@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import * as THREE from "three";
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { supabase } from "../lib/supabaseClient";
+
+declare global {
+  interface Window {
+    THREE?: any;
+  }
+}
 
 type RawProfile = {
   id: string;
@@ -63,9 +67,37 @@ function isActiveNow(row: RawProfile) {
   return Date.now() - lastSeen <= 5 * 60 * 1000;
 }
 
-function latLonToVector3(lat: number, lon: number, radius: number) {
-  const phi = (90 - lat) * (Math.PI / 180);
-  const theta = (lon + 180) * (Math.PI / 180);
+function loadScript(src: string) {
+  return new Promise<void>((resolve, reject) => {
+    const existing = document.querySelector(`script[src="${src}"]`) as HTMLScriptElement | null;
+    if (existing) {
+      if (existing.dataset.loaded === "true") {
+        resolve();
+        return;
+      }
+
+      existing.addEventListener("load", () => resolve(), { once: true });
+      existing.addEventListener("error", () => reject(new Error(`Failed to load ${src}`)), {
+        once: true,
+      });
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = src;
+    script.async = true;
+    script.onload = () => {
+      script.dataset.loaded = "true";
+      resolve();
+    };
+    script.onerror = () => reject(new Error(`Failed to load ${src}`));
+    document.head.appendChild(script);
+  });
+}
+
+function latLonToVector3(THREE: any, lat: number, lon: number, radius: number) {
+  const phi = ((90 - lat) * Math.PI) / 180;
+  const theta = ((lon + 180) * Math.PI) / 180;
 
   const x = -(radius * Math.sin(phi) * Math.cos(theta));
   const z = radius * Math.sin(phi) * Math.sin(theta);
@@ -74,64 +106,52 @@ function latLonToVector3(lat: number, lon: number, radius: number) {
   return new THREE.Vector3(x, y, z);
 }
 
-function makeLineFromLatLon(points: Array<[number, number]>, radius: number) {
-  const vectors = points.map(([lat, lon]) => latLonToVector3(lat, lon, radius));
-  const geometry = new THREE.BufferGeometry().setFromPoints(vectors);
-  return geometry;
+function makeLineFromLatLon(THREE: any, points: Array<[number, number]>, radius: number) {
+  const vectors = points.map(([lat, lon]) => latLonToVector3(THREE, lat, lon, radius));
+  return new THREE.BufferGeometry().setFromPoints(vectors);
 }
 
-/**
- * Simple stylized continent outlines.
- * These are intentionally lightweight and illustrative, not geographic GIS data.
- */
 const CONTINENT_OUTLINES: Array<Array<[number, number]>> = [
-  // North America
   [
     [72, -165], [68, -145], [62, -125], [56, -110], [52, -96], [48, -84], [42, -74],
     [34, -80], [24, -97], [20, -108], [24, -116], [33, -122], [44, -128], [56, -145],
     [66, -160], [72, -165],
   ],
-  // South America
   [
     [12, -80], [7, -75], [-4, -72], [-16, -68], [-28, -64], [-40, -60], [-52, -67],
     [-55, -74], [-45, -74], [-28, -70], [-10, -74], [2, -79], [12, -80],
   ],
-  // Europe + Asia
   [
     [72, -10], [68, 14], [62, 35], [56, 56], [54, 78], [48, 98], [44, 118], [40, 138],
     [30, 148], [18, 126], [12, 108], [8, 90], [16, 72], [22, 58], [30, 42], [38, 28],
     [44, 16], [50, 4], [58, -6], [66, -14], [72, -10],
   ],
-  // Africa
   [
     [35, -16], [30, -6], [24, 8], [16, 24], [6, 34], [-10, 40], [-24, 32], [-34, 22],
     [-32, 8], [-18, -2], [-4, -10], [10, -14], [24, -16], [35, -16],
   ],
-  // Australia
   [
     [-10, 112], [-18, 126], [-26, 138], [-36, 147], [-42, 140], [-39, 124], [-30, 114],
     [-20, 111], [-10, 112],
   ],
-  // Greenland
   [
     [82, -56], [78, -36], [72, -28], [66, -40], [62, -50], [66, -58], [74, -62], [82, -56],
   ],
-  // Antarctica ring
   [
     [-72, -180], [-74, -140], [-75, -100], [-74, -60], [-75, -20], [-74, 20], [-75, 60],
     [-74, 100], [-75, 140], [-72, 180],
   ],
 ];
 
-const LANDMARKS: Array<{ name: string; lat: number; lon: number }> = [
-  { name: "Greenwich", lat: 51.48, lon: 0 },
-  { name: "Arecibo Region", lat: 18.34, lon: -66.75 },
-  { name: "Hawaii", lat: 19.7, lon: -155.5 },
-  { name: "Canary Region", lat: 28.3, lon: -16.5 },
-  { name: "Atacama Region", lat: -23.0, lon: -67.8 },
-  { name: "South Africa", lat: -32.4, lon: 20.8 },
-  { name: "Australia", lat: -31.3, lon: 149.1 },
-  { name: "Japan", lat: 35.7, lon: 139.7 },
+const LANDMARKS: Array<{ lat: number; lon: number }> = [
+  { lat: 51.48, lon: 0 },
+  { lat: 18.34, lon: -66.75 },
+  { lat: 19.7, lon: -155.5 },
+  { lat: 28.3, lon: -16.5 },
+  { lat: -23.0, lon: -67.8 },
+  { lat: -32.4, lon: 20.8 },
+  { lat: -31.3, lon: 149.1 },
+  { lat: 35.7, lon: 139.7 },
 ];
 
 export default function Globe() {
@@ -213,249 +233,277 @@ export default function Globe() {
   }, []);
 
   useEffect(() => {
-    if (!mountRef.current) return;
-
-    const container = mountRef.current;
-    container.innerHTML = "";
-
-    const scene = new THREE.Scene();
-
-    const width = container.clientWidth || 800;
-    const height = container.clientHeight || 440;
-
-    const camera = new THREE.PerspectiveCamera(42, width / height, 0.1, 1000);
-    camera.position.set(0, 0, 11.25);
-
-    const renderer = new THREE.WebGLRenderer({
-      antialias: true,
-      alpha: true,
-      powerPreference: "high-performance",
-    });
-
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.setSize(width, height);
-    renderer.outputColorSpace = THREE.SRGBColorSpace;
-    container.appendChild(renderer.domElement);
-
-    const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.06;
-    controls.enablePan = false;
-    controls.minDistance = 7.25;
-    controls.maxDistance = 18;
-    controls.autoRotate = false;
-    controls.rotateSpeed = 0.72;
-
-    const ambient = new THREE.AmbientLight(0x9fd8ff, 0.92);
-    scene.add(ambient);
-
-    const keyLight = new THREE.PointLight(0x79d1ff, 2.4, 120);
-    keyLight.position.set(8, 4, 10);
-    scene.add(keyLight);
-
-    const fillLight = new THREE.PointLight(0x7b60ff, 1.35, 120);
-    fillLight.position.set(-10, -4, -8);
-    scene.add(fillLight);
-
-    const globeGroup = new THREE.Group();
-    scene.add(globeGroup);
-
-    const radius = 3.36;
-
-    const globeGeometry = new THREE.SphereGeometry(radius, 72, 72);
-    const globeMaterial = new THREE.MeshPhysicalMaterial({
-      color: 0x08172b,
-      roughness: 0.82,
-      metalness: 0.08,
-      transparent: true,
-      opacity: 0.97,
-      clearcoat: 0.45,
-      clearcoatRoughness: 0.88,
-      emissive: 0x07111e,
-      emissiveIntensity: 0.88,
-    });
-
-    const globeMesh = new THREE.Mesh(globeGeometry, globeMaterial);
-    globeGroup.add(globeMesh);
-
-    const atmosphereGeometry = new THREE.SphereGeometry(radius * 1.022, 72, 72);
-    const atmosphereMaterial = new THREE.MeshBasicMaterial({
-      color: 0x59ccff,
-      transparent: true,
-      opacity: 0.07,
-    });
-    const atmosphere = new THREE.Mesh(atmosphereGeometry, atmosphereMaterial);
-    globeGroup.add(atmosphere);
-
-    const meridianMaterial = new THREE.LineBasicMaterial({
-      color: 0x1f4f7a,
-      transparent: true,
-      opacity: 0.28,
-    });
-
-    for (let lat = -60; lat <= 60; lat += 30) {
-      const ringPoints: THREE.Vector3[] = [];
-      for (let lon = -180; lon <= 180; lon += 4) {
-        ringPoints.push(latLonToVector3(lat, lon, radius * 1.001));
-      }
-      const geometry = new THREE.BufferGeometry().setFromPoints(ringPoints);
-      const ring = new THREE.Line(geometry, meridianMaterial);
-      globeGroup.add(ring);
-    }
-
-    for (let lon = -150; lon <= 180; lon += 30) {
-      const linePoints: THREE.Vector3[] = [];
-      for (let lat = -90; lat <= 90; lat += 3) {
-        linePoints.push(latLonToVector3(lat, lon, radius * 1.001));
-      }
-      const geometry = new THREE.BufferGeometry().setFromPoints(linePoints);
-      const line = new THREE.Line(geometry, meridianMaterial);
-      globeGroup.add(line);
-    }
-
-    const continentMaterial = new THREE.LineBasicMaterial({
-      color: 0x4dcfff,
-      transparent: true,
-      opacity: 0.72,
-    });
-
-    CONTINENT_OUTLINES.forEach((outline) => {
-      const geometry = makeLineFromLatLon(outline, radius * 1.006);
-      const line = new THREE.Line(geometry, continentMaterial);
-      globeGroup.add(line);
-    });
-
-    const landmarkGroup = new THREE.Group();
-    globeGroup.add(landmarkGroup);
-
-    const landmarkGeometry = new THREE.SphereGeometry(0.03, 10, 10);
-    const landmarkMaterial = new THREE.MeshBasicMaterial({
-      color: 0x9ddfff,
-      transparent: true,
-      opacity: 0.95,
-    });
-
-    LANDMARKS.forEach((landmark) => {
-      const pos = latLonToVector3(landmark.lat, landmark.lon, radius * 1.014);
-      const marker = new THREE.Mesh(landmarkGeometry, landmarkMaterial);
-      marker.position.copy(pos);
-      landmarkGroup.add(marker);
-    });
-
-    const starsGeometry = new THREE.BufferGeometry();
-    const stars: number[] = [];
-    for (let i = 0; i < 320; i += 1) {
-      const range = 58;
-      stars.push(
-        (Math.random() - 0.5) * range,
-        (Math.random() - 0.5) * range,
-        (Math.random() - 0.5) * range
-      );
-    }
-    starsGeometry.setAttribute("position", new THREE.Float32BufferAttribute(stars, 3));
-
-    const starsMaterial = new THREE.PointsMaterial({
-      color: 0x78ddff,
-      size: 0.07,
-      transparent: true,
-      opacity: 0.72,
-    });
-
-    const starField = new THREE.Points(starsGeometry, starsMaterial);
-    scene.add(starField);
-
-    const nodeGroup = new THREE.Group();
-    globeGroup.add(nodeGroup);
-
-    const idleNodeMaterial = new THREE.MeshBasicMaterial({
-      color: 0x57d9ff,
-      transparent: true,
-      opacity: 0.96,
-    });
-
-    const activeNodeMaterial = new THREE.MeshBasicMaterial({
-      color: 0x8f6cff,
-      transparent: true,
-      opacity: 1,
-    });
-
-    const idleGlowMaterial = new THREE.MeshBasicMaterial({
-      color: 0x57d9ff,
-      transparent: true,
-      opacity: 0.16,
-    });
-
-    const activeGlowMaterial = new THREE.MeshBasicMaterial({
-      color: 0x8f6cff,
-      transparent: true,
-      opacity: 0.24,
-    });
-
-    const nodeGeometry = new THREE.SphereGeometry(0.045, 12, 12);
-    const nodeGlowGeometry = new THREE.SphereGeometry(0.095, 12, 12);
-
-    nodes.forEach((node) => {
-      const pos = latLonToVector3(node.lat, node.lon, radius * 1.03);
-
-      const glow = new THREE.Mesh(
-        nodeGlowGeometry,
-        node.active ? activeGlowMaterial : idleGlowMaterial
-      );
-      glow.position.copy(pos);
-
-      const marker = new THREE.Mesh(
-        nodeGeometry,
-        node.active ? activeNodeMaterial : idleNodeMaterial
-      );
-      marker.position.copy(pos);
-
-      nodeGroup.add(glow);
-      nodeGroup.add(marker);
-    });
-
+    let cancelled = false;
     let frameId = 0;
+    let renderer: any = null;
+    let scene: any = null;
+    let controls: any = null;
+    let camera: any = null;
+    let resizeHandler: (() => void) | null = null;
 
-    const animate = () => {
-      frameId = window.requestAnimationFrame(animate);
-      globeGroup.rotation.y += 0.0012;
-      controls.update();
-      renderer.render(scene, camera);
-    };
+    async function buildGlobe() {
+      try {
+        await loadScript("https://cdn.jsdelivr.net/npm/three@0.148.0/build/three.min.js");
+        await loadScript("https://cdn.jsdelivr.net/npm/three@0.148.0/examples/js/controls/OrbitControls.js");
 
-    animate();
+        if (cancelled || !mountRef.current || !window.THREE) return;
 
-    const handleResize = () => {
-      const nextWidth = container.clientWidth || 800;
-      const nextHeight = container.clientHeight || 440;
-      camera.aspect = nextWidth / nextHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(nextWidth, nextHeight);
-    };
+        const THREE = window.THREE;
+        const container = mountRef.current;
+        container.innerHTML = "";
 
-    window.addEventListener("resize", handleResize);
+        scene = new THREE.Scene();
+
+        const width = container.clientWidth || 800;
+        const height = container.clientHeight || 440;
+
+        camera = new THREE.PerspectiveCamera(42, width / height, 0.1, 1000);
+        camera.position.set(0, 0, 11.25);
+
+        renderer = new THREE.WebGLRenderer({
+          antialias: true,
+          alpha: true,
+          powerPreference: "high-performance",
+        });
+
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.setSize(width, height);
+        container.appendChild(renderer.domElement);
+
+        controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.06;
+        controls.enablePan = false;
+        controls.minDistance = 7.25;
+        controls.maxDistance = 18;
+        controls.autoRotate = false;
+        controls.rotateSpeed = 0.72;
+
+        const ambient = new THREE.AmbientLight(0x9fd8ff, 0.92);
+        scene.add(ambient);
+
+        const keyLight = new THREE.PointLight(0x79d1ff, 2.4, 120);
+        keyLight.position.set(8, 4, 10);
+        scene.add(keyLight);
+
+        const fillLight = new THREE.PointLight(0x7b60ff, 1.35, 120);
+        fillLight.position.set(-10, -4, -8);
+        scene.add(fillLight);
+
+        const globeGroup = new THREE.Group();
+        scene.add(globeGroup);
+
+        const radius = 3.36;
+
+        const globeGeometry = new THREE.SphereGeometry(radius, 72, 72);
+        const globeMaterial = new THREE.MeshPhysicalMaterial({
+          color: 0x08172b,
+          roughness: 0.82,
+          metalness: 0.08,
+          transparent: true,
+          opacity: 0.97,
+          clearcoat: 0.45,
+          clearcoatRoughness: 0.88,
+          emissive: 0x07111e,
+          emissiveIntensity: 0.88,
+        });
+
+        const globeMesh = new THREE.Mesh(globeGeometry, globeMaterial);
+        globeGroup.add(globeMesh);
+
+        const atmosphereGeometry = new THREE.SphereGeometry(radius * 1.022, 72, 72);
+        const atmosphereMaterial = new THREE.MeshBasicMaterial({
+          color: 0x59ccff,
+          transparent: true,
+          opacity: 0.07,
+        });
+        const atmosphere = new THREE.Mesh(atmosphereGeometry, atmosphereMaterial);
+        globeGroup.add(atmosphere);
+
+        const meridianMaterial = new THREE.LineBasicMaterial({
+          color: 0x1f4f7a,
+          transparent: true,
+          opacity: 0.28,
+        });
+
+        for (let lat = -60; lat <= 60; lat += 30) {
+          const ringPoints: any[] = [];
+          for (let lon = -180; lon <= 180; lon += 4) {
+            ringPoints.push(latLonToVector3(THREE, lat, lon, radius * 1.001));
+          }
+          const geometry = new THREE.BufferGeometry().setFromPoints(ringPoints);
+          const ring = new THREE.Line(geometry, meridianMaterial);
+          globeGroup.add(ring);
+        }
+
+        for (let lon = -150; lon <= 180; lon += 30) {
+          const linePoints: any[] = [];
+          for (let lat = -90; lat <= 90; lat += 3) {
+            linePoints.push(latLonToVector3(THREE, lat, lon, radius * 1.001));
+          }
+          const geometry = new THREE.BufferGeometry().setFromPoints(linePoints);
+          const line = new THREE.Line(geometry, meridianMaterial);
+          globeGroup.add(line);
+        }
+
+        const continentMaterial = new THREE.LineBasicMaterial({
+          color: 0x4dcfff,
+          transparent: true,
+          opacity: 0.72,
+        });
+
+        CONTINENT_OUTLINES.forEach((outline) => {
+          const geometry = makeLineFromLatLon(THREE, outline, radius * 1.006);
+          const line = new THREE.Line(geometry, continentMaterial);
+          globeGroup.add(line);
+        });
+
+        const landmarkGroup = new THREE.Group();
+        globeGroup.add(landmarkGroup);
+
+        const landmarkGeometry = new THREE.SphereGeometry(0.03, 10, 10);
+        const landmarkMaterial = new THREE.MeshBasicMaterial({
+          color: 0x9ddfff,
+          transparent: true,
+          opacity: 0.95,
+        });
+
+        LANDMARKS.forEach((landmark) => {
+          const pos = latLonToVector3(THREE, landmark.lat, landmark.lon, radius * 1.014);
+          const marker = new THREE.Mesh(landmarkGeometry, landmarkMaterial);
+          marker.position.copy(pos);
+          landmarkGroup.add(marker);
+        });
+
+        const starsGeometry = new THREE.BufferGeometry();
+        const stars: number[] = [];
+        for (let i = 0; i < 320; i += 1) {
+          const range = 58;
+          stars.push(
+            (Math.random() - 0.5) * range,
+            (Math.random() - 0.5) * range,
+            (Math.random() - 0.5) * range
+          );
+        }
+        starsGeometry.setAttribute("position", new THREE.Float32BufferAttribute(stars, 3));
+
+        const starsMaterial = new THREE.PointsMaterial({
+          color: 0x78ddff,
+          size: 0.07,
+          transparent: true,
+          opacity: 0.72,
+        });
+
+        const starField = new THREE.Points(starsGeometry, starsMaterial);
+        scene.add(starField);
+
+        const nodeGroup = new THREE.Group();
+        globeGroup.add(nodeGroup);
+
+        const idleNodeMaterial = new THREE.MeshBasicMaterial({
+          color: 0x57d9ff,
+          transparent: true,
+          opacity: 0.96,
+        });
+
+        const activeNodeMaterial = new THREE.MeshBasicMaterial({
+          color: 0x8f6cff,
+          transparent: true,
+          opacity: 1,
+        });
+
+        const idleGlowMaterial = new THREE.MeshBasicMaterial({
+          color: 0x57d9ff,
+          transparent: true,
+          opacity: 0.16,
+        });
+
+        const activeGlowMaterial = new THREE.MeshBasicMaterial({
+          color: 0x8f6cff,
+          transparent: true,
+          opacity: 0.24,
+        });
+
+        const nodeGeometry = new THREE.SphereGeometry(0.045, 12, 12);
+        const nodeGlowGeometry = new THREE.SphereGeometry(0.095, 12, 12);
+
+        nodes.forEach((node) => {
+          const pos = latLonToVector3(THREE, node.lat, node.lon, radius * 1.03);
+
+          const glow = new THREE.Mesh(
+            nodeGlowGeometry,
+            node.active ? activeGlowMaterial : idleGlowMaterial
+          );
+          glow.position.copy(pos);
+
+          const marker = new THREE.Mesh(
+            nodeGeometry,
+            node.active ? activeNodeMaterial : idleNodeMaterial
+          );
+          marker.position.copy(pos);
+
+          nodeGroup.add(glow);
+          nodeGroup.add(marker);
+        });
+
+        const animate = () => {
+          if (cancelled) return;
+          frameId = window.requestAnimationFrame(animate);
+          globeGroup.rotation.y += 0.0012;
+          controls.update();
+          renderer.render(scene, camera);
+        };
+
+        animate();
+
+        resizeHandler = () => {
+          if (!container || !camera || !renderer) return;
+          const nextWidth = container.clientWidth || 800;
+          const nextHeight = container.clientHeight || 440;
+          camera.aspect = nextWidth / nextHeight;
+          camera.updateProjectionMatrix();
+          renderer.setSize(nextWidth, nextHeight);
+        };
+
+        window.addEventListener("resize", resizeHandler);
+      } catch (error) {
+        console.error("Failed to initialize globe renderer:", error);
+      }
+    }
+
+    buildGlobe();
 
     return () => {
-      cancelAnimationFrame(frameId);
-      window.removeEventListener("resize", handleResize);
-      controls.dispose();
-      renderer.dispose();
-      scene.traverse((object: THREE.Object3D) => {
-  const mesh = object as THREE.Mesh;
+      cancelled = true;
+      if (frameId) cancelAnimationFrame(frameId);
+      if (resizeHandler) window.removeEventListener("resize", resizeHandler);
+      if (controls) controls.dispose?.();
 
-  if ("geometry" in mesh && mesh.geometry) {
-    mesh.geometry.dispose?.();
-  }
+      if (scene) {
+        scene.traverse((object: any) => {
+          if (object.geometry && typeof object.geometry.dispose === "function") {
+            object.geometry.dispose();
+          }
 
-  if ("material" in mesh && mesh.material) {
-    if (Array.isArray(mesh.material)) {
-      mesh.material.forEach((material: THREE.Material) => material.dispose?.());
-    } else {
-      (mesh.material as THREE.Material).dispose?.();
-    }
-  }
-});
-      if (renderer.domElement.parentNode === container) {
-        container.removeChild(renderer.domElement);
+          if (object.material) {
+            if (Array.isArray(object.material)) {
+              object.material.forEach((material: any) => {
+                if (material && typeof material.dispose === "function") {
+                  material.dispose();
+                }
+              });
+            } else if (typeof object.material.dispose === "function") {
+              object.material.dispose();
+            }
+          }
+        });
+      }
+
+      if (renderer) {
+        renderer.dispose?.();
+        if (renderer.domElement && renderer.domElement.parentNode) {
+          renderer.domElement.parentNode.removeChild(renderer.domElement);
+        }
       }
     };
   }, [nodes]);
