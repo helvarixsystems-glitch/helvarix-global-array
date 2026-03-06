@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useNavigate } from "react-router-dom";
 
@@ -86,9 +86,7 @@ type CampaignVM = {
 const queryCache = new Map<string, unknown>();
 
 async function cachedQuery<T>(key: string, fn: () => Promise<T>): Promise<T> {
-  if (queryCache.has(key)) {
-    return queryCache.get(key) as T;
-  }
+  if (queryCache.has(key)) return queryCache.get(key) as T;
   const result = await fn();
   queryCache.set(key, result);
   return result;
@@ -258,8 +256,6 @@ export default function Home() {
   const [earthBusy, setEarthBusy] = useState(false);
   const [earthErr, setEarthErr] = useState<string | null>(null);
 
-  const realtimeRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
-
   useEffect(() => {
     let alive = true;
 
@@ -296,9 +292,7 @@ export default function Home() {
       } catch (err) {
         console.error("Home bootstrap failed:", err);
       } finally {
-        if (alive) {
-          setLoading(false);
-        }
+        if (alive) setLoading(false);
       }
     }
 
@@ -309,35 +303,6 @@ export default function Home() {
     };
   }, []);
 
-  useEffect(() => {
-    const channel = supabase
-      .channel("home_observations_stream")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "observations" },
-        (payload) => {
-          const row = payload.new as ObservationRow;
-
-          setRecentObs((prev) => [row, ...prev].slice(0, 12));
-
-          if (sessionUserId && row.user_id === sessionUserId) {
-            setUserSubmissions((prev) => prev + 1);
-          }
-        }
-      )
-      .subscribe((status) => {
-        if (status === "CHANNEL_ERROR") {
-          console.warn("Realtime channel error on home_observations_stream");
-        }
-      });
-
-    realtimeRef.current = channel;
-
-    return () => {
-      channel.unsubscribe();
-    };
-  }, [sessionUserId]);
-
   async function loadProfile(uid: string): Promise<ProfileRow | null> {
     const data = await cachedQuery(`profile-${uid}`, async () => {
       const { data, error } = await supabase
@@ -346,11 +311,7 @@ export default function Home() {
         .eq("id", uid)
         .maybeSingle();
 
-      if (error) {
-        console.error("loadProfile error:", error);
-        return null;
-      }
-
+      if (error) return null;
       return (data as ProfileRow) ?? null;
     });
 
@@ -368,11 +329,7 @@ export default function Home() {
         .eq("is_active", true)
         .order("start_at", { ascending: false });
 
-      if (error) {
-        console.error("loadCampaignsOnly error:", error);
-        return [];
-      }
-
+      if (error) return [];
       return (data as CampaignRow[]) ?? [];
     });
 
@@ -386,7 +343,6 @@ export default function Home() {
     });
 
     if (error) {
-      console.error("loadCampaignProgress rpc error:", error);
       await loadCampaignsOnly();
       return;
     }
@@ -423,11 +379,7 @@ export default function Home() {
         .order("created_at", { ascending: false })
         .limit(12);
 
-      if (error) {
-        console.error("loadRecent error:", error);
-        return [];
-      }
-
+      if (error) return [];
       return (data as ObservationRow[]) ?? [];
     });
 
@@ -441,7 +393,6 @@ export default function Home() {
       .eq("user_id", uid);
 
     if (error) {
-      console.error("loadUserSubmissionCount error:", error);
       setUserSubmissions(0);
       return;
     }
@@ -655,11 +606,45 @@ export default function Home() {
           color: var(--muted);
         }
 
+        .betaWrap{
+          display:flex;
+          align-items:center;
+          justify-content:flex-end;
+          margin-left:auto;
+        }
+
+        .betaBadge{
+          display:inline-flex;
+          align-items:center;
+          justify-content:center;
+          min-width: 220px;
+          padding: 14px 28px;
+          border-radius: 18px;
+          border: 1px solid rgba(255, 210, 90, 0.45);
+          background:
+            radial-gradient(circle at 30% 30%, rgba(255,235,160,0.22), transparent 48%),
+            linear-gradient(135deg, rgba(120,72,10,0.95), rgba(255,196,70,0.95) 45%, rgba(120,72,10,0.95));
+          color: #fff4c7;
+          font-weight: 900;
+          font-size: 28px;
+          letter-spacing: .22em;
+          text-transform: uppercase;
+          box-shadow:
+            0 0 20px rgba(255, 206, 92, 0.20),
+            0 10px 30px rgba(0,0,0,0.35),
+            inset 0 1px 0 rgba(255,255,255,0.18);
+          text-shadow:
+            0 0 8px rgba(255,220,120,0.35),
+            0 1px 0 rgba(0,0,0,0.35);
+        }
+
         .actions{
           display:flex;
           gap: 10px;
           align-items:center;
           flex-wrap:wrap;
+          width: 100%;
+          justify-content: flex-end;
         }
 
         .btn{
@@ -991,6 +976,10 @@ export default function Home() {
             </div>
           </div>
 
+          <div className="betaWrap">
+            <div className="betaBadge">BETA</div>
+          </div>
+
           <div className="actions">
             <button className="btn primary" onClick={openSubmit}>
               Submit Observation
@@ -1005,7 +994,6 @@ export default function Home() {
         </div>
 
         <div className="grid">
-          {/* LEFT: Identity + Campaigns */}
           <div className="card">
             <div className="cardTitle">
               <div>
@@ -1050,7 +1038,6 @@ export default function Home() {
             </div>
           </div>
 
-          {/* RIGHT: Recent */}
           <div className="card">
             <div className="cardTitle">
               <div>
@@ -1096,7 +1083,6 @@ export default function Home() {
           </div>
         </div>
 
-        {/* LOCAL SECTOR DATA */}
         <div className="sectionTitle" style={{ marginTop: 22 }}>
           <span className="dot violet" />
           <div>
