@@ -1,176 +1,119 @@
 import { useMemo, useState } from "react";
-import type { CSSProperties } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { signIn, signUp } from "../lib/auth";
-import { useNavigate } from "react-router-dom";
 
 export function Auth() {
-  const nav = useNavigate();
-
+  const navigate = useNavigate();
+  const location = useLocation() as { state?: { from?: string } };
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
-  const [pw, setPw] = useState("");
+  const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
-
   const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
 
-  const emailNorm = useMemo(() => email.trim().toLowerCase(), [email]);
-  const canSubmit = emailNorm.length > 3 && pw.length >= 6 && !busy;
+  const redirectTo = location.state?.from || "/";
+  const normalizedEmail = useMemo(() => email.trim().toLowerCase(), [email]);
+  const canSubmit = normalizedEmail.length > 3 && password.length >= 6 && !busy;
 
   async function handleSubmit() {
     if (!canSubmit) return;
-    setErr(null);
-    setInfo(null);
     setBusy(true);
+    setError(null);
+    setInfo(null);
+
     try {
       if (mode === "signup") {
-        const { error, data } = await signUp(emailNorm, pw);
-        if (error) return setErr(error.message);
+        const { data, error: signUpError } = await signUp(normalizedEmail, password);
+        if (signUpError) throw signUpError;
 
-        // If email confirmation is enabled, there may be no session yet.
-        const hasSession = !!data.session;
-        if (!hasSession) {
-          setInfo("Check your email to confirm your account, then sign in.");
+        if (!data.session) {
+          setInfo("Account created. Check your email for a confirmation link, then sign in.");
           setMode("signin");
-          setPw("");
+          setPassword("");
           return;
         }
-
-        nav("/");
-        return;
+      } else {
+        const { error: signInError } = await signIn(normalizedEmail, password);
+        if (signInError) throw signInError;
       }
 
-      const { error } = await signIn(emailNorm, pw);
-      if (error) return setErr(error.message);
-      nav("/");
-    } catch (e: any) {
-      setErr(e?.message ?? "Authentication failed.");
+      navigate(redirectTo, { replace: true });
+    } catch (err: any) {
+      setError(err?.message ?? "Authentication failed.");
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <div style={wrap}>
-      <div className="card" style={{ padding: 18 }}>
-        <div style={{ display: "grid", gap: 8 }}>
-          <div
-            style={{
-              fontSize: 12,
-              letterSpacing: "0.34em",
-              textTransform: "uppercase",
-              color: "rgba(41,217,255,0.86)",
-            }}
-          >
-            Helvarix Systems
+    <div className="authPage">
+      <section className="heroPanel authHero">
+        <div className="eyebrow">HELVARIX SYSTEMS</div>
+        <h1 className="pageTitle">A cleaner operator gateway for the Global Array.</h1>
+        <p className="pageText">
+          Sign in to access your observation dashboard, submission tools, ranking history, and membership controls.
+        </p>
+        <div className="heroStats threeUp compactStats">
+          <div className="metricCard">
+            <div className="metricLabel">Profiles</div>
+            <div className="metricValue">User-linked</div>
           </div>
-          <div style={{ fontSize: 24, fontWeight: 900, letterSpacing: "0.06em" }}>
-            Global Array
+          <div className="metricCard">
+            <div className="metricLabel">Sessions</div>
+            <div className="metricValue">Supabase Auth</div>
           </div>
-          <div style={{ color: "var(--muted)", lineHeight: 1.4 }}>
-            {mode === "signin"
-              ? "Sign in to access your dashboard, submissions, and score."
-              : "Create an account to start contributing observations and earning points."}
+          <div className="metricCard">
+            <div className="metricLabel">Billing</div>
+            <div className="metricValue">Stripe-ready</div>
           </div>
         </div>
+      </section>
 
-        <div style={{ marginTop: 16, display: "grid", gap: 10 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            <button
-              className={mode === "signin" ? "btnPrimary" : "btnGhost"}
-              onClick={() => {
-                setMode("signin");
-                setErr(null);
-                setInfo(null);
-              }}
-              type="button"
-            >
-              Sign In
-            </button>
-            <button
-              className={mode === "signup" ? "btnPrimary" : "btnGhost"}
-              onClick={() => {
-                setMode("signup");
-                setErr(null);
-                setInfo(null);
-              }}
-              type="button"
-            >
-              Create Account
-            </button>
-          </div>
+      <section className="panel authCard">
+        <div className="tabRow">
+          <button type="button" className={`tabBtn ${mode === "signin" ? "active" : ""}`} onClick={() => setMode("signin")}>
+            Sign in
+          </button>
+          <button type="button" className={`tabBtn ${mode === "signup" ? "active" : ""}`} onClick={() => setMode("signup")}>
+            Create account
+          </button>
+        </div>
 
-          <input
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="Email"
-            className="input"
-            autoComplete="email"
-            inputMode="email"
-          />
+        <div className="fieldGroup">
+          <label className="fieldLabel">Email</label>
+          <input className="input" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
+        </div>
 
-          <div style={{ position: "relative" }}>
+        <div className="fieldGroup">
+          <label className="fieldLabel">Password</label>
+          <div className="inputWithAction">
             <input
-              value={pw}
-              onChange={(e) => setPw(e.target.value)}
-              placeholder="Password (min 6 characters)"
-              type={showPw ? "text" : "password"}
               className="input"
+              type={showPw ? "text" : "password"}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
               autoComplete={mode === "signin" ? "current-password" : "new-password"}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleSubmit();
-              }}
-              style={{ paddingRight: 54 }}
+              onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
             />
-            <button
-              type="button"
-              onClick={() => setShowPw((s) => !s)}
-              title={showPw ? "Hide password" : "Show password"}
-              aria-label={showPw ? "Hide password" : "Show password"}
-              className="btnGhost"
-              style={pwToggle}
-            >
+            <button type="button" className="ghostBtn compactBtn" onClick={() => setShowPw((v) => !v)}>
               {showPw ? "Hide" : "Show"}
             </button>
           </div>
-
-          {err && <div style={{ color: "var(--danger)" }}>{err}</div>}
-          {info && <div style={{ color: "rgba(41,217,255,0.86)" }}>{info}</div>}
-
-          <button
-            className="btnPrimary"
-            onClick={handleSubmit}
-            disabled={!canSubmit}
-            aria-busy={busy}
-            style={!canSubmit ? { opacity: 0.6, cursor: "not-allowed" } : undefined}
-          >
-            {busy ? "Processing…" : mode === "signin" ? "Sign In" : "Create Account"}
-          </button>
-
-          <div style={{ color: "var(--muted2)", fontSize: 12, lineHeight: 1.5 }}>
-            By continuing, you agree to the platform rules for scientific integrity and respectful collaboration.
-          </div>
         </div>
-      </div>
+
+        {error ? <div className="alert error">{error}</div> : null}
+        {info ? <div className="alert info">{info}</div> : null}
+
+        <button className="primaryBtn" type="button" onClick={handleSubmit} disabled={!canSubmit}>
+          {busy ? "Working…" : mode === "signin" ? "Sign in" : "Create account"}
+        </button>
+
+        <div className="helperText">
+          This page is intentionally public. Everything else in the app is routed behind authentication.
+        </div>
+      </section>
     </div>
   );
 }
-
-const wrap: CSSProperties = {
-  maxWidth: 520,
-  margin: "10vh auto",
-  padding: 16,
-};
-
-const pwToggle: CSSProperties = {
-  position: "absolute",
-  right: 8,
-  top: 8,
-  width: 72,
-  padding: "10px 10px",
-  borderRadius: 12,
-  fontWeight: 800,
-  letterSpacing: "0.12em",
-  textTransform: "uppercase",
-};
