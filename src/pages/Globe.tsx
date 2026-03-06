@@ -1,12 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 
-declare global {
-  interface Window {
-    THREE?: any;
-  }
-}
-
 type RawProfile = {
   id: string;
   lat: number | null;
@@ -65,34 +59,6 @@ function isActiveNow(row: RawProfile) {
   if (Number.isNaN(lastSeen)) return false;
 
   return Date.now() - lastSeen <= 5 * 60 * 1000;
-}
-
-function loadScript(src: string) {
-  return new Promise<void>((resolve, reject) => {
-    const existing = document.querySelector(`script[src="${src}"]`) as HTMLScriptElement | null;
-    if (existing) {
-      if (existing.dataset.loaded === "true") {
-        resolve();
-        return;
-      }
-
-      existing.addEventListener("load", () => resolve(), { once: true });
-      existing.addEventListener("error", () => reject(new Error(`Failed to load ${src}`)), {
-        once: true,
-      });
-      return;
-    }
-
-    const script = document.createElement("script");
-    script.src = src;
-    script.async = true;
-    script.onload = () => {
-      script.dataset.loaded = "true";
-      resolve();
-    };
-    script.onerror = () => reject(new Error(`Failed to load ${src}`));
-    document.head.appendChild(script);
-  });
 }
 
 function latLonToVector3(THREE: any, lat: number, lon: number, radius: number) {
@@ -176,6 +142,8 @@ export default function Globe() {
           .limit(2500);
 
         if (primary.error) {
+          console.warn("Primary globe node query failed:", primary.error);
+
           const fallback = await supabase
             .from("profiles")
             .select("id,lat,lon")
@@ -183,7 +151,11 @@ export default function Globe() {
             .not("lon", "is", null)
             .limit(2500);
 
-          if (fallback.error) throw fallback.error;
+          if (fallback.error) {
+            console.warn("Fallback globe node query failed:", fallback.error);
+            throw fallback.error;
+          }
+
           rows = (fallback.data as RawProfile[]) ?? [];
         } else {
           rows = (primary.data as RawProfile[]) ?? [];
@@ -243,12 +215,20 @@ export default function Globe() {
 
     async function buildGlobe() {
       try {
-        await loadScript("https://cdn.jsdelivr.net/npm/three@0.148.0/build/three.min.js");
-        await loadScript("https://cdn.jsdelivr.net/npm/three@0.148.0/examples/js/controls/OrbitControls.js");
+        const THREE = await import(
+          /* @vite-ignore */
+          "https://cdn.jsdelivr.net/npm/three@0.148.0/build/three.module.js"
+        );
 
-        if (cancelled || !mountRef.current || !window.THREE) return;
+        const controlsModule = await import(
+          /* @vite-ignore */
+          "https://cdn.jsdelivr.net/npm/three@0.148.0/examples/jsm/controls/OrbitControls.js"
+        );
 
-        const THREE = window.THREE;
+        const OrbitControls = controlsModule.OrbitControls;
+
+        if (cancelled || !mountRef.current) return;
+
         const container = mountRef.current;
         container.innerHTML = "";
 
@@ -270,7 +250,7 @@ export default function Globe() {
         renderer.setSize(width, height);
         container.appendChild(renderer.domElement);
 
-        controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls = new OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
         controls.dampingFactor = 0.06;
         controls.enablePan = false;
