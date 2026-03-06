@@ -243,6 +243,7 @@ export default function Globe() {
 
   useEffect(() => {
     let cancelled = false;
+
     let frameId = 0;
     let renderer: any = null;
     let scene: any = null;
@@ -252,7 +253,6 @@ export default function Globe() {
 
     async function buildGlobe() {
       try {
-        // Use a matching older pair where OrbitControls is available as a classic global script.
         await loadScript("https://cdn.jsdelivr.net/npm/three@0.124.0/build/three.min.js");
         await loadScript("https://cdn.jsdelivr.net/npm/three@0.124.0/examples/js/controls/OrbitControls.js");
 
@@ -307,11 +307,11 @@ export default function Globe() {
 
         const globeGeometry = new THREE.SphereGeometry(radius, 72, 72);
         const globeMaterial = new THREE.MeshPhongMaterial({
-          color: 0x08172b,
+          color: 0x0a2347,
           transparent: true,
-          opacity: 0.97,
-          shininess: 18,
-          emissive: 0x07111e,
+          opacity: 0.88,
+          shininess: 10,
+          emissive: 0x06101d,
         });
 
         const globeMesh = new THREE.Mesh(globeGeometry, globeMaterial);
@@ -327,9 +327,9 @@ export default function Globe() {
         globeGroup.add(atmosphere);
 
         const meridianMaterial = new THREE.LineBasicMaterial({
-          color: 0x1f4f7a,
+          color: 0x173759,
           transparent: true,
-          opacity: 0.28,
+          opacity: 0.18,
         });
 
         for (let lat = -60; lat <= 60; lat += 30) {
@@ -353,31 +353,35 @@ export default function Globe() {
         }
 
         const continentMaterial = new THREE.LineBasicMaterial({
-          color: 0x4dcfff,
+          color: 0x7fe7ff,
           transparent: true,
-          opacity: 0.72,
+          opacity: 0.98,
+          depthTest: false,
         });
 
         CONTINENT_OUTLINES.forEach((outline) => {
-          const geometry = makeLineFromLatLon(THREE, outline, radius * 1.006);
+          const geometry = makeLineFromLatLon(THREE, outline, radius * 1.02);
           const line = new THREE.Line(geometry, continentMaterial);
+          line.renderOrder = 10;
           globeGroup.add(line);
         });
 
         const landmarkGroup = new THREE.Group();
         globeGroup.add(landmarkGroup);
 
-        const landmarkGeometry = new THREE.SphereGeometry(0.03, 10, 10);
+        const landmarkGeometry = new THREE.SphereGeometry(0.04, 10, 10);
         const landmarkMaterial = new THREE.MeshBasicMaterial({
-          color: 0x9ddfff,
+          color: 0xb8f1ff,
           transparent: true,
-          opacity: 0.95,
+          opacity: 1,
+          depthTest: false,
         });
 
         LANDMARKS.forEach((landmark) => {
-          const pos = latLonToVector3(THREE, landmark.lat, landmark.lon, radius * 1.014);
+          const pos = latLonToVector3(THREE, landmark.lat, landmark.lon, radius * 1.03);
           const marker = new THREE.Mesh(landmarkGeometry, landmarkMaterial);
           marker.position.copy(pos);
+          marker.renderOrder = 11;
           landmarkGroup.add(marker);
         });
 
@@ -412,43 +416,49 @@ export default function Globe() {
           color: 0x57d9ff,
           transparent: true,
           opacity: 0.96,
+          depthTest: false,
         });
 
         const activeNodeMaterial = new THREE.MeshBasicMaterial({
           color: 0x8f6cff,
           transparent: true,
           opacity: 1,
+          depthTest: false,
         });
 
         const idleGlowMaterial = new THREE.MeshBasicMaterial({
           color: 0x57d9ff,
           transparent: true,
           opacity: 0.16,
+          depthTest: false,
         });
 
         const activeGlowMaterial = new THREE.MeshBasicMaterial({
           color: 0x8f6cff,
           transparent: true,
           opacity: 0.24,
+          depthTest: false,
         });
 
         const nodeGeometry = new THREE.SphereGeometry(0.045, 12, 12);
         const nodeGlowGeometry = new THREE.SphereGeometry(0.095, 12, 12);
 
         nodes.forEach((node) => {
-          const pos = latLonToVector3(THREE, node.lat, node.lon, radius * 1.03);
+          const pos = latLonToVector3(THREE, node.lat, node.lon, radius * 1.04);
 
           const glow = new THREE.Mesh(
             nodeGlowGeometry,
             node.active ? activeGlowMaterial : idleGlowMaterial
           );
           glow.position.copy(pos);
+          glow.renderOrder = 12;
 
           const marker = new THREE.Mesh(
             nodeGeometry,
             node.active ? activeNodeMaterial : idleNodeMaterial
           );
           marker.position.copy(pos);
+          marker.renderOrder = 13;
 
           nodeGroup.add(glow);
           nodeGroup.add(marker);
@@ -555,7 +565,7 @@ export default function Globe() {
           position:relative;
           overflow:hidden;
           background:
-            radial-gradient(circle at 50% 42%, rgba(126,175,255,.16), transparent 22%),
+            radial-gradient(circle at 50% 42%, rgba(126,175,255,.10), transparent 22%),
             linear-gradient(180deg, rgba(3,9,22,.96), rgba(2,7,18,.98));
           border:1px solid rgba(95,177,255,.1);
           box-shadow:
