@@ -1,34 +1,32 @@
-import React from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "../components/AppShell";
-
-import Home from "../pages/Home";
-import Globe from "../pages/Globe";
-import Telemetry from "../pages/Telemetry";
-import Submit from "../pages/Submit";
-import Leaderboard from "../pages/Leaderboard";
-import Collective from "../pages/Collective";
-import Profile from "../pages/Profile";
-
-// ✅ Auth is a named export in your file
+import { Protected } from "../components/Protected";
 import { Auth } from "../pages/Auth";
+import Collective from "../pages/Collective";
+import Globe from "../pages/Globe";
+import Home from "../pages/Home";
+import Leaderboard from "../pages/Leaderboard";
+import Profile from "../pages/Profile";
+import Submit from "../pages/Submit";
+import Telemetry from "../pages/Telemetry";
+
+function ProtectedPage({ children }: { children: JSX.Element }) {
+  return <Protected>{children}</Protected>;
+}
 
 export default function App() {
   return (
     <BrowserRouter>
       <AppShell>
         <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/globe" element={<Globe />} />
-          <Route path="/telemetry" element={<Telemetry />} />
-          <Route path="/submit" element={<Submit />} />
-          <Route path="/leaderboard" element={<Leaderboard />} />
-          <Route path="/collective" element={<Collective />} />
-          <Route path="/profile" element={<Profile />} />
-
-          {/* ✅ Auth route */}
           <Route path="/auth" element={<Auth />} />
-
+          <Route path="/" element={<ProtectedPage><Home /></ProtectedPage>} />
+          <Route path="/globe" element={<ProtectedPage><Globe /></ProtectedPage>} />
+          <Route path="/telemetry" element={<ProtectedPage><Telemetry /></ProtectedPage>} />
+          <Route path="/submit" element={<ProtectedPage><Submit /></ProtectedPage>} />
+          <Route path="/leaderboard" element={<ProtectedPage><Leaderboard /></ProtectedPage>} />
+          <Route path="/collective" element={<ProtectedPage><Collective /></ProtectedPage>} />
+          <Route path="/profile" element={<ProtectedPage><Profile /></ProtectedPage>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AppShell>
