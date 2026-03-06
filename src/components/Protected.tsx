@@ -1,25 +1,52 @@
 import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
-import { useNavigate } from "react-router-dom";
 
-export function Protected({ children }: { children: React.ReactNode }) {
-  const nav = useNavigate();
-  const [ok, setOk] = useState(false);
+export function Protected({ children }: { children: ReactNode }) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [ready, setReady] = useState(false);
+  const [allowed, setAllowed] = useState(false);
 
   useEffect(() => {
+    let mounted = true;
+
     supabase.auth.getSession().then(({ data }) => {
-      if (!data.session) nav("/auth");
-      else setOk(true);
+      if (!mounted) return;
+      if (data.session) {
+        setAllowed(true);
+        setReady(true);
+      } else {
+        navigate("/auth", { replace: true, state: { from: location.pathname } });
+      }
     });
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
-      if (!session) nav("/auth");
-      else setOk(true);
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!mounted) return;
+      if (session) {
+        setAllowed(true);
+        setReady(true);
+      } else {
+        setAllowed(false);
+        navigate("/auth", { replace: true, state: { from: location.pathname } });
+      }
     });
 
-    return () => sub.subscription.unsubscribe();
-  }, [nav]);
+    return () => {
+      mounted = false;
+      sub.subscription.unsubscribe();
+    };
+  }, [location.pathname, navigate]);
 
-  if (!ok) return <div style={{ padding: 24 }}>Loading…</div>;
-  return <>{children}</>;
+  if (!ready) {
+    return (
+      <div className="stateCard">
+        <div className="stateTitle">Loading operator session…</div>
+        <div className="stateText">Checking your Helvarix identity and restoring your dashboard.</div>
+      </div>
+    );
+  }
+
+  return allowed ? <>{children}</> : null;
 }
