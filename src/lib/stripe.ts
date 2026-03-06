@@ -1,70 +1,57 @@
-import { loadStripe } from "@stripe/stripe-js"
-import { env } from "./env"
+import { loadStripe } from "@stripe/stripe-js";
+import { env, hasStripeClientKey } from "./env";
+import { supabase } from "./supabaseClient";
 
-/**
- * Lazy Stripe loader
- * Prevents app from crashing if Stripe isn't configured.
- */
-
-let stripePromise: Promise<any> | null = null
-
-export function getStripe() {
-  if (!env.STRIPE_PK) {
-    throw new Error(
-      "Stripe is not configured. Please set VITE_STRIPE_PK in your environment variables."
-    )
+export async function startCheckout(priceId: string) {
+  if (!hasStripeClientKey()) {
+    throw new Error("Stripe publishable key is missing. Set VITE_STRIPE_PK in Cloudflare Pages.");
   }
 
-  if (!stripePromise) {
-    stripePromise = loadStripe(env.STRIPE_PK)
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session?.user) {
+    throw new Error("You must be signed in before starting checkout.");
   }
 
-  return stripePromise
-}
-
-/**
- * Redirect user to Stripe Checkout
- */
-
-export async function redirectToCheckout({
-  priceId,
-  userId,
-  email
-}: {
-  priceId: string
-  userId: string
-  email: string
-}) {
-  const stripe = await getStripe()
-
-  const response = await fetch("/api/stripe/checkout", {
+  const res = await fetch("/api/stripe/checkout", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       priceId,
-      userId,
-      email
-    })
-  })
+      userId: session.user.id,
+      email: session.user.email,
+    }),
+  });
 
-  if (!response.ok) {
-    const text = await response.text()
-    throw new Error(`Stripe checkout failed: ${text}`)
+  if (!res.ok) {
+    throw new Error(await res.text());
   }
 
-  const data = await response.json()
+  const { sessionId, url } = await res.json();
+  const stripe = await loadStripe(env.stripePk);
 
-  if (!data.sessionId) {
-    throw new Error("Stripe session ID missing from response")
+  if (stripe && sessionId) {
+    const result = await stripe.redirectToCheckout({ sessionId });
+    if (result.error) throw result.error;
+    return;
   }
 
-  const { error } = await stripe.redirectToCheckout({
-    sessionId: data.sessionId
-  })
-
-  if (error) {
-    throw error
+  if (url) {
+    window.location.href = url;
+    return;
   }
+
+  throw new Error("Unable to open Stripe checkout.");
+}
+
+export async function openCustomerPortal() {
+  const res = await fetch("/api/stripe/portal", { method: "POST" });
+  if (!res.ok) {
+    throw new Error(await res.text());
+  }
+  const { url } = await res.json();
+  if (!url) throw new Error("Portal URL was not returned.");
+  window.location.href = url;
 }
