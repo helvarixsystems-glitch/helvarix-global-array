@@ -1,43 +1,31 @@
-/**
- * Environment configuration loader
- * Prevents application crashes when optional keys (like Stripe) are missing.
- */
-
-function requireEnv(name: string): string {
-  const value = import.meta.env[name]
-
-  if (!value) {
-    throw new Error(`Missing required environment variable: ${name}`)
-  }
-
-  return value
+export function normalizeSupabaseUrl(url: string) {
+  const trimmed = (url ?? "").trim();
+  if (!trimmed) return "";
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) return trimmed;
+  if (!trimmed.includes(".")) return `https://${trimmed}.supabase.co`;
+  return `https://${trimmed}`;
 }
 
-function optionalEnv(name: string): string | null {
-  const value = import.meta.env[name]
+function get(name: string) {
+  return ((import.meta as any).env?.[name] as string | undefined)?.trim() || undefined;
+}
 
-  if (!value || value === "") {
-    return null
+function mustGet(name: string) {
+  const v = get(name);
+  if (!v) {
+    throw new Error(
+      `Missing environment variable ${name}. Set it in Cloudflare Pages for Preview and Production.`
+    );
   }
-
-  return value
+  return v;
 }
 
 export const env = {
-  /**
-   * Supabase configuration
-   */
-  SUPABASE_URL: requireEnv("VITE_SUPABASE_URL"),
-  SUPABASE_ANON_KEY: requireEnv("VITE_SUPABASE_ANON_KEY"),
+  supabaseUrl: normalizeSupabaseUrl(mustGet("VITE_SUPABASE_URL")),
+  supabaseAnonKey: mustGet("VITE_SUPABASE_ANON_KEY"),
+  stripePk: get("VITE_STRIPE_PK") ?? get("VITE_STRIPE_PUBLISHABLE_KEY") ?? "",
+};
 
-  /**
-   * Stripe configuration
-   * Optional so the app doesn't crash if not configured yet
-   */
-  STRIPE_PK: optionalEnv("VITE_STRIPE_PK"),
-
-  /**
-   * Application metadata
-   */
-  APP_NAME: "Helvarix Global Array"
+export function hasStripeClientKey() {
+  return Boolean(env.stripePk);
 }
