@@ -188,7 +188,6 @@ export default function Submit() {
         if (asset.previewUrl) URL.revokeObjectURL(asset.previewUrl);
       });
     };
-    // intentionally not depending on assets to avoid revoking previews on each add/remove cycle
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -432,7 +431,11 @@ export default function Submit() {
                 className="input"
                 value={form.signalQuality}
                 onChange={(e) => updateField("signalQuality", e.target.value)}
-                placeholder={mode === "visual" ? "1.8 arcsec, clear, light haze" : "24 dB SNR, stable, intermittent"}
+                placeholder={
+                  mode === "visual"
+                    ? "1.8 arcsec, clear, light haze"
+                    : "24 dB SNR, stable, intermittent"
+                }
               />
             </div>
 
@@ -475,7 +478,7 @@ export default function Submit() {
         </section>
 
         <section className="gridTwo submitGrid">
-          <section className="panel">
+          <section className="panel leftSubmissionColumn">
             <div className="sectionHeader">
               <div>
                 <div className="sectionKicker">MEDIA + FILES</div>
@@ -548,6 +551,39 @@ export default function Submit() {
                   ))}
                 </div>
               )}
+
+              <div className="submitActionCard">
+                <div className="submitActionMeta">
+                  <div className="sectionKicker">FINALIZE</div>
+                  <h3 className="submitActionTitle">Publish to telemetry</h3>
+                  <p className="submitActionText">
+                    This submission will write to observations, attach uploads, and appear in the live feed under your profile.
+                  </p>
+                </div>
+
+                <div className="submitActionButtons">
+                  <button className="primaryBtn actionPrimary" type="submit" disabled={saving}>
+                    {saving ? "Submitting…" : "Submit observation"}
+                  </button>
+
+                  <button
+                    className="ghostBtn actionSecondary"
+                    type="button"
+                    onClick={() => {
+                      setForm(INITIAL_FORM);
+                      assets.forEach((asset) => {
+                        if (asset.previewUrl) URL.revokeObjectURL(asset.previewUrl);
+                      });
+                      setAssets([]);
+                      setSaveMessage(null);
+                      setError(null);
+                    }}
+                    disabled={saving}
+                  >
+                    Reset form
+                  </button>
+                </div>
+              </div>
             </div>
           </section>
 
@@ -607,7 +643,9 @@ export default function Submit() {
               </div>
 
               <div className="submitPreviewBody">
-                <div className="sectionKicker">{mode === "visual" ? "VISUAL OBSERVATION" : "RADIO OBSERVATION"}</div>
+                <div className="sectionKicker">
+                  {mode === "visual" ? "VISUAL OBSERVATION" : "RADIO OBSERVATION"}
+                </div>
                 <h3 className="submitPreviewTarget">
                   {form.target.trim() || "Untitled Observation"}
                 </h3>
@@ -651,30 +689,6 @@ export default function Submit() {
 
         {saveMessage ? <div className="alert info">{saveMessage}</div> : null}
         {error ? <div className="alert error">{error}</div> : null}
-
-        <section className="panel">
-          <div className="buttonRow">
-            <button className="primaryBtn" type="submit" disabled={saving}>
-              {saving ? "Submitting…" : "Submit observation"}
-            </button>
-            <button
-              className="ghostBtn"
-              type="button"
-              onClick={() => {
-                setForm(INITIAL_FORM);
-                assets.forEach((asset) => {
-                  if (asset.previewUrl) URL.revokeObjectURL(asset.previewUrl);
-                });
-                setAssets([]);
-                setSaveMessage(null);
-                setError(null);
-              }}
-              disabled={saving}
-            >
-              Reset form
-            </button>
-          </div>
-        </section>
       </form>
 
       <style>{`
@@ -700,6 +714,12 @@ export default function Submit() {
 
         .submitGrid{
           align-items:start;
+        }
+
+        .leftSubmissionColumn{
+          display:grid;
+          gap: 18px;
+          align-content:start;
         }
 
         .uploadPanel{
@@ -823,6 +843,42 @@ export default function Submit() {
         }
 
         .removeAssetBtn{
+          width:auto;
+          white-space:nowrap;
+        }
+
+        .submitActionCard{
+          display:grid;
+          gap: 18px;
+          padding: 18px;
+          border-radius: 18px;
+          border: 1px solid rgba(92,214,255,0.14);
+          background:
+            radial-gradient(circle at top left, rgba(92,214,255,0.07), transparent 42%),
+            linear-gradient(180deg, rgba(11,18,34,0.88), rgba(8,14,28,0.92));
+        }
+
+        .submitActionTitle{
+          margin: 6px 0 0;
+          font-size: 24px;
+          line-height: 1.1;
+        }
+
+        .submitActionText{
+          margin: 10px 0 0;
+          color: var(--muted);
+          line-height: 1.6;
+        }
+
+        .submitActionButtons{
+          display:flex;
+          gap: 12px;
+          flex-wrap:wrap;
+          align-items:center;
+        }
+
+        .actionPrimary,
+        .actionSecondary{
           width:auto;
           white-space:nowrap;
         }
@@ -1010,6 +1066,16 @@ export default function Submit() {
 
           .removeAssetBtn{
             grid-column: 1 / -1;
+          }
+
+          .submitActionButtons{
+            flex-direction:column;
+            align-items:stretch;
+          }
+
+          .actionPrimary,
+          .actionSecondary{
+            width:100%;
           }
         }
 
