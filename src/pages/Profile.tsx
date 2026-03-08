@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { ChangeEvent, useEffect, useMemo, useState } from "react";
 import { openCustomerPortal } from "../lib/stripe";
 import { supabase } from "../lib/supabaseClient";
 
@@ -30,12 +30,9 @@ type ProfileRow = {
 type FormState = {
   callsign: string;
   displayName: string;
-  role: string;
   bio: string;
   city: string;
   country: string;
-  avatarUrl: string;
-  bannerUrl: string;
   observatoryName: string;
   primaryMode: string;
   equipmentSummary: string;
@@ -56,15 +53,14 @@ type ProfileStats = {
   latestAt: string | null;
 };
 
+const PROFILE_MEDIA_BUCKET = "profile-media";
+
 const INITIAL_FORM: FormState = {
   callsign: "",
   displayName: "",
-  role: "",
   bio: "",
   city: "",
   country: "",
-  avatarUrl: "",
-  bannerUrl: "",
   observatoryName: "",
   primaryMode: "visual",
   equipmentSummary: "",
@@ -77,6 +73,44 @@ const INITIAL_FORM: FormState = {
   visibility: "public",
   accentPref: "violet",
 };
+
+const ALIAS_PREFIXES = [
+  "Aurora",
+  "Vector",
+  "Helio",
+  "Nova",
+  "Orion",
+  "Zenith",
+  "Polar",
+  "Echo",
+  "Vanta",
+  "Lumen",
+  "Apex",
+  "Peri",
+  "Atlas",
+  "Sable",
+  "Crux",
+  "Pulse",
+];
+
+const ALIAS_SUFFIXES = [
+  "Array",
+  "Signal",
+  "Observer",
+  "Beacon",
+  "Drift",
+  "Transit",
+  "Relay",
+  "Axis",
+  "Specter",
+  "Emitter",
+  "Ranger",
+  "Scope",
+  "Arc",
+  "Node",
+  "Tracer",
+  "Vector",
+];
 
 function arrayToInput(value: string[] | string | null | undefined) {
   if (!value) return "";
@@ -171,6 +205,51 @@ function normalizeMediaCount(observations: Record<string, unknown>[]) {
   }, 0);
 }
 
+function generateAlias(seed: string) {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i += 1) {
+    hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
+  }
+
+  const prefix = ALIAS_PREFIXES[hash % ALIAS_PREFIXES.length];
+  const suffix = ALIAS_SUFFIXES[(hash >> 5) % ALIAS_SUFFIXES.length];
+  const code = String((hash % 9000) + 1000);
+
+  return `${prefix} ${suffix} ${code}`;
+}
+
+function getOperatorLevel(oi: number, ci: number) {
+  const combined = oi + ci;
+
+  if (combined >= 6000) return { level: 6, role: "Research Commander" };
+  if (combined >= 3000) return { level: 5, role: "Campaign Lead" };
+  if (combined >= 1500) return { level: 4, role: "Array Specialist" };
+  if (combined >= 750) return { level: 3, role: "Senior Operator" };
+  if (combined >= 250) return { level: 2, role: "Field Operator" };
+  return { level: 1, role: "Cadet Operator" };
+}
+
+function makeStoragePath(userId: string, folder: "avatar" | "banner", file: File) {
+  const ext = file.name.includes(".") ? file.name.split(".").pop()?.toLowerCase() || "jpg" : "jpg";
+  return `${userId}/${folder}/${Date.now()}-${folder}.${ext}`;
+}
+
+async function uploadProfileImage(userId: string, folder: "avatar" | "banner", file: File) {
+  const path = makeStoragePath(userId, folder, file);
+
+  const { error: uploadError } = await supabase.storage
+    .from(PROFILE_MEDIA_BUCKET)
+    .upload(path, file, {
+      cacheControl: "3600",
+      upsert: true,
+    });
+
+  if (uploadError) throw uploadError;
+
+  const { data } = supabase.storage.from(PROFILE_MEDIA_BUCKET).getPublicUrl(path);
+  return data.publicUrl;
+}
+
 async function saveProfileWithFallback(payload: Record<string, unknown>) {
   const optionalKeys = [
     "display_name",
@@ -188,6 +267,7 @@ async function saveProfileWithFallback(payload: Record<string, unknown>) {
     "discord_handle",
     "visibility",
     "accent_pref",
+    "role",
   ];
 
   let workingPayload = { ...payload };
@@ -226,6 +306,11 @@ export default function Profile() {
   const [sessionUserId, setSessionUserId] = useState<string | null>(null);
   const [storedOI, setStoredOI] = useState<number>(0);
   const [storedCI, setStoredCI] = useState<number>(0);
+
+  const [avatarUrl, setAvatarUrl] = useState<string>("");
+  const [bannerUrl, setBannerUrl] = useState<string>("");
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [bannerUploading, setBannerUploading] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -288,15 +373,18 @@ export default function Profile() {
         const profile = (row as ProfileRow | null) ?? null;
         const observationRows = ((observations as Record<string, unknown>[] | null) ?? []);
 
+        const oi = Number(profile?.observation_index ?? 0);
+        const ci = Number(profile?.campaign_impact ?? 0);
+        const generatedAlias = generateAlias(user.id);
+        const safeDisplayName =
+          profile?.display_name?.trim() || generatedAlias;
+
         setForm({
           callsign: profile?.callsign ?? "",
-          displayName: profile?.display_name ?? "",
-          role: profile?.role ?? "",
+          displayName: safeDisplayName,
           bio: profile?.bio ?? "",
           city: profile?.city ?? "",
           country: profile?.country ?? "",
-          avatarUrl: profile?.avatar_url ?? "",
-          bannerUrl: profile?.banner_url ?? "",
           observatoryName: profile?.observatory_name ?? "",
           primaryMode: profile?.primary_mode ?? "visual",
           equipmentSummary: profile?.equipment_summary ?? "",
@@ -310,11 +398,13 @@ export default function Profile() {
           accentPref: profile?.accent_pref ?? "violet",
         });
 
-        setStoredOI(Number(profile?.observation_index ?? 0));
-        setStoredCI(Number(profile?.campaign_impact ?? 0));
+        setAvatarUrl(profile?.avatar_url ?? "");
+        setBannerUrl(profile?.banner_url ?? "");
+        setStoredOI(oi);
+        setStoredCI(ci);
 
-        const verified = observationRows.filter((row) => {
-          const raw = String(row.verification_status ?? row.status ?? "").toLowerCase();
+        const verified = observationRows.filter((obs) => {
+          const raw = String(obs.verification_status ?? obs.status ?? "").toLowerCase();
           return ["verified", "approved", "confirmed"].includes(raw);
         }).length;
 
@@ -349,6 +439,36 @@ export default function Profile() {
     setForm((current) => ({ ...current, [key]: value }));
   }
 
+  async function handleImageUpload(
+    event: ChangeEvent<HTMLInputElement>,
+    type: "avatar" | "banner"
+  ) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (!sessionUserId) {
+      setError("You must be signed in to upload profile images.");
+      return;
+    }
+
+    try {
+      setError(null);
+      if (type === "avatar") setAvatarUploading(true);
+      else setBannerUploading(true);
+
+      const publicUrl = await uploadProfileImage(sessionUserId, type, file);
+
+      if (type === "avatar") setAvatarUrl(publicUrl);
+      else setBannerUrl(publicUrl);
+    } catch (err) {
+      console.error(err);
+      setError(err instanceof Error ? err.message : "Unable to upload image.");
+    } finally {
+      if (type === "avatar") setAvatarUploading(false);
+      else setBannerUploading(false);
+    }
+  }
+
   async function saveProfile() {
     setSaving(true);
     setError(null);
@@ -359,16 +479,18 @@ export default function Profile() {
       const user = data.session?.user;
       if (!user) throw new Error("Not signed in.");
 
+      const computedRole = getOperatorLevel(storedOI, storedCI).role;
+
       const payload: Record<string, unknown> = {
         id: user.id,
         callsign: form.callsign.trim() || null,
-        display_name: form.displayName.trim() || null,
-        role: form.role.trim() || null,
+        display_name: form.displayName.trim() || generateAlias(user.id),
+        role: computedRole,
         bio: form.bio.trim() || null,
         city: form.city.trim() || null,
         country: form.country.trim() || null,
-        avatar_url: form.avatarUrl.trim() || null,
-        banner_url: form.bannerUrl.trim() || null,
+        avatar_url: avatarUrl || null,
+        banner_url: bannerUrl || null,
         observatory_name: form.observatoryName.trim() || null,
         primary_mode: form.primaryMode.trim() || null,
         equipment_summary: form.equipmentSummary.trim() || null,
@@ -392,10 +514,10 @@ export default function Profile() {
     }
   }
 
-  const displayName = form.displayName.trim() || form.callsign.trim() || "Array Operator";
+  const displayName = form.displayName.trim() || (sessionUserId ? generateAlias(sessionUserId) : "Array Operator");
   const location = [form.city.trim(), form.country.trim()].filter(Boolean).join(", ");
   const specialties = inputToArray(form.specialties);
-  const favoriteTargets = inputToArray(form.favoriteTargets);
+  const computedRank = getOperatorLevel(storedOI, storedCI);
 
   const accentClass = useMemo(() => {
     if (form.accentPref === "cyan") return "accentCyan";
@@ -409,15 +531,17 @@ export default function Profile() {
         <div
           className="profileHeroBanner"
           style={
-            form.bannerUrl.trim()
-              ? { backgroundImage: `linear-gradient(rgba(6,10,20,0.35), rgba(6,10,20,0.68)), url(${form.bannerUrl.trim()})` }
+            bannerUrl
+              ? {
+                  backgroundImage: `linear-gradient(rgba(6,10,20,0.35), rgba(6,10,20,0.68)), url(${bannerUrl})`,
+                }
               : undefined
           }
         >
           <div className="profileHeroContent">
             <div className="profileIdentity">
-              {form.avatarUrl.trim() ? (
-                <img className="profileAvatar" src={form.avatarUrl.trim()} alt={displayName} />
+              {avatarUrl ? (
+                <img className="profileAvatar" src={avatarUrl} alt={displayName} />
               ) : (
                 <div className="profileAvatar fallback">
                   {displayName.slice(0, 1).toUpperCase()}
@@ -431,7 +555,8 @@ export default function Profile() {
                   <span className="statusBadge profileMetaBadge">
                     {form.callsign.trim() || "No callsign set"}
                   </span>
-                  {form.role.trim() ? <span>{form.role.trim()}</span> : null}
+                  <span>{computedRank.role}</span>
+                  <span>Level {computedRank.level}</span>
                   {location ? <span>{location}</span> : null}
                 </div>
                 {form.bio.trim() ? <p className="pageText profileBio">{form.bio.trim()}</p> : null}
@@ -488,23 +613,18 @@ export default function Profile() {
             </div>
 
             <div className="fieldGroup">
-              <label className="fieldLabel">Display name</label>
+              <label className="fieldLabel">Public alias</label>
               <input
                 className="input"
                 value={form.displayName}
                 onChange={(e) => updateField("displayName", e.target.value)}
-                placeholder="Aaron Simpson"
+                placeholder={sessionUserId ? generateAlias(sessionUserId) : "Operator Alias"}
               />
             </div>
 
             <div className="fieldGroup">
               <label className="fieldLabel">Role</label>
-              <input
-                className="input"
-                value={form.role}
-                onChange={(e) => updateField("role", e.target.value)}
-                placeholder="Network Operator, Astrophotographer, Radio Observer"
-              />
+              <input className="input" value={computedRank.role} readOnly />
             </div>
 
             <div className="fieldGroup">
@@ -552,23 +672,29 @@ export default function Profile() {
             </div>
 
             <div className="fieldGroup">
-              <label className="fieldLabel">Avatar URL</label>
-              <input
-                className="input"
-                value={form.avatarUrl}
-                onChange={(e) => updateField("avatarUrl", e.target.value)}
-                placeholder="https://..."
-              />
+              <label className="fieldLabel">Avatar image</label>
+              <label className="uploadMiniCard">
+                <input
+                  className="srOnlyInput"
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => handleImageUpload(e, "avatar")}
+                />
+                <span>{avatarUploading ? "Uploading avatar…" : "Upload avatar"}</span>
+              </label>
             </div>
 
             <div className="fieldGroup">
-              <label className="fieldLabel">Banner URL</label>
-              <input
-                className="input"
-                value={form.bannerUrl}
-                onChange={(e) => updateField("bannerUrl", e.target.value)}
-                placeholder="https://..."
-              />
+              <label className="fieldLabel">Banner image</label>
+              <label className="uploadMiniCard">
+                <input
+                  className="srOnlyInput"
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => handleImageUpload(e, "banner")}
+                />
+                <span>{bannerUploading ? "Uploading banner…" : "Upload banner"}</span>
+              </label>
             </div>
           </div>
         </section>
@@ -583,8 +709,8 @@ export default function Profile() {
 
           <article className="profilePreviewCard">
             <div className="profilePreviewTop">
-              {form.avatarUrl.trim() ? (
-                <img className="profilePreviewAvatar" src={form.avatarUrl.trim()} alt={displayName} />
+              {avatarUrl ? (
+                <img className="profilePreviewAvatar" src={avatarUrl} alt={displayName} />
               ) : (
                 <div className="profilePreviewAvatar fallback">
                   {displayName.slice(0, 1).toUpperCase()}
@@ -594,7 +720,7 @@ export default function Profile() {
               <div>
                 <div className="profilePreviewName">{displayName}</div>
                 <div className="profilePreviewSub">
-                  {[form.role.trim(), location].filter(Boolean).join(" • ") || "Network Operator"}
+                  {[computedRank.role, location].filter(Boolean).join(" • ") || "Cadet Operator"}
                 </div>
                 {form.callsign.trim() ? (
                   <div className="profilePreviewCallsign">{form.callsign.trim()}</div>
@@ -691,15 +817,15 @@ export default function Profile() {
           </div>
         </section>
 
-        <section className="panel">
-          <div className="sectionHeader">
+        <section className="panel compactPanel">
+          <div className="sectionHeader compactHeader">
             <div>
               <div className="sectionKicker">NETWORK LINKS</div>
               <h2 className="sectionTitle">Public links and handles</h2>
             </div>
           </div>
 
-          <div className="formGrid">
+          <div className="formGrid compactFormGrid">
             <div className="fieldGroup spanTwo">
               <label className="fieldLabel">Website</label>
               <input
@@ -823,7 +949,12 @@ export default function Profile() {
             </div>
 
             <div className="buttonRow">
-              <button className="primaryBtn" type="button" onClick={saveProfile} disabled={saving}>
+              <button
+                className="primaryBtn"
+                type="button"
+                onClick={saveProfile}
+                disabled={saving || avatarUploading || bannerUploading}
+              >
                 {saving ? "Saving…" : "Save profile"}
               </button>
 
@@ -920,6 +1051,54 @@ export default function Profile() {
 
         .profileMainGrid{
           align-items:start;
+        }
+
+        .compactPanel{
+          align-self:start;
+          height:auto;
+          padding-bottom: 18px;
+        }
+
+        .compactHeader{
+          margin-bottom: 10px;
+        }
+
+        .compactFormGrid{
+          gap: 16px;
+        }
+
+        .uploadMiniCard{
+          min-height: 56px;
+          border-radius: 16px;
+          border: 1px dashed rgba(92,214,255,0.24);
+          background: rgba(255,255,255,0.03);
+          display:flex;
+          align-items:center;
+          padding: 0 16px;
+          cursor:pointer;
+          transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+        }
+
+        .uploadMiniCard:hover{
+          border-color: rgba(92,214,255,0.42);
+          background: rgba(92,214,255,0.06);
+          transform: translateY(-1px);
+        }
+
+        .uploadMiniCard span{
+          font-weight: 700;
+        }
+
+        .srOnlyInput{
+          position:absolute;
+          width:1px;
+          height:1px;
+          padding:0;
+          margin:-1px;
+          overflow:hidden;
+          clip:rect(0,0,0,0);
+          white-space:nowrap;
+          border:0;
         }
 
         .profilePreviewCard{
