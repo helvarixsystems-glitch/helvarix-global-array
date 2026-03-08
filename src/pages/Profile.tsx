@@ -142,7 +142,10 @@ function formatDate(value: string | null) {
 
 function extractStringArray(value: unknown): string[] {
   if (!value) return [];
-  if (Array.isArray(value)) return value.flatMap((item) => extractStringArray(item)).filter(Boolean);
+
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => extractStringArray(item)).filter(Boolean);
+  }
 
   if (typeof value === "string") {
     const trimmed = value.trim();
@@ -376,8 +379,7 @@ export default function Profile() {
         const oi = Number(profile?.observation_index ?? 0);
         const ci = Number(profile?.campaign_impact ?? 0);
         const generatedAlias = generateAlias(user.id);
-        const safeDisplayName =
-          profile?.display_name?.trim() || generatedAlias;
+        const safeDisplayName = profile?.display_name?.trim() || generatedAlias;
 
         setForm({
           callsign: profile?.callsign ?? "",
@@ -514,7 +516,8 @@ export default function Profile() {
     }
   }
 
-  const displayName = form.displayName.trim() || (sessionUserId ? generateAlias(sessionUserId) : "Array Operator");
+  const displayName =
+    form.displayName.trim() || (sessionUserId ? generateAlias(sessionUserId) : "Array Operator");
   const location = [form.city.trim(), form.country.trim()].filter(Boolean).join(", ");
   const specialties = inputToArray(form.specialties);
   const computedRank = getOperatorLevel(storedOI, storedCI);
@@ -816,58 +819,58 @@ export default function Profile() {
             </div>
           </div>
         </section>
-
-        <section className="panel compactPanel">
-          <div className="sectionHeader compactHeader">
-            <div>
-              <div className="sectionKicker">NETWORK LINKS</div>
-              <h2 className="sectionTitle">Public links and handles</h2>
-            </div>
-          </div>
-
-          <div className="formGrid compactFormGrid">
-            <div className="fieldGroup spanTwo">
-              <label className="fieldLabel">Website</label>
-              <input
-                className="input"
-                value={form.websiteUrl}
-                onChange={(e) => updateField("websiteUrl", e.target.value)}
-                placeholder="https://your-site.com"
-              />
-            </div>
-
-            <div className="fieldGroup">
-              <label className="fieldLabel">X</label>
-              <input
-                className="input"
-                value={form.xUrl}
-                onChange={(e) => updateField("xUrl", e.target.value)}
-                placeholder="https://x.com/..."
-              />
-            </div>
-
-            <div className="fieldGroup">
-              <label className="fieldLabel">Instagram</label>
-              <input
-                className="input"
-                value={form.instagramUrl}
-                onChange={(e) => updateField("instagramUrl", e.target.value)}
-                placeholder="https://instagram.com/..."
-              />
-            </div>
-
-            <div className="fieldGroup spanTwo">
-              <label className="fieldLabel">Discord handle</label>
-              <input
-                className="input"
-                value={form.discordHandle}
-                onChange={(e) => updateField("discordHandle", e.target.value)}
-                placeholder="@helvarix-operator"
-              />
-            </div>
-          </div>
-        </section>
       </div>
+
+      <section className="panel fullWidthPanel compactPanel">
+        <div className="sectionHeader compactHeader">
+          <div>
+            <div className="sectionKicker">NETWORK LINKS</div>
+            <h2 className="sectionTitle">Public links and handles</h2>
+          </div>
+        </div>
+
+        <div className="formGrid compactFormGrid">
+          <div className="fieldGroup spanTwo">
+            <label className="fieldLabel">Website</label>
+            <input
+              className="input"
+              value={form.websiteUrl}
+              onChange={(e) => updateField("websiteUrl", e.target.value)}
+              placeholder="https://your-site.com"
+            />
+          </div>
+
+          <div className="fieldGroup">
+            <label className="fieldLabel">X</label>
+            <input
+              className="input"
+              value={form.xUrl}
+              onChange={(e) => updateField("xUrl", e.target.value)}
+              placeholder="https://x.com/..."
+            />
+          </div>
+
+          <div className="fieldGroup">
+            <label className="fieldLabel">Instagram</label>
+            <input
+              className="input"
+              value={form.instagramUrl}
+              onChange={(e) => updateField("instagramUrl", e.target.value)}
+              placeholder="https://instagram.com/..."
+            />
+          </div>
+
+          <div className="fieldGroup spanTwo">
+            <label className="fieldLabel">Discord handle</label>
+            <input
+              className="input"
+              value={form.discordHandle}
+              onChange={(e) => updateField("discordHandle", e.target.value)}
+              placeholder="@helvarix-operator"
+            />
+          </div>
+        </div>
+      </section>
 
       <div className="gridTwo profileMainGrid">
         <section className="panel">
@@ -1051,6 +1054,10 @@ export default function Profile() {
 
         .profileMainGrid{
           align-items:start;
+        }
+
+        .fullWidthPanel{
+          width: 100%;
         }
 
         .compactPanel{
