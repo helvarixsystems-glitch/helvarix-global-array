@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 
 type SubmissionMode = "visual" | "radio";
+type CampaignCadence = "DAILY" | "WEEKLY" | "GLOBAL" | "RESEARCH" | "COLLECTIVE" | "UNKNOWN";
 
 type ProfileRow = {
   id: string;
@@ -14,6 +15,18 @@ type ProfileRow = {
   observation_index?: number | null;
 };
 
+type CampaignRow = {
+  id: string;
+  title?: string | null;
+  name?: string | null;
+  cadence?: string | null;
+  scope?: string | null;
+  type?: string | null;
+  tags?: string[] | null;
+  description?: string | null;
+  is_active?: boolean | null;
+};
+
 type FormState = {
   target: string;
   observingAt: string;
@@ -22,6 +35,7 @@ type FormState = {
   equipment: string;
   notes: string;
   tags: string;
+  campaignId: string;
 };
 
 type UploadAsset = {
@@ -40,6 +54,7 @@ const INITIAL_FORM: FormState = {
   equipment: "",
   notes: "",
   tags: "",
+  campaignId: "",
 };
 
 function slugify(value: string) {
@@ -88,6 +103,37 @@ function createObservationId() {
   return `obs-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+function normalizeCadence(value: string | null | undefined): CampaignCadence {
+  const raw = String(value ?? "").trim().toLowerCase();
+
+  if (raw.includes("daily")) return "DAILY";
+  if (raw.includes("weekly")) return "WEEKLY";
+  if (raw.includes("global")) return "GLOBAL";
+  if (raw.includes("research")) return "RESEARCH";
+  if (raw.includes("collective")) return "COLLECTIVE";
+
+  return "UNKNOWN";
+}
+
+function getCampaignLabel(campaign: CampaignRow | null | undefined) {
+  return campaign?.title?.trim() || campaign?.name?.trim() || "Unnamed Campaign";
+}
+
+function getCampaignCadenceBadge(campaign: CampaignRow | null | undefined): CampaignCadence {
+  return normalizeCadence(
+    campaign?.cadence ?? campaign?.scope ?? campaign?.type ?? campaign?.title ?? campaign?.name
+  );
+}
+
+function getCampaignExplanation(cadence: CampaignCadence) {
+  if (cadence === "DAILY") return "Applies a 1.3× Observation Index multiplier.";
+  if (cadence === "WEEKLY") return "Applies a 1.5× Observation Index multiplier.";
+  if (cadence === "GLOBAL") return "Counts toward Campaign Impact.";
+  if (cadence === "RESEARCH") return "Counts toward Campaign Impact with research weighting.";
+  if (cadence === "COLLECTIVE") return "Counts toward Campaign Impact with collective weighting.";
+  return "General submission with no special campaign multiplier detected.";
+}
+
 async function uploadAsset(userId: string, observationId: string, asset: UploadAsset) {
   const ext = fileExtension(asset.file.name) || "bin";
   const safeName = slugify(asset.file.name.replace(/\.[^/.]+$/, "")) || "upload";
@@ -123,6 +169,12 @@ async function insertObservationWithFallback(payload: Record<string, unknown>) {
     "files",
     "bortle_class",
     "signal_quality",
+    "campaign_id",
+    "campaign_title",
+    "campaign_name",
+    "campaign_scope",
+    "campaign_type",
+    "campaign_cadence",
   ];
 
   let workingPayload = { ...payload };
@@ -150,37 +202,69 @@ export default function Submit() {
   const [mode, setMode] = useState<SubmissionMode>("visual");
   const [form, setForm] = useState<FormState>(INITIAL_FORM);
   const [profile, setProfile] = useState<ProfileRow | null>(null);
+  const [campaigns, setCampaigns] = useState<CampaignRow[]>([]);
   const [sessionUserId, setSessionUserId] = useState<string | null>(null);
 
   const [assets, setAssets] = useState<UploadAsset[]>([]);
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [campaignLoadError, setCampaignLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
 
-    async function loadProfile() {
-      const { data: authData } = await supabase.auth.getSession();
-      const user = authData.session?.user ?? null;
+    async function loadInitialData() {
+      try {
+        const { data: authData } = await supabase.auth.getSession();
+        const user = authData.session?.user ?? null;
 
-      if (!mounted) return;
+        if (!mounted) return;
+        setSessionUserId(user?.id ?? null);
 
-      setSessionUserId(user?.id ?? null);
+        if (user) {
+          const { data } = await supabase
+            .from("profiles")
+            .select("id,callsign,role,city,country,avatar_url,observation_index")
+            .eq("id", user.id)
+            .maybeSingle();
 
-      if (!user) return;
+          if (mounted && data) setProfile(data as ProfileRow);
+        }
 
-      const { data } = await supabase
-        .from("profiles")
-        .select("id,callsign,role,city,country,avatar_url,observation_index")
-        .eq("id", user.id)
-        .maybeSingle();
+        try {
+          const { data, error: campaignsError } = await supabase
+            .from("campaigns")
+            .select("id,title,name,cadence,scope,type,tags,description,is_active")
+            .order("is_active", { ascending: false })
+            .order("title", { ascending: true });
 
-      if (!mounted) return;
-      if (data) setProfile(data as ProfileRow);
+          if (campaignsError) throw campaignsError;
+
+          if (mounted) {
+            const usable = ((data as CampaignRow[] | null) ?? []).filter(
+              (campaign) => campaign.is_active !== false
+            );
+            setCampaigns(usable);
+          }
+        } catch (campaignErr) {
+          console.error("Unable to load campaigns:", campaignErr);
+          if (mounted) {
+            setCampaignLoadError(
+              campaignErr instanceof Error ? campaignErr.message : "Unable to load campaigns."
+            );
+            setCampaigns([]);
+          }
+        }
+      } catch (err) {
+        console.error(err);
+        if (mounted) {
+          setError(err instanceof Error ? err.message : "Unable to load submission form.");
+        }
+      }
     }
 
-    loadProfile();
+    loadInitialData();
 
     return () => {
       mounted = false;
@@ -229,6 +313,13 @@ export default function Submit() {
 
   const socialLocation = [profile?.city, profile?.country].filter(Boolean).join(", ");
 
+  const selectedCampaign = useMemo(
+    () => campaigns.find((campaign) => campaign.id === form.campaignId) ?? null,
+    [campaigns, form.campaignId]
+  );
+
+  const selectedCadence = getCampaignCadenceBadge(selectedCampaign);
+
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setSaving(true);
@@ -262,6 +353,14 @@ export default function Submit() {
       if (mode === "visual" && !tags.includes("optical")) tags.push("optical");
       if (mode === "radio" && !tags.includes("radio")) tags.push("radio");
 
+      if (selectedCampaign) {
+        const campaignLabel = getCampaignLabel(selectedCampaign);
+        const cadenceTag = selectedCadence.toLowerCase();
+        if (!tags.includes("campaign")) tags.push("campaign");
+        if (campaignLabel && !tags.includes(slugify(campaignLabel))) tags.push(slugify(campaignLabel));
+        if (selectedCadence !== "UNKNOWN" && !tags.includes(cadenceTag)) tags.push(cadenceTag);
+      }
+
       const payload: Record<string, unknown> = {
         id: observationId,
         user_id: user.id,
@@ -282,6 +381,12 @@ export default function Submit() {
         files: uploaded,
         bortle_class: mode === "visual" ? Number(form.bortleClass) : null,
         signal_quality: form.signalQuality.trim() || null,
+        campaign_id: selectedCampaign?.id ?? null,
+        campaign_title: selectedCampaign?.title ?? null,
+        campaign_name: selectedCampaign?.name ?? selectedCampaign?.title ?? null,
+        campaign_scope: selectedCampaign?.scope ?? null,
+        campaign_type: selectedCampaign?.type ?? null,
+        campaign_cadence: selectedCadence !== "UNKNOWN" ? selectedCadence : null,
       };
 
       await insertObservationWithFallback(payload);
@@ -322,8 +427,8 @@ export default function Submit() {
             <div className="eyebrow">OBSERVATION INTAKE</div>
             <h1 className="pageTitle">Field-ready submission flow.</h1>
             <p className="pageText submitHeroText">
-              Visual and radio observations now submit directly into the live network feed, with
-              photos and supporting files attached to the observation record.
+              Visual and radio observations submit directly into the live network feed, with photos,
+              support files, and campaign attachment for deterministic leaderboard scoring.
             </p>
           </div>
 
@@ -437,6 +542,55 @@ export default function Submit() {
                     : "24 dB SNR, stable, intermittent"
                 }
               />
+            </div>
+
+            <div className="fieldGroup spanTwo">
+              <label className="fieldLabel">Campaign attachment</label>
+              <select
+                className="input"
+                value={form.campaignId}
+                onChange={(e) => updateField("campaignId", e.target.value)}
+              >
+                <option value="">No campaign attached</option>
+                {campaigns.map((campaign) => {
+                  const cadence = getCampaignCadenceBadge(campaign);
+                  return (
+                    <option key={campaign.id} value={campaign.id}>
+                      {`${getCampaignLabel(campaign)}${cadence !== "UNKNOWN" ? ` — ${cadence}` : ""}`}
+                    </option>
+                  );
+                })}
+              </select>
+
+              {selectedCampaign ? (
+                <div className="campaignInfoCard">
+                  <div className="campaignInfoTop">
+                    <span className="statusBadge campaignBadge">{selectedCadence}</span>
+                    <strong>{getCampaignLabel(selectedCampaign)}</strong>
+                  </div>
+                  <div className="campaignInfoText">{getCampaignExplanation(selectedCadence)}</div>
+                  {selectedCampaign.description ? (
+                    <div className="campaignInfoSub">{selectedCampaign.description}</div>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="campaignInfoCard muted">
+                  <div className="campaignInfoTop">
+                    <span className="statusBadge campaignBadge">GENERAL</span>
+                    <strong>Independent observation</strong>
+                  </div>
+                  <div className="campaignInfoText">
+                    Submit without a campaign if this observation is not tied to a daily, weekly,
+                    global, research, or collective objective.
+                  </div>
+                </div>
+              )}
+
+              {campaignLoadError ? (
+                <div className="helperError">
+                  Campaigns could not be loaded from Supabase. General submission still works.
+                </div>
+              ) : null}
             </div>
 
             <div className="fieldGroup spanTwo">
@@ -557,7 +711,8 @@ export default function Submit() {
                   <div className="sectionKicker">FINALIZE</div>
                   <h3 className="submitActionTitle">Publish to telemetry</h3>
                   <p className="submitActionText">
-                    This submission will write to observations, attach uploads, and appear in the live feed under your profile.
+                    This submission writes to observations, attaches uploads, stores campaign context,
+                    and appears in the live feed under your profile.
                   </p>
                 </div>
 
@@ -650,6 +805,13 @@ export default function Submit() {
                   {form.target.trim() || "Untitled Observation"}
                 </h3>
 
+                {selectedCampaign ? (
+                  <div className="previewCampaignRow">
+                    <span className="statusBadge campaignBadge">{selectedCadence}</span>
+                    <span className="previewCampaignText">{getCampaignLabel(selectedCampaign)}</span>
+                  </div>
+                ) : null}
+
                 {form.notes.trim() ? (
                   <p className="pageText previewNotes">{form.notes.trim()}</p>
                 ) : (
@@ -720,6 +882,47 @@ export default function Submit() {
           display:grid;
           gap: 18px;
           align-content:start;
+        }
+
+        .campaignInfoCard{
+          margin-top: 12px;
+          padding: 14px;
+          border-radius: 16px;
+          border: 1px solid rgba(92,214,255,0.14);
+          background: rgba(255,255,255,0.03);
+          display:grid;
+          gap: 8px;
+        }
+
+        .campaignInfoCard.muted{
+          opacity: 0.92;
+        }
+
+        .campaignInfoTop{
+          display:flex;
+          align-items:center;
+          gap: 10px;
+          flex-wrap:wrap;
+        }
+
+        .campaignInfoText,
+        .campaignInfoSub{
+          color: var(--muted);
+          line-height: 1.6;
+        }
+
+        .campaignInfoSub{
+          font-size: 13px;
+        }
+
+        .campaignBadge{
+          white-space: nowrap;
+        }
+
+        .helperError{
+          margin-top: 10px;
+          color: #ff9cb1;
+          font-size: 13px;
         }
 
         .uploadPanel{
@@ -988,6 +1191,18 @@ export default function Submit() {
           margin: 8px 0 0;
           font-size: 28px;
           line-height: 1.08;
+        }
+
+        .previewCampaignRow{
+          margin-top: 12px;
+          display:flex;
+          align-items:center;
+          gap: 10px;
+          flex-wrap:wrap;
+        }
+
+        .previewCampaignText{
+          font-weight: 700;
         }
 
         .previewNotes{
