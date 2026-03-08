@@ -767,59 +767,57 @@ export default function Profile() {
         </section>
       </div>
 
-      <div className="gridTwo profileMainGrid">
-        <section className="panel">
-          <div className="sectionHeader">
-            <div>
-              <div className="sectionKicker">OPERATOR SETUP</div>
-              <h2 className="sectionTitle">Observatory and specialties</h2>
-            </div>
+      <section className="panel fullWidthPanel">
+        <div className="sectionHeader">
+          <div>
+            <div className="sectionKicker">OPERATOR SETUP</div>
+            <h2 className="sectionTitle">Observatory and specialties</h2>
+          </div>
+        </div>
+
+        <div className="formGrid">
+          <div className="fieldGroup spanTwo">
+            <label className="fieldLabel">Observatory name</label>
+            <input
+              className="input"
+              value={form.observatoryName}
+              onChange={(e) => updateField("observatoryName", e.target.value)}
+              placeholder="Helvarix South Array"
+            />
           </div>
 
-          <div className="formGrid">
-            <div className="fieldGroup spanTwo">
-              <label className="fieldLabel">Observatory name</label>
-              <input
-                className="input"
-                value={form.observatoryName}
-                onChange={(e) => updateField("observatoryName", e.target.value)}
-                placeholder="Helvarix South Array"
-              />
-            </div>
-
-            <div className="fieldGroup spanTwo">
-              <label className="fieldLabel">Equipment summary</label>
-              <textarea
-                className="input"
-                rows={5}
-                value={form.equipmentSummary}
-                onChange={(e) => updateField("equipmentSummary", e.target.value)}
-                placeholder="Describe your telescope, camera, mount, SDR, antenna, dish, processing stack, or anything else you want visible on your profile."
-              />
-            </div>
-
-            <div className="fieldGroup spanTwo">
-              <label className="fieldLabel">Specialties</label>
-              <input
-                className="input"
-                value={form.specialties}
-                onChange={(e) => updateField("specialties", e.target.value)}
-                placeholder="deep sky, planetary, hydrogen line, transient tracking"
-              />
-            </div>
-
-            <div className="fieldGroup spanTwo">
-              <label className="fieldLabel">Favorite targets</label>
-              <input
-                className="input"
-                value={form.favoriteTargets}
-                onChange={(e) => updateField("favoriteTargets", e.target.value)}
-                placeholder="M31, Veil Nebula, Jupiter, Cassiopeia A"
-              />
-            </div>
+          <div className="fieldGroup spanTwo">
+            <label className="fieldLabel">Equipment summary</label>
+            <textarea
+              className="input"
+              rows={5}
+              value={form.equipmentSummary}
+              onChange={(e) => updateField("equipmentSummary", e.target.value)}
+              placeholder="Describe your telescope, camera, mount, SDR, antenna, dish, processing stack, or anything else you want visible on your profile."
+            />
           </div>
-        </section>
-      </div>
+
+          <div className="fieldGroup spanTwo">
+            <label className="fieldLabel">Specialties</label>
+            <input
+              className="input"
+              value={form.specialties}
+              onChange={(e) => updateField("specialties", e.target.value)}
+              placeholder="deep sky, planetary, hydrogen line, transient tracking"
+            />
+          </div>
+
+          <div className="fieldGroup spanTwo">
+            <label className="fieldLabel">Favorite targets</label>
+            <input
+              className="input"
+              value={form.favoriteTargets}
+              onChange={(e) => updateField("favoriteTargets", e.target.value)}
+              placeholder="M31, Veil Nebula, Jupiter, Cassiopeia A"
+            />
+          </div>
+        </div>
+      </section>
 
       <section className="panel fullWidthPanel compactPanel">
         <div className="sectionHeader compactHeader">
@@ -872,113 +870,111 @@ export default function Profile() {
         </div>
       </section>
 
-      <div className="gridTwo profileMainGrid">
-        <section className="panel">
-          <div className="sectionHeader">
-            <div>
-              <div className="sectionKicker">PREFERENCES</div>
-              <h2 className="sectionTitle">Visibility and page styling</h2>
-            </div>
+      <section className="panel fullWidthPanel">
+        <div className="sectionHeader">
+          <div>
+            <div className="sectionKicker">PREFERENCES</div>
+            <h2 className="sectionTitle">Visibility and page styling</h2>
+          </div>
+        </div>
+
+        <div className="formGrid">
+          <div className="fieldGroup">
+            <label className="fieldLabel">Visibility</label>
+            <select
+              className="input"
+              value={form.visibility}
+              onChange={(e) => updateField("visibility", e.target.value)}
+            >
+              <option value="public">Public</option>
+              <option value="network">Network only</option>
+              <option value="private">Private</option>
+            </select>
           </div>
 
-          <div className="formGrid">
-            <div className="fieldGroup">
-              <label className="fieldLabel">Visibility</label>
-              <select
-                className="input"
-                value={form.visibility}
-                onChange={(e) => updateField("visibility", e.target.value)}
-              >
-                <option value="public">Public</option>
-                <option value="network">Network only</option>
-                <option value="private">Private</option>
-              </select>
-            </div>
-
-            <div className="fieldGroup">
-              <label className="fieldLabel">Accent preference</label>
-              <select
-                className="input"
-                value={form.accentPref}
-                onChange={(e) => updateField("accentPref", e.target.value)}
-              >
-                <option value="violet">Violet</option>
-                <option value="cyan">Cyan</option>
-                <option value="amber">Amber</option>
-              </select>
-            </div>
-
-            <div className="fieldGroup spanTwo">
-              <label className="fieldLabel">Account email</label>
-              <input className="input" value={sessionEmail ?? ""} readOnly />
-            </div>
-          </div>
-        </section>
-
-        <section className="panel">
-          <div className="sectionHeader">
-            <div>
-              <div className="sectionKicker">ACCOUNT STATUS</div>
-              <h2 className="sectionTitle">Network activity and controls</h2>
-            </div>
+          <div className="fieldGroup">
+            <label className="fieldLabel">Accent preference</label>
+            <select
+              className="input"
+              value={form.accentPref}
+              onChange={(e) => updateField("accentPref", e.target.value)}
+            >
+              <option value="violet">Violet</option>
+              <option value="cyan">Cyan</option>
+              <option value="amber">Amber</option>
+            </select>
           </div>
 
-          <div className="gridFour compactStats profileStatsGrid">
-            <div className="metricCard">
-              <div className="metricLabel">Observations</div>
-              <div className="metricValue">{stats.observations}</div>
-            </div>
-            <div className="metricCard">
-              <div className="metricLabel">Verified</div>
-              <div className="metricValue">{stats.verified}</div>
-            </div>
-            <div className="metricCard">
-              <div className="metricLabel">Media posts</div>
-              <div className="metricValue">{stats.mediaPosts}</div>
-            </div>
-            <div className="metricCard">
-              <div className="metricLabel">Last active</div>
-              <div className="metricValue smallMetric">{formatDate(stats.latestAt)}</div>
-            </div>
+          <div className="fieldGroup spanTwo">
+            <label className="fieldLabel">Account email</label>
+            <input className="input" value={sessionEmail ?? ""} readOnly />
+          </div>
+        </div>
+      </section>
+
+      <section className="panel fullWidthPanel">
+        <div className="sectionHeader">
+          <div>
+            <div className="sectionKicker">ACCOUNT STATUS</div>
+            <h2 className="sectionTitle">Network activity and controls</h2>
+          </div>
+        </div>
+
+        <div className="gridFour compactStats profileStatsGrid">
+          <div className="metricCard">
+            <div className="metricLabel">Observations</div>
+            <div className="metricValue">{stats.observations}</div>
+          </div>
+          <div className="metricCard">
+            <div className="metricLabel">Verified</div>
+            <div className="metricValue">{stats.verified}</div>
+          </div>
+          <div className="metricCard">
+            <div className="metricLabel">Media posts</div>
+            <div className="metricValue">{stats.mediaPosts}</div>
+          </div>
+          <div className="metricCard">
+            <div className="metricLabel">Last active</div>
+            <div className="metricValue smallMetric">{formatDate(stats.latestAt)}</div>
+          </div>
+        </div>
+
+        <div className="profileActionCard">
+          <div>
+            <div className="sectionKicker">BILLING + SAVE</div>
+            <h3 className="profileActionTitle">Manage your operator account</h3>
+            <p className="profileActionText">
+              Save your customization changes to Supabase and manage subscription details from the billing portal.
+            </p>
           </div>
 
-          <div className="profileActionCard">
-            <div>
-              <div className="sectionKicker">BILLING + SAVE</div>
-              <h3 className="profileActionTitle">Manage your operator account</h3>
-              <p className="profileActionText">
-                Save your customization changes to Supabase and manage subscription details from the billing portal.
-              </p>
-            </div>
+          <div className="buttonRow">
+            <button
+              className="primaryBtn"
+              type="button"
+              onClick={saveProfile}
+              disabled={saving || avatarUploading || bannerUploading}
+            >
+              {saving ? "Saving…" : "Save profile"}
+            </button>
 
-            <div className="buttonRow">
-              <button
-                className="primaryBtn"
-                type="button"
-                onClick={saveProfile}
-                disabled={saving || avatarUploading || bannerUploading}
-              >
-                {saving ? "Saving…" : "Save profile"}
-              </button>
-
-              <button
-                className="ghostBtn"
-                type="button"
-                onClick={() =>
-                  openCustomerPortal().catch((err: Error) => {
-                    setError(err.message);
-                  })
-                }
-              >
-                Open billing portal
-              </button>
-            </div>
+            <button
+              className="ghostBtn"
+              type="button"
+              onClick={() =>
+                openCustomerPortal().catch((err: Error) => {
+                  setError(err.message);
+                })
+              }
+            >
+              Open billing portal
+            </button>
           </div>
+        </div>
 
-          {message ? <div className="alert info">{message}</div> : null}
-          {error ? <div className="alert error">{error}</div> : null}
-        </section>
-      </div>
+        {message ? <div className="alert info">{message}</div> : null}
+        {error ? <div className="alert error">{error}</div> : null}
+      </section>
 
       <style>{`
         .profileHeroBanner{
@@ -1061,8 +1057,6 @@ export default function Profile() {
         }
 
         .compactPanel{
-          align-self:start;
-          height:auto;
           padding-bottom: 18px;
         }
 
@@ -1275,7 +1269,8 @@ export default function Profile() {
         }
 
         @media (max-width: 820px){
-          .profileIdentity{
+          .profileIdentity,
+          .profilePreviewTop{
             display:grid;
             grid-template-columns: 1fr;
           }
