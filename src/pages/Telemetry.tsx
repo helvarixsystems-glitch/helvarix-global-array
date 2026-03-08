@@ -20,6 +20,8 @@ type ObservationRecord = {
   file_urls?: unknown;
   image_urls?: unknown;
   media_urls?: unknown;
+  uploads?: unknown;
+  attachments?: unknown;
   [key: string]: unknown;
 };
 
@@ -64,9 +66,7 @@ function extractStringArray(value: unknown): string[] {
   if (!value) return [];
 
   if (Array.isArray(value)) {
-    return value
-      .flatMap((item) => extractStringArray(item))
-      .filter(Boolean);
+    return value.flatMap((item) => extractStringArray(item)).filter(Boolean);
   }
 
   if (typeof value === "string") {
@@ -359,12 +359,6 @@ export default function Telemetry() {
           <div>
             <div className="eyebrow">COMMUNITY FEED</div>
             <h1 className="pageTitle">Real observations, ready for real operators.</h1>
-            <p className="pageText telemetryHeroText">
-              This feed now pulls from your live <strong>observations</strong> table, resolves
-              operator identity from <strong>profiles</strong>, and is already structured to make
-              uploaded images the focal point as soon as your submission workflow starts storing
-              media URLs.
-            </p>
           </div>
 
           <Link className="primaryBtn compactAction" to="/submit">
@@ -446,11 +440,6 @@ export default function Telemetry() {
         <section className="panel emptyTelemetryState">
           <div className="sectionKicker">NO OBSERVATIONS YET</div>
           <h2 className="sectionTitle">Your feed is ready for real data.</h2>
-          <p className="pageText">
-            As soon as the submission flow writes rows into <strong>observations</strong>, they
-            will appear here automatically. Once file uploads are added, any image URLs stored on
-            the row will render as the primary media for each card.
-          </p>
         </section>
       ) : (
         <div className="telemetryFeedGrid">
@@ -571,10 +560,6 @@ export default function Telemetry() {
           justify-content:space-between;
           align-items:flex-start;
           gap: 18px;
-        }
-
-        .telemetryHeroText{
-          max-width: 860px;
         }
 
         .compactAction{
