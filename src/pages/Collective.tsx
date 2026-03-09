@@ -25,12 +25,13 @@ type Coordinates = {
   longitude: number;
 };
 
-const STRIPE_PRICE_ID =
+const SOLAR_GOLD = "#f2bf57";
+const COLLECTIVE_PRICE_ID =
   (import.meta as any)?.env?.VITE_STRIPE_COLLECTIVE_PRICE_ID ||
   (import.meta as any)?.env?.VITE_STRIPE_PRICE_ID ||
-  "REPLACE_WITH_STRIPE_PRICE_ID";
+  "";
 
-const SOLAR_GOLD = "#f2bf57";
+const MONTHLY_PRICE_LABEL = "$15/month";
 
 function formatClock(value: string | null) {
   if (!value) return "—";
@@ -40,14 +41,6 @@ function formatClock(value: string | null) {
     hour: "numeric",
     minute: "2-digit",
   });
-}
-
-function formatLocationLabel(profile: ProfileRecord, coordsLabel: string | null) {
-  const city = String(profile?.city ?? "").trim();
-  const country = String(profile?.country ?? "").trim();
-  const parts = [city, country].filter(Boolean);
-  if (parts.length) return parts.join(", ");
-  return coordsLabel || "Location not set";
 }
 
 function toNumber(value: unknown) {
@@ -150,10 +143,18 @@ function getObservingRating(weather: WeatherSnapshot) {
 
   const bounded = Math.max(0, Math.min(100, Math.round(score)));
 
-  if (bounded >= 82) return { score: bounded, label: "Excellent", tone: "good" as const };
-  if (bounded >= 64) return { score: bounded, label: "Strong", tone: "good" as const };
-  if (bounded >= 44) return { score: bounded, label: "Mixed", tone: "warn" as const };
-  return { score: bounded, label: "Poor", tone: "bad" as const };
+  if (bounded >= 82) return { score: bounded, label: "Excellent" };
+  if (bounded >= 64) return { score: bounded, label: "Strong" };
+  if (bounded >= 44) return { score: bounded, label: "Mixed" };
+  return { score: bounded, label: "Poor" };
+}
+
+function formatLocationLabel(profile: ProfileRecord, coordsLabel: string | null) {
+  const city = String(profile?.city ?? "").trim();
+  const country = String(profile?.country ?? "").trim();
+  const parts = [city, country].filter(Boolean);
+  if (parts.length) return parts.join(", ");
+  return coordsLabel || "Location unavailable";
 }
 
 async function geocodePlace(query: string): Promise<Coordinates | null> {
@@ -192,8 +193,10 @@ async function fetchWeather(coords: Coordinates): Promise<WeatherSnapshot> {
   const solar = await sunriseRes.json();
 
   const current = forecast?.current ?? {};
-  const firstHourlyIndex = 0;
   const hourly = forecast?.hourly ?? {};
+  const currentTime = String(current.time ?? "");
+  const hourTimes: string[] = Array.isArray(hourly?.time) ? hourly.time : [];
+  const hourIndex = Math.max(0, hourTimes.indexOf(currentTime));
 
   return {
     temperatureC:
@@ -203,12 +206,12 @@ async function fetchWeather(coords: Coordinates): Promise<WeatherSnapshot> {
     cloudCover:
       typeof current.cloud_cover === "number" ? current.cloud_cover : null,
     precipitationProbability:
-      typeof hourly?.precipitation_probability?.[firstHourlyIndex] === "number"
-        ? hourly.precipitation_probability[firstHourlyIndex]
+      typeof hourly?.precipitation_probability?.[hourIndex] === "number"
+        ? hourly.precipitation_probability[hourIndex]
         : null,
     visibilityKm:
-      typeof hourly?.visibility?.[firstHourlyIndex] === "number"
-        ? hourly.visibility[firstHourlyIndex] / 1000
+      typeof hourly?.visibility?.[hourIndex] === "number"
+        ? hourly.visibility[hourIndex] / 1000
         : null,
     sunriseIso: solar?.results?.sunrise ?? null,
     sunsetIso: solar?.results?.sunset ?? null,
@@ -228,7 +231,6 @@ export default function Collective() {
   const [profile, setProfile] = useState<ProfileRecord>(null);
   const [isPro, setIsPro] = useState(false);
 
-  const [coords, setCoords] = useState<Coordinates | null>(null);
   const [coordsLabel, setCoordsLabel] = useState<string | null>(null);
   const [weather, setWeather] = useState<WeatherSnapshot | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(false);
@@ -270,12 +272,9 @@ export default function Collective() {
 
         const params = new URLSearchParams(window.location.search);
         if (params.get("success") === "1") {
-          setNotice("Membership activated. Your Collective access is now live.");
-          if (!nextProfile?.is_pro) {
-            setIsPro(true);
-          }
+          setNotice("Collective membership activated.");
         } else if (params.get("canceled") === "1") {
-          setNotice("Checkout was canceled. Your account remains unchanged.");
+          setNotice("Checkout canceled.");
         }
       } catch (err: any) {
         if (!active) return;
@@ -286,7 +285,6 @@ export default function Collective() {
     }
 
     loadPage();
-
     return () => {
       active = false;
     };
@@ -295,7 +293,7 @@ export default function Collective() {
   useEffect(() => {
     let cancelled = false;
 
-    async function resolveObservatoryContext() {
+    async function resolveContext() {
       if (!sessionUser) return;
 
       setWeatherLoading(true);
@@ -339,7 +337,6 @@ export default function Collective() {
 
         if (cancelled) return;
 
-        setCoords(nextCoords);
         setCoordsLabel(label);
 
         if (nextCoords) {
@@ -358,8 +355,7 @@ export default function Collective() {
       }
     }
 
-    resolveObservatoryContext();
-
+    resolveContext();
     return () => {
       cancelled = true;
     };
@@ -370,13 +366,10 @@ export default function Collective() {
     setError(null);
 
     try {
-      if (!STRIPE_PRICE_ID || STRIPE_PRICE_ID === "REPLACE_WITH_STRIPE_PRICE_ID") {
-        throw new Error(
-          "Set VITE_STRIPE_COLLECTIVE_PRICE_ID in Cloudflare Pages before enabling checkout."
-        );
+      if (!COLLECTIVE_PRICE_ID) {
+        throw new Error("Unable to open checkout right now.");
       }
-
-      await startCheckout(STRIPE_PRICE_ID);
+      await startCheckout(COLLECTIVE_PRICE_ID);
     } catch (err: any) {
       setError(err?.message ?? "Unable to start checkout.");
     } finally {
@@ -408,8 +401,6 @@ export default function Collective() {
     [profile, coordsLabel]
   );
 
-  const observationIndex = toNumber(profile?.observation_index);
-  const campaignImpact = toNumber(profile?.campaign_impact);
   const moonFraction = getMoonPhaseFraction(new Date());
   const moonPhaseLabel = getMoonPhaseLabel(moonFraction);
   const moonIllumination = getMoonIlluminationPercent(moonFraction);
@@ -426,12 +417,17 @@ export default function Collective() {
     }
   );
 
-  const premiumTools = [
+  const observationIndex = toNumber(profile?.observation_index);
+  const campaignImpact = toNumber(profile?.campaign_impact);
+  const teamCount = isPro ? Math.max(1, toNumber(profile?.team_count) || 2) : 0;
+  const reservedSlots = isPro ? 3 : 0;
+
+  const toolCards = [
     {
       title: "Observing Window",
       value: weather ? `${rating.label} · ${rating.score}/100` : "Awaiting conditions",
-      body:
-        "Scores current cloud cover, wind, precipitation risk, visibility, and moonlight so paying operators can decide whether a session is worth setting up.",
+      body: "Local conditions scored for session quality, wind, cloud cover, visibility, and moonlight.",
+      locked: false,
     },
     {
       title: "Site Conditions",
@@ -439,35 +435,68 @@ export default function Collective() {
         weather && weather.temperatureC != null
           ? `${Math.round(weather.temperatureC)}°C · ${getWeatherSummary(weather.weatherCode)}`
           : "No active weather snapshot",
-      body:
-        "Live local conditions for the active observing region, designed to support setup planning before dark.",
+      body: "Fast-read environment data for setup, teardown, and imaging decisions.",
+      locked: false,
     },
     {
       title: "Darkness Timing",
       value:
         weather?.sunsetIso || weather?.sunriseIso
           ? `${formatClock(weather.sunsetIso)} sunset · ${formatClock(weather.sunriseIso)} sunrise`
-          : "Set a location to unlock",
-      body:
-        "Fast solar timing so users can estimate when to begin visual sessions, imaging runs, calibration, and shutdown.",
+          : "Location needed",
+      body: "Sunset and sunrise timing for planning observation windows.",
+      locked: false,
     },
     {
       title: "Moonlight Impact",
       value: `${moonPhaseLabel} · ${moonIllumination}% illuminated`,
-      body:
-        "Quick lunar brightness reference for deep-sky planning, narrowband nights, and public outreach sessions.",
+      body: "Useful for deep-sky planning, contrast expectations, and target selection.",
+      locked: false,
     },
     {
       title: "Team Operations",
-      value: isPro ? "Enabled for subscribers" : "Locked",
-      body:
-        "Teams can be reserved for paid members, letting them coordinate observing runs, private collaboration, and group campaigns.",
+      value: isPro ? `${teamCount} teams enabled` : "Members only",
+      body: "Create private research teams, coordinate observing runs, and share workflow roles.",
+      locked: !isPro,
+    },
+    {
+      title: "Member Campaigns",
+      value: isPro ? `${reservedSlots} reserved entry slots` : "Members only",
+      body: "Join premium campaigns with limited operator capacity and controlled admission.",
+      locked: !isPro,
+    },
+    {
+      title: "Priority Queue",
+      value: isPro ? "Expedited validation" : "Members only",
+      body: "Subscriber submissions can be routed through faster review and campaign intake.",
+      locked: !isPro,
     },
     {
       title: "Public Identity Boost",
-      value: isPro ? "Solar gold public badge" : "Preview only",
-      body:
-        "Subscribers get premium visual treatment on public-facing surfaces, including name accents and upgraded identity presentation.",
+      value: isPro ? "Solar gold enabled" : "Members only",
+      body: "Premium names render in solar gold on public-facing areas of the platform.",
+      locked: !isPro,
+    },
+  ];
+
+  const campaignCards = [
+    {
+      title: "Near-Earth Object Watch",
+      status: "Open to members",
+      slots: isPro ? "2 of 12 slots remaining" : "Subscriber access required",
+      body: "Coordinated follow-up windows for fast-moving targets and shared reporting cadence.",
+    },
+    {
+      title: "Lunar Surface Imaging Sweep",
+      status: "Limited entry",
+      slots: isPro ? "5 of 20 slots remaining" : "Subscriber access required",
+      body: "Multi-operator lunar capture sessions built around timing, phase, and seeing quality.",
+    },
+    {
+      title: "Deep Sky Validation Network",
+      status: "Team-based",
+      slots: isPro ? "Invite teams currently onboarding" : "Subscriber access required",
+      body: "Structured campaigns for repeat observation, image comparison, and cross-checking findings.",
     },
   ];
 
@@ -479,7 +508,7 @@ export default function Collective() {
           position:relative;
           padding:28px;
           background:
-            radial-gradient(circle at top right, rgba(242, 191, 87, 0.14), transparent 28%),
+            radial-gradient(circle at top right, rgba(242, 191, 87, 0.13), transparent 28%),
             radial-gradient(circle at top left, rgba(92, 214, 255, 0.10), transparent 32%),
             linear-gradient(180deg, rgba(15, 24, 46, 0.96), rgba(9, 16, 31, 0.92));
         }
@@ -490,12 +519,12 @@ export default function Collective() {
           width:320px;
           height:320px;
           border-radius:50%;
-          background:radial-gradient(circle, rgba(242,191,87,0.18), transparent 65%);
+          background:radial-gradient(circle, rgba(242,191,87,0.17), transparent 65%);
           pointer-events:none;
         }
         .collectiveHeroGrid{
           display:grid;
-          grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.75fr);
+          grid-template-columns:minmax(0,1.25fr) minmax(320px,0.75fr);
           gap:18px;
           align-items:stretch;
           position:relative;
@@ -509,7 +538,7 @@ export default function Collective() {
           font-weight:800;
         }
         .collectiveLead{
-          max-width:780px;
+          max-width:800px;
           margin-top:14px;
           color:var(--muted);
           line-height:1.7;
@@ -526,8 +555,8 @@ export default function Collective() {
           gap:8px;
           padding:10px 14px;
           border-radius:999px;
-          border:1px solid rgba(242, 191, 87, 0.32);
-          background:rgba(242, 191, 87, 0.10);
+          border:1px solid rgba(242,191,87,0.30);
+          background:rgba(242,191,87,0.10);
           color:#ffe4a5;
           font-weight:700;
         }
@@ -537,7 +566,7 @@ export default function Collective() {
           gap:16px;
           padding:22px;
           border-radius:24px;
-          border:1px solid rgba(242, 191, 87, 0.18);
+          border:1px solid rgba(242,191,87,0.16);
           background:linear-gradient(180deg, rgba(15, 24, 46, 0.88), rgba(9, 14, 28, 0.94));
         }
         .collectiveStatusTop{
@@ -555,6 +584,7 @@ export default function Collective() {
           font-size:14px;
           color:var(--muted);
           font-weight:600;
+          margin-left:4px;
         }
         .collectiveMiniList{
           display:grid;
@@ -580,7 +610,7 @@ export default function Collective() {
         .collectiveMetricCard{
           padding:18px;
           border-radius:18px;
-          background:var(--panel-soft);
+          background:var(--panel-soft, rgba(255,255,255,0.03));
           border:1px solid rgba(92, 214, 255, 0.12);
         }
         .collectiveMetricValue{
@@ -590,7 +620,7 @@ export default function Collective() {
         }
         .collectiveTwoCol{
           display:grid;
-          grid-template-columns: minmax(0, 1.05fr) minmax(340px, 0.95fr);
+          grid-template-columns:minmax(0,1.05fr) minmax(340px,0.95fr);
           gap:18px;
         }
         .collectiveToolsGrid{
@@ -607,19 +637,51 @@ export default function Collective() {
           display:grid;
           gap:8px;
         }
-        .collectiveToolCard .toolValue{
+        .collectiveToolValue{
           font-size:18px;
           font-weight:800;
         }
-        .collectiveToolCard .toolBody{
+        .collectiveToolValue.live{
+          color:#94f5c7;
+        }
+        .collectiveToolValue.locked{
+          color:#ffcf78;
+        }
+        .collectiveToolBody{
           color:var(--muted);
           line-height:1.6;
         }
-        .toolLock{
-          color:#ffcf78;
+        .campaignPreviewGrid{
+          display:grid;
+          gap:14px;
+          margin-top:18px;
         }
-        .toolLive{
-          color:#94f5c7;
+        .campaignPreviewCard{
+          padding:18px;
+          border-radius:18px;
+          background:rgba(8, 14, 30, 0.72);
+          border:1px solid rgba(255,255,255,0.06);
+        }
+        .campaignPreviewTop{
+          display:flex;
+          align-items:center;
+          justify-content:space-between;
+          gap:12px;
+          flex-wrap:wrap;
+        }
+        .campaignPreviewTitle{
+          font-size:18px;
+          font-weight:800;
+        }
+        .campaignPreviewMeta{
+          margin-top:10px;
+          color:var(--muted);
+          line-height:1.6;
+        }
+        .campaignPreviewSlots{
+          margin-top:12px;
+          color:#ffe4a5;
+          font-weight:700;
         }
         .publicIdentityPreview{
           display:grid;
@@ -661,52 +723,26 @@ export default function Collective() {
           gap:8px;
           padding:10px 12px;
           border-radius:999px;
-          border:1px solid rgba(242,191,87,0.26);
+          border:1px solid rgba(242,191,87,0.24);
           background:rgba(242,191,87,0.08);
           color:#ffe4a5;
           font-weight:700;
         }
-        .collectiveTimeline{
+        .collectiveDataList{
           display:grid;
-          gap:12px;
-          margin-top:18px;
+          gap:10px;
         }
-        .timelineRow{
-          display:grid;
-          grid-template-columns:28px 1fr;
-          gap:12px;
-        }
-        .timelineDot{
-          width:28px;
-          height:28px;
-          border-radius:999px;
+        .collectiveDataRow{
           display:flex;
-          align-items:center;
-          justify-content:center;
-          border:1px solid rgba(242,191,87,0.26);
-          background:rgba(242,191,87,0.10);
-          color:#ffe4a5;
-          font-size:12px;
-          font-weight:800;
-        }
-        .timelineCard{
-          padding:14px 16px;
-          border-radius:16px;
+          justify-content:space-between;
+          gap:16px;
+          padding:12px 14px;
+          border-radius:14px;
           background:rgba(255,255,255,0.03);
           border:1px solid rgba(255,255,255,0.06);
         }
-        .timelineCard strong{
-          display:block;
-          margin-bottom:6px;
-        }
-        .collectiveHelperNote{
-          margin-top:14px;
-          padding:14px 16px;
-          border-radius:14px;
-          border:1px dashed rgba(242,191,87,0.22);
-          background:rgba(242,191,87,0.06);
-          color:#ffe9b7;
-          line-height:1.6;
+        .collectiveDataRow span{
+          color:var(--muted);
         }
         @media (max-width: 1024px){
           .collectiveHeroGrid,
@@ -736,15 +772,16 @@ export default function Collective() {
             <div className="collectiveKicker">PREMIUM MEMBERSHIP</div>
             <h1 className="pageTitle">Helvarix Research Collective</h1>
             <p className="collectiveLead">
-              A premium operator layer built for serious contributors. Collective members unlock
-              local observing intelligence, private teams, premium public identity treatment,
-              faster session planning, and subscription-aware tooling that fits your astronomy UI.
+              Premium access for serious operators. Collective membership unlocks team collaboration,
+              limited-entry campaigns, location-aware observing tools, priority workflows, and
+              solar-gold public identity across the platform.
             </p>
 
             <div className="collectiveHeroMeta">
               <span className="goldBadge">{isPro ? "COLLECTIVE ACTIVE" : "COLLECTIVE LOCKED"}</span>
-              <span className="statusBadge">Public solar-gold identity for paying members</span>
-              <span className="statusBadge">Weather + location aware observing tools</span>
+              <span className="statusBadge">Private teams</span>
+              <span className="statusBadge">Limited-entry campaigns</span>
+              <span className="statusBadge">Weather-aware tools</span>
             </div>
           </div>
 
@@ -753,7 +790,7 @@ export default function Collective() {
               <div>
                 <div className="sectionKicker">CURRENT PLAN</div>
                 <div className="collectivePrice">
-                  $12<small>/month</small>
+                  $15<small>/month</small>
                 </div>
               </div>
               <span className="statusBadge">{isPro ? "Subscriber" : "Free account"}</span>
@@ -791,20 +828,18 @@ export default function Collective() {
                   onClick={handleUpgrade}
                   disabled={busyCheckout}
                 >
-                  {busyCheckout ? "Opening Stripe…" : "Upgrade to Collective"}
+                  {busyCheckout ? "Opening Stripe…" : `Upgrade to Collective · ${MONTHLY_PRICE_LABEL}`}
                 </button>
               )}
 
-              {!isPro ? (
-                <button className="ghostBtn" type="button" onClick={handlePortal} disabled={busyPortal}>
-                  Billing portal
-                </button>
-              ) : null}
-            </div>
-
-            <div className="helperText">
-              Set <code>VITE_STRIPE_COLLECTIVE_PRICE_ID</code> in Cloudflare Pages and point it to
-              your recurring Stripe price before going live.
+              <button
+                className="ghostBtn"
+                type="button"
+                onClick={handlePortal}
+                disabled={busyPortal}
+              >
+                Billing portal
+              </button>
             </div>
           </aside>
         </div>
@@ -814,7 +849,7 @@ export default function Collective() {
         <section className="panel">
           <div className="stateTitle">Loading Collective…</div>
           <div className="stateText">
-            Restoring operator status, membership state, and observatory context.
+            Syncing membership and observatory context.
           </div>
         </section>
       ) : null}
@@ -826,7 +861,7 @@ export default function Collective() {
         <div className="sectionHeader">
           <div>
             <div className="sectionKicker">MEMBERSHIP SNAPSHOT</div>
-            <h2 className="sectionTitle">Status-aware premium surface</h2>
+            <h2 className="sectionTitle">Subscriber performance layer</h2>
           </div>
           <span className="statusBadge">{isPro ? "Unlocked" : "Preview mode"}</span>
         </div>
@@ -859,50 +894,38 @@ export default function Collective() {
         <section className="panel">
           <div className="sectionHeader">
             <div>
-              <div className="sectionKicker">PREMIUM TOOLS</div>
-              <h2 className="sectionTitle">Location-driven operator toolkit</h2>
+              <div className="sectionKicker">MEMBER TOOLS</div>
+              <h2 className="sectionTitle">Premium operator toolkit</h2>
               <p className="sectionText" style={{ marginTop: 10 }}>
-                This section is designed to feel useful even before upgrade, while clearly putting
-                the best tools behind the paywall.
+                Built for collaboration, field planning, and higher-value campaign participation.
               </p>
             </div>
             <span className="statusBadge">{weatherLoading ? "Syncing weather…" : "Live context"}</span>
           </div>
 
           <div className="collectiveToolsGrid">
-            {premiumTools.map((tool) => (
+            {toolCards.map((tool) => (
               <div key={tool.title} className="collectiveToolCard">
                 <div className="fieldLabel">{tool.title}</div>
-                <div className={`toolValue ${isPro ? "toolLive" : "toolLock"}`}>{tool.value}</div>
-                <div className="toolBody">{tool.body}</div>
+                <div className={`collectiveToolValue ${tool.locked ? "locked" : "live"}`}>
+                  {tool.value}
+                </div>
+                <div className="collectiveToolBody">{tool.body}</div>
               </div>
             ))}
           </div>
 
-          <div className="collectiveTimeline">
-            <div className="timelineRow">
-              <div className="timelineDot">1</div>
-              <div className="timelineCard">
-                <strong>Free operator</strong>
-                Can view the Collective pitch, see premium previews, and start Stripe checkout.
+          <div className="campaignPreviewGrid">
+            {campaignCards.map((campaign) => (
+              <div key={campaign.title} className="campaignPreviewCard">
+                <div className="campaignPreviewTop">
+                  <div className="campaignPreviewTitle">{campaign.title}</div>
+                  <span className="statusBadge">{campaign.status}</span>
+                </div>
+                <div className="campaignPreviewMeta">{campaign.body}</div>
+                <div className="campaignPreviewSlots">{campaign.slots}</div>
               </div>
-            </div>
-            <div className="timelineRow">
-              <div className="timelineDot">2</div>
-              <div className="timelineCard">
-                <strong>Subscription active</strong>
-                Stripe webhook marks <code>profiles.is_pro = true</code>, which unlocks the premium
-                tools and membership UI on this page.
-              </div>
-            </div>
-            <div className="timelineRow">
-              <div className="timelineDot">3</div>
-              <div className="timelineCard">
-                <strong>Public upgrade treatment</strong>
-                Paying members should render their public-facing names with the same solar-gold
-                treatment shown in the preview card on the right.
-              </div>
-            </div>
+            ))}
           </div>
         </section>
 
@@ -910,7 +933,7 @@ export default function Collective() {
           <div className="sectionHeader">
             <div>
               <div className="sectionKicker">PUBLIC IDENTITY</div>
-              <h2 className="sectionTitle">Solar-gold subscriber preview</h2>
+              <h2 className="sectionTitle">Subscriber presence</h2>
             </div>
             <span className="statusBadge">{isPro ? "Applied here" : "Preview only"}</span>
           </div>
@@ -928,8 +951,16 @@ export default function Collective() {
               {isPro ? <div className="identityChip">SOLAR GOLD MEMBER</div> : null}
             </div>
 
-            <div className="dataList compactList">
-              <div className="dataRow">
+            <div className="collectiveDataList">
+              <div className="collectiveDataRow">
+                <span>Team access</span>
+                <strong>{isPro ? `${teamCount} teams enabled` : "Locked"}</strong>
+              </div>
+              <div className="collectiveDataRow">
+                <span>Campaign entry</span>
+                <strong>{isPro ? `${reservedSlots} reserved slots` : "Locked"}</strong>
+              </div>
+              <div className="collectiveDataRow">
                 <span>Weather now</span>
                 <strong>
                   {weather
@@ -939,25 +970,19 @@ export default function Collective() {
                     : "Unavailable"}
                 </strong>
               </div>
-              <div className="dataRow">
+              <div className="collectiveDataRow">
                 <span>Cloud cover</span>
                 <strong>
                   {weather?.cloudCover != null ? `${Math.round(weather.cloudCover)}%` : "—"}
                 </strong>
               </div>
-              <div className="dataRow">
+              <div className="collectiveDataRow">
                 <span>Wind speed</span>
                 <strong>
                   {weather?.windKph != null ? `${Math.round(weather.windKph)} km/h` : "—"}
                 </strong>
               </div>
-              <div className="dataRow">
-                <span>Visibility</span>
-                <strong>
-                  {weather?.visibilityKm != null ? `${weather.visibilityKm.toFixed(1)} km` : "—"}
-                </strong>
-              </div>
-              <div className="dataRow">
+              <div className="collectiveDataRow">
                 <span>Sunset / Sunrise</span>
                 <strong>
                   {weather?.sunsetIso || weather?.sunriseIso
@@ -965,21 +990,10 @@ export default function Collective() {
                     : "—"}
                 </strong>
               </div>
-              <div className="dataRow">
+              <div className="collectiveDataRow">
                 <span>Moon illumination</span>
                 <strong>{moonIllumination}%</strong>
               </div>
-            </div>
-
-            <div className="collectiveHelperNote">
-              This page can preview the gold treatment, but to make subscriber names show up gold
-              everywhere public through the app, mirror this rule in your telemetry rows, public
-              profile header, leaderboard cells, and any feed item that renders a user name:
-              <br />
-              <br />
-              <code>
-                const isSolarGold = Boolean(profile?.is_pro); className={"{isSolarGold ? 'solarGoldText' : ''}"}
-              </code>
             </div>
           </div>
         </section>
