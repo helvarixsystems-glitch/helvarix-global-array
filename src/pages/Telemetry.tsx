@@ -32,6 +32,7 @@ type ProfileRecord = {
   city: string | null;
   country: string | null;
   avatar_url?: string | null;
+  is_pro?: boolean | null;
 };
 
 type FeedItem = {
@@ -50,10 +51,13 @@ type FeedItem = {
   role: string | null;
   location: string | null;
   avatarUrl: string | null;
+  isPro: boolean;
   raw: ObservationRecord;
 };
 
 type FeedFilter = "all" | "media" | "mine";
+
+const SOLAR_GOLD = "#f2bf57";
 
 function toTitleCase(value: string) {
   return value
@@ -191,7 +195,7 @@ async function loadProfiles(userIds: string[]) {
 
   const { data, error } = await supabase
     .from("profiles")
-    .select("id,callsign,role,city,country,avatar_url")
+    .select("id,callsign,role,city,country,avatar_url,is_pro")
     .in("id", userIds);
 
   if (error) throw error;
@@ -265,6 +269,7 @@ export default function Telemetry() {
             role: profile?.role ?? null,
             location: buildLocation(profile),
             avatarUrl: profile?.avatar_url ?? null,
+            isPro: Boolean(profile?.is_pro),
             raw: row,
           };
         });
@@ -343,12 +348,14 @@ export default function Telemetry() {
     const withMedia = items.filter((item) => item.media.length > 0).length;
     const verified = items.filter((item) => item.status === "Verified").length;
     const mine = items.filter((item) => item.userId === sessionUserId).length;
+    const proPosts = items.filter((item) => item.isPro).length;
 
     return {
       total: items.length,
       withMedia,
       verified,
       mine,
+      proPosts,
     };
   }, [items, sessionUserId]);
 
@@ -358,7 +365,11 @@ export default function Telemetry() {
         <div className="telemetryHeroTop">
           <div>
             <div className="eyebrow">COMMUNITY FEED</div>
-            <h1 className="pageTitle">Real observations, ready for real operators.</h1>
+            <h1 className="pageTitle">Live telemetry from the network.</h1>
+            <p className="telemetryIntro">
+              Real submissions, real operators, and solar-gold subscriber presence throughout the
+              public feed.
+            </p>
           </div>
 
           <Link className="primaryBtn compactAction" to="/submit">
@@ -421,8 +432,8 @@ export default function Telemetry() {
           </div>
 
           <div className="metricCard">
-            <div className="metricLabel">Your uploads</div>
-            <div className="metricValue">{stats.mine}</div>
+            <div className="metricLabel">Solar gold</div>
+            <div className="metricValue">{stats.proPosts}</div>
           </div>
         </div>
       </section>
@@ -451,21 +462,26 @@ export default function Telemetry() {
             return (
               <article
                 key={item.id}
-                className={`panel feedCard ${primaryMedia ? "withMedia" : "noMedia"}`}
+                className={`panel feedCard ${primaryMedia ? "withMedia" : "noMedia"} ${
+                  item.isPro ? "proFeedCard" : ""
+                }`}
               >
                 <div className="feedCardTop">
                   <div className="feedIdentity">
                     {item.avatarUrl ? (
                       <img className="feedAvatar" src={item.avatarUrl} alt={item.callsign} />
                     ) : (
-                      <div className="feedAvatar fallback">
+                      <div className={`feedAvatar fallback ${item.isPro ? "solarGoldAvatar" : ""}`}>
                         {item.callsign.slice(0, 1).toUpperCase()}
                       </div>
                     )}
 
                     <div>
                       <div className="feedCallsignRow">
-                        <span className="feedCallsign">{item.callsign}</span>
+                        <span className={`feedCallsign ${item.isPro ? "solarGoldText" : ""}`}>
+                          {item.callsign}
+                        </span>
+                        {item.isPro ? <span className="solarGoldChip">PRO</span> : null}
                         {isOwnPost ? <span className="statusPill tiny">You</span> : null}
                       </div>
 
@@ -552,14 +568,25 @@ export default function Telemetry() {
       <style>{`
         .telemetryHero{
           display:grid;
-          gap: 22px;
+          gap:22px;
+          background:
+            radial-gradient(circle at top right, rgba(242,191,87,0.08), transparent 30%),
+            radial-gradient(circle at top left, rgba(92,214,255,0.10), transparent 34%),
+            linear-gradient(180deg, rgba(12,19,36,0.96), rgba(8,13,24,0.96));
         }
 
         .telemetryHeroTop{
           display:flex;
           justify-content:space-between;
           align-items:flex-start;
-          gap: 18px;
+          gap:18px;
+        }
+
+        .telemetryIntro{
+          margin:12px 0 0;
+          color:var(--muted);
+          max-width:760px;
+          line-height:1.7;
         }
 
         .compactAction{
@@ -569,19 +596,19 @@ export default function Telemetry() {
 
         .telemetryControls{
           display:grid;
-          grid-template-columns: minmax(0, 1fr) auto;
-          gap: 14px;
+          grid-template-columns:minmax(0, 1fr) auto;
+          gap:14px;
           align-items:center;
         }
 
         .telemetryFilters{
           display:flex;
-          gap: 10px;
+          gap:10px;
           flex-wrap:wrap;
         }
 
         .telemetryStats{
-          margin-top: 4px;
+          margin-top:4px;
         }
 
         .inputShell{
@@ -590,62 +617,72 @@ export default function Telemetry() {
 
         .inputIcon{
           position:absolute;
-          left: 16px;
-          top: 50%;
-          transform: translateY(-50%);
-          color: var(--muted);
+          left:16px;
+          top:50%;
+          transform:translateY(-50%);
+          color:var(--muted);
           pointer-events:none;
         }
 
         .telemetryInput{
-          padding-left: 42px;
+          padding-left:42px;
         }
 
         .emptyTelemetryState{
-          padding: 30px;
+          padding:30px;
         }
 
         .telemetryFeedGrid{
           display:grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 18px;
+          grid-template-columns:repeat(2, minmax(0, 1fr));
+          gap:18px;
         }
 
         .feedCard{
           overflow:hidden;
-          padding: 0;
+          padding:0;
+          transition:transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+        }
+
+        .feedCard:hover{
+          transform:translateY(-2px);
+        }
+
+        .proFeedCard{
+          border-color:rgba(242,191,87,0.16);
+          box-shadow:0 0 0 1px rgba(242,191,87,0.05), 0 16px 40px rgba(0,0,0,0.22);
         }
 
         .feedCardTop,
         .feedContent{
-          padding: 20px 20px 0;
+          padding:20px 20px 0;
         }
 
         .feedCard.noMedia .feedContent{
-          padding-top: 20px;
+          padding-top:20px;
         }
 
         .feedIdentity{
           display:flex;
           align-items:center;
-          gap: 12px;
+          gap:12px;
           min-width:0;
         }
 
         .feedCardTop{
           display:flex;
           justify-content:space-between;
-          gap: 14px;
+          gap:14px;
           align-items:flex-start;
         }
 
         .feedAvatar{
-          width: 48px;
-          height: 48px;
+          width:48px;
+          height:48px;
           object-fit:cover;
-          border-radius: 999px;
-          border: 1px solid rgba(255,255,255,0.12);
-          background: rgba(255,255,255,0.05);
+          border-radius:999px;
+          border:1px solid rgba(255,255,255,0.12);
+          background:rgba(255,255,255,0.05);
           flex-shrink:0;
         }
 
@@ -653,62 +690,88 @@ export default function Telemetry() {
           display:grid;
           place-items:center;
           font-weight:800;
-          color: var(--cyan);
+          color:var(--cyan);
+        }
+
+        .solarGoldAvatar{
+          color:${SOLAR_GOLD};
+          border-color:rgba(242,191,87,0.32);
+          background:rgba(242,191,87,0.08);
+          box-shadow:0 0 22px rgba(242,191,87,0.12);
         }
 
         .feedCallsignRow{
           display:flex;
           align-items:center;
-          gap: 8px;
+          gap:8px;
           flex-wrap:wrap;
         }
 
         .feedCallsign{
           font-weight:800;
-          letter-spacing: 0.02em;
+          letter-spacing:0.02em;
+        }
+
+        .solarGoldText{
+          color:${SOLAR_GOLD};
+          text-shadow:0 0 18px rgba(242,191,87,0.18);
+        }
+
+        .solarGoldChip{
+          display:inline-flex;
+          align-items:center;
+          gap:8px;
+          padding:5px 10px;
+          border-radius:999px;
+          border:1px solid rgba(242,191,87,0.26);
+          background:rgba(242,191,87,0.10);
+          color:#ffe4a5;
+          font-weight:800;
+          font-size:11px;
+          letter-spacing:0.08em;
         }
 
         .feedMetaLine{
-          margin-top: 4px;
-          color: var(--muted);
-          font-size: 13px;
+          margin-top:4px;
+          color:var(--muted);
+          font-size:13px;
           line-height:1.4;
         }
 
         .statusPill.tiny{
-          padding: 4px 8px;
-          font-size: 11px;
+          padding:4px 8px;
+          font-size:11px;
         }
 
         .statusBadge.good{
-          color: #93ffd4;
-          border-color: rgba(55,211,156,0.28);
-          background: rgba(55,211,156,0.12);
+          color:#93ffd4;
+          border-color:rgba(55,211,156,0.28);
+          background:rgba(55,211,156,0.12);
         }
 
         .statusBadge.warn{
-          color: #ffd88a;
-          border-color: rgba(242,191,87,0.24);
-          background: rgba(242,191,87,0.12);
+          color:#ffd88a;
+          border-color:rgba(242,191,87,0.24);
+          background:rgba(242,191,87,0.12);
         }
 
         .statusBadge.bad{
-          color: #ff9cb1;
-          border-color: rgba(255,111,145,0.24);
-          background: rgba(255,111,145,0.12);
+          color:#ff9cb1;
+          border-color:rgba(255,111,145,0.24);
+          background:rgba(255,111,145,0.12);
         }
 
         .statusBadge.neutral{
-          color: var(--muted);
+          color:var(--muted);
         }
 
         .feedMediaWrap{
-          margin-top: 18px;
-          aspect-ratio: 4 / 3;
-          width: 100%;
-          border-top: 1px solid rgba(255,255,255,0.06);
-          border-bottom: 1px solid rgba(255,255,255,0.06);
-          background: linear-gradient(180deg, rgba(11,18,34,0.95), rgba(7,12,24,0.95));
+          margin-top:18px;
+          aspect-ratio:4 / 3;
+          width:100%;
+          border-top:1px solid rgba(255,255,255,0.06);
+          border-bottom:1px solid rgba(255,255,255,0.06);
+          background:linear-gradient(180deg, rgba(11,18,34,0.95), rgba(7,12,24,0.95));
           overflow:hidden;
         }
 
@@ -725,7 +788,7 @@ export default function Telemetry() {
           display:flex;
           flex-direction:column;
           justify-content:flex-end;
-          padding: 22px;
+          padding:22px;
           background:
             radial-gradient(circle at top left, rgba(92,214,255,0.16), transparent 38%),
             radial-gradient(circle at bottom right, rgba(143,114,255,0.18), transparent 36%),
@@ -733,114 +796,114 @@ export default function Telemetry() {
         }
 
         .placeholderMode{
-          font-size: 12px;
-          letter-spacing: 0.24em;
+          font-size:12px;
+          letter-spacing:0.24em;
           text-transform:uppercase;
-          color: var(--cyan);
+          color:var(--cyan);
         }
 
         .placeholderTarget{
-          margin-top: 12px;
-          font-size: clamp(22px, 3vw, 32px);
-          font-weight: 800;
-          max-width: 70%;
+          margin-top:12px;
+          font-size:clamp(22px, 3vw, 32px);
+          font-weight:800;
+          max-width:70%;
         }
 
         .placeholderSub{
-          margin-top: 8px;
-          color: var(--muted);
+          margin-top:8px;
+          color:var(--muted);
         }
 
         .feedContent{
-          padding-bottom: 20px;
+          padding-bottom:20px;
         }
 
         .feedHeadline{
           display:flex;
           align-items:flex-start;
           justify-content:space-between;
-          gap: 18px;
+          gap:18px;
         }
 
         .feedTarget{
-          margin: 8px 0 0;
-          font-size: clamp(22px, 2.4vw, 30px);
+          margin:8px 0 0;
+          font-size:clamp(22px, 2.4vw, 30px);
           line-height:1.05;
         }
 
         .feedTimeBlock{
           text-align:right;
           font-size:13px;
-          color: var(--muted);
+          color:var(--muted);
           flex-shrink:0;
           line-height:1.4;
         }
 
         .feedTimeBlock > div{
-          color: var(--text);
+          color:var(--text);
           font-weight:700;
-          margin-bottom: 4px;
+          margin-bottom:4px;
         }
 
         .feedNotes{
-          margin: 14px 0 0;
-          color: var(--muted);
+          margin:14px 0 0;
+          color:var(--muted);
           line-height:1.7;
         }
 
         .feedDetailsGrid{
           display:grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 12px;
-          margin-top: 18px;
+          grid-template-columns:repeat(2, minmax(0, 1fr));
+          gap:12px;
+          margin-top:18px;
         }
 
         .feedDetailCard{
-          padding: 14px;
-          border-radius: 16px;
-          background: rgba(255,255,255,0.03);
-          border: 1px solid rgba(255,255,255,0.06);
+          padding:14px;
+          border-radius:16px;
+          background:rgba(255,255,255,0.03);
+          border:1px solid rgba(255,255,255,0.06);
           display:grid;
-          gap: 8px;
+          gap:8px;
         }
 
         .feedDetailCard span{
-          color: var(--muted);
-          font-size: 12px;
+          color:var(--muted);
+          font-size:12px;
           text-transform:uppercase;
           letter-spacing:0.16em;
         }
 
         .feedDetailCard strong{
           line-height:1.5;
-          font-size: 14px;
+          font-size:14px;
         }
 
         .feedDetailCard.full{
-          grid-column: 1 / -1;
+          grid-column:1 / -1;
         }
 
         .feedTags{
-          margin-top: 16px;
+          margin-top:16px;
           display:flex;
           flex-wrap:wrap;
-          gap: 10px;
+          gap:10px;
         }
 
         .feedTag{
           display:inline-flex;
           align-items:center;
-          padding: 8px 12px;
-          border-radius: 999px;
-          font-size: 12px;
-          border: 1px solid rgba(92,214,255,0.16);
-          background: rgba(92,214,255,0.08);
-          color: var(--text);
+          padding:8px 12px;
+          border-radius:999px;
+          font-size:12px;
+          border:1px solid rgba(92,214,255,0.16);
+          background:rgba(92,214,255,0.08);
+          color:var(--text);
         }
 
         @media (max-width: 960px){
           .telemetryFeedGrid{
-            grid-template-columns: 1fr;
+            grid-template-columns:1fr;
           }
         }
 
@@ -849,12 +912,12 @@ export default function Telemetry() {
           .telemetryControls,
           .feedHeadline,
           .feedCardTop{
-            grid-template-columns: 1fr;
+            grid-template-columns:1fr;
             display:grid;
           }
 
           .telemetryControls{
-            gap: 12px;
+            gap:12px;
           }
 
           .feedTimeBlock{
@@ -865,18 +928,18 @@ export default function Telemetry() {
         @media (max-width: 640px){
           .telemetryStats,
           .feedDetailsGrid{
-            grid-template-columns: 1fr;
+            grid-template-columns:1fr;
           }
 
           .placeholderTarget{
-            max-width: 100%;
+            max-width:100%;
           }
 
           .feedCardTop,
           .feedContent,
           .emptyTelemetryState{
-            padding-left: 16px;
-            padding-right: 16px;
+            padding-left:16px;
+            padding-right:16px;
           }
         }
       `}</style>
