@@ -711,58 +711,60 @@ export default function Profile() {
           </div>
 
           <article className="profilePreviewCard">
-            <div className="profilePreviewTop">
-              {avatarUrl ? (
-                <img className="profilePreviewAvatar" src={avatarUrl} alt={displayName} />
-              ) : (
-                <div className="profilePreviewAvatar fallback">
-                  {displayName.slice(0, 1).toUpperCase()}
+            <div className="profilePreviewContent">
+              <div className="profilePreviewTop">
+                {avatarUrl ? (
+                  <img className="profilePreviewAvatar" src={avatarUrl} alt={displayName} />
+                ) : (
+                  <div className="profilePreviewAvatar fallback">
+                    {displayName.slice(0, 1).toUpperCase()}
+                  </div>
+                )}
+
+                <div>
+                  <div className="profilePreviewName">{displayName}</div>
+                  <div className="profilePreviewSub">
+                    {[computedRank.role, location].filter(Boolean).join(" • ") || "Cadet Operator"}
+                  </div>
+                  {form.callsign.trim() ? (
+                    <div className="profilePreviewCallsign">{form.callsign.trim()}</div>
+                  ) : null}
                 </div>
+              </div>
+
+              {form.bio.trim() ? (
+                <p className="pageText previewBodyText">{form.bio.trim()}</p>
+              ) : (
+                <p className="pageText previewBodyText muted">
+                  Add a bio so other operators can understand your focus and setup.
+                </p>
               )}
 
-              <div>
-                <div className="profilePreviewName">{displayName}</div>
-                <div className="profilePreviewSub">
-                  {[computedRank.role, location].filter(Boolean).join(" • ") || "Cadet Operator"}
+              <div className="previewMetaGrid">
+                <div className="previewMetaCard">
+                  <span>Observatory</span>
+                  <strong>{form.observatoryName.trim() || "Not set"}</strong>
                 </div>
-                {form.callsign.trim() ? (
-                  <div className="profilePreviewCallsign">{form.callsign.trim()}</div>
-                ) : null}
+                <div className="previewMetaCard">
+                  <span>Primary mode</span>
+                  <strong>{form.primaryMode || "Visual"}</strong>
+                </div>
+                <div className="previewMetaCard full">
+                  <span>Equipment</span>
+                  <strong>{form.equipmentSummary.trim() || "No equipment summary set."}</strong>
+                </div>
               </div>
+
+              {specialties.length > 0 ? (
+                <div className="feedTags">
+                  {specialties.map((item) => (
+                    <span key={item} className="feedTag">
+                      {item}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
             </div>
-
-            {form.bio.trim() ? (
-              <p className="pageText previewBodyText">{form.bio.trim()}</p>
-            ) : (
-              <p className="pageText previewBodyText muted">
-                Add a bio so other operators can understand your focus and setup.
-              </p>
-            )}
-
-            <div className="previewMetaGrid">
-              <div className="previewMetaCard">
-                <span>Observatory</span>
-                <strong>{form.observatoryName.trim() || "Not set"}</strong>
-              </div>
-              <div className="previewMetaCard">
-                <span>Primary mode</span>
-                <strong>{form.primaryMode || "Visual"}</strong>
-              </div>
-              <div className="previewMetaCard full">
-                <span>Equipment</span>
-                <strong>{form.equipmentSummary.trim() || "No equipment summary set."}</strong>
-              </div>
-            </div>
-
-            {specialties.length > 0 ? (
-              <div className="feedTags">
-                {specialties.map((item) => (
-                  <span key={item} className="feedTag">
-                    {item}
-                  </span>
-                ))}
-              </div>
-            ) : null}
           </article>
         </section>
       </div>
@@ -1109,20 +1111,24 @@ export default function Profile() {
         .livePreviewPanel{
           display:flex;
           flex-direction:column;
+          overflow:hidden;
         }
 
         .profilePreviewCard{
-          display:grid;
-          gap: 18px;
+          flex:1;
+          display:block;
           padding: 18px;
           border-radius: 20px;
           border: 1px solid rgba(92,214,255,0.12);
           background: linear-gradient(180deg, rgba(12,20,38,0.92), rgba(8,14,28,0.92));
+          overflow:hidden;
         }
 
-        .livePreviewPanel .profilePreviewCard{
-          flex:1;
-          min-height:100%;
+        .profilePreviewContent{
+          display:grid;
+          gap: 18px;
+          height:100%;
+          align-content:start;
         }
 
         .profilePreviewTop{
