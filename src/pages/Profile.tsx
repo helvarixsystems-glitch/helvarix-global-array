@@ -25,6 +25,7 @@ type ProfileRow = {
   accent_pref?: string | null;
   observation_index?: number | null;
   campaign_impact?: number | null;
+  is_pro?: boolean | null;
 };
 
 type FormState = {
@@ -54,6 +55,7 @@ type ProfileStats = {
 };
 
 const PROFILE_MEDIA_BUCKET = "profile-media";
+const SOLAR_GOLD = "#f2bf57";
 
 const INITIAL_FORM: FormState = {
   callsign: "",
@@ -309,6 +311,7 @@ export default function Profile() {
   const [sessionUserId, setSessionUserId] = useState<string | null>(null);
   const [storedOI, setStoredOI] = useState<number>(0);
   const [storedCI, setStoredCI] = useState<number>(0);
+  const [isPro, setIsPro] = useState(false);
 
   const [avatarUrl, setAvatarUrl] = useState<string>("");
   const [bannerUrl, setBannerUrl] = useState<string>("");
@@ -358,7 +361,8 @@ export default function Profile() {
                 visibility,
                 accent_pref,
                 observation_index,
-                campaign_impact
+                campaign_impact,
+                is_pro
               `)
               .eq("id", user.id)
               .maybeSingle(),
@@ -404,6 +408,7 @@ export default function Profile() {
         setBannerUrl(profile?.banner_url ?? "");
         setStoredOI(oi);
         setStoredCI(ci);
+        setIsPro(Boolean(profile?.is_pro));
 
         const verified = observationRows.filter((obs) => {
           const raw = String(obs.verification_status ?? obs.status ?? "").toLowerCase();
@@ -518,6 +523,7 @@ export default function Profile() {
 
   const displayName =
     form.displayName.trim() || (sessionUserId ? generateAlias(sessionUserId) : "Array Operator");
+
   const location = [form.city.trim(), form.country.trim()].filter(Boolean).join(", ");
   const specialties = inputToArray(form.specialties);
   const computedRank = getOperatorLevel(storedOI, storedCI);
@@ -529,7 +535,7 @@ export default function Profile() {
   }, [form.accentPref]);
 
   return (
-    <div className={`pageStack profilePage ${accentClass}`}>
+    <div className={`pageStack profilePage ${accentClass} ${isPro ? "profilePro" : ""}`}>
       <section className="heroPanel profileHero">
         <div
           className="profileHeroBanner"
@@ -544,16 +550,24 @@ export default function Profile() {
           <div className="profileHeroContent">
             <div className="profileIdentity">
               {avatarUrl ? (
-                <img className="profileAvatar" src={avatarUrl} alt={displayName} />
+                <img
+                  className={`profileAvatar ${isPro ? "profileAvatarPro" : ""}`}
+                  src={avatarUrl}
+                  alt={displayName}
+                />
               ) : (
-                <div className="profileAvatar fallback">
+                <div className={`profileAvatar fallback ${isPro ? "profileAvatarPro profileAvatarFallbackPro" : ""}`}>
                   {displayName.slice(0, 1).toUpperCase()}
                 </div>
               )}
 
               <div className="profileIdentityText">
                 <div className="eyebrow">OPERATOR PROFILE</div>
-                <h1 className="pageTitle">{displayName}</h1>
+                <div className="profileTitleRow">
+                  <h1 className={`pageTitle ${isPro ? "solarGoldText" : ""}`}>{displayName}</h1>
+                  {isPro ? <span className="solarGoldChip">SOLAR GOLD MEMBER</span> : null}
+                </div>
+
                 <div className="profileMetaRow">
                   <span className="statusBadge profileMetaBadge">
                     {form.callsign.trim() || "No callsign set"}
@@ -562,24 +576,25 @@ export default function Profile() {
                   <span>Level {computedRank.level}</span>
                   {location ? <span>{location}</span> : null}
                 </div>
+
                 {form.bio.trim() ? <p className="pageText profileBio">{form.bio.trim()}</p> : null}
               </div>
             </div>
 
             <div className="profileHeroStats">
-              <div className="metricCard">
+              <div className={`metricCard ${isPro ? "proMetricCard" : ""}`}>
                 <div className="metricLabel">Observation Index</div>
                 <div className="metricValue">{storedOI.toLocaleString()}</div>
               </div>
-              <div className="metricCard">
+              <div className={`metricCard ${isPro ? "proMetricCard" : ""}`}>
                 <div className="metricLabel">Campaign Impact</div>
                 <div className="metricValue">{storedCI.toLocaleString()}</div>
               </div>
-              <div className="metricCard">
+              <div className={`metricCard ${isPro ? "proMetricCard" : ""}`}>
                 <div className="metricLabel">Observations</div>
                 <div className="metricValue">{stats.observations.toLocaleString()}</div>
               </div>
-              <div className="metricCard">
+              <div className={`metricCard ${isPro ? "proMetricCard" : ""}`}>
                 <div className="metricLabel">Verified</div>
                 <div className="metricValue">{stats.verified.toLocaleString()}</div>
               </div>
@@ -710,27 +725,45 @@ export default function Profile() {
             </div>
           </div>
 
-          <article className="profilePreviewCard">
+          <article className={`profilePreviewCard ${isPro ? "profilePreviewCardPro" : ""}`}>
             <div className="profilePreviewContent">
               <div className="profilePreviewTop">
                 {avatarUrl ? (
-                  <img className="profilePreviewAvatar" src={avatarUrl} alt={displayName} />
+                  <img
+                    className={`profilePreviewAvatar ${isPro ? "profilePreviewAvatarPro" : ""}`}
+                    src={avatarUrl}
+                    alt={displayName}
+                  />
                 ) : (
-                  <div className="profilePreviewAvatar fallback">
+                  <div
+                    className={`profilePreviewAvatar fallback ${
+                      isPro ? "profilePreviewAvatarPro profileAvatarFallbackPro" : ""
+                    }`}
+                  >
                     {displayName.slice(0, 1).toUpperCase()}
                   </div>
                 )}
 
                 <div>
-                  <div className="profilePreviewName">{displayName}</div>
+                  <div className={`profilePreviewName ${isPro ? "solarGoldText" : ""}`}>
+                    {displayName}
+                  </div>
                   <div className="profilePreviewSub">
                     {[computedRank.role, location].filter(Boolean).join(" • ") || "Cadet Operator"}
                   </div>
                   {form.callsign.trim() ? (
-                    <div className="profilePreviewCallsign">{form.callsign.trim()}</div>
+                    <div className={`profilePreviewCallsign ${isPro ? "profilePreviewCallsignPro" : ""}`}>
+                      {form.callsign.trim()}
+                    </div>
                   ) : null}
                 </div>
               </div>
+
+              {isPro ? (
+                <div className="profilePreviewMemberRow">
+                  <span className="solarGoldChip">SOLAR GOLD MEMBER</span>
+                </div>
+              ) : null}
 
               {form.bio.trim() ? (
                 <p className="pageText previewBodyText">{form.bio.trim()}</p>
@@ -741,15 +774,15 @@ export default function Profile() {
               )}
 
               <div className="previewMetaGrid">
-                <div className="previewMetaCard">
+                <div className={`previewMetaCard ${isPro ? "previewMetaCardPro" : ""}`}>
                   <span>Observatory</span>
                   <strong>{form.observatoryName.trim() || "Not set"}</strong>
                 </div>
-                <div className="previewMetaCard">
+                <div className={`previewMetaCard ${isPro ? "previewMetaCardPro" : ""}`}>
                   <span>Primary mode</span>
                   <strong>{form.primaryMode || "Visual"}</strong>
                 </div>
-                <div className="previewMetaCard full">
+                <div className={`previewMetaCard full ${isPro ? "previewMetaCardPro" : ""}`}>
                   <span>Equipment</span>
                   <strong>{form.equipmentSummary.trim() || "No equipment summary set."}</strong>
                 </div>
@@ -758,7 +791,7 @@ export default function Profile() {
               {specialties.length > 0 ? (
                 <div className="feedTags">
                   {specialties.map((item) => (
-                    <span key={item} className="feedTag">
+                    <span key={item} className={`feedTag ${isPro ? "feedTagPro" : ""}`}>
                       {item}
                     </span>
                   ))}
@@ -923,25 +956,25 @@ export default function Profile() {
         </div>
 
         <div className="gridFour compactStats profileStatsGrid">
-          <div className="metricCard">
+          <div className={`metricCard ${isPro ? "proMetricCard" : ""}`}>
             <div className="metricLabel">Observations</div>
             <div className="metricValue">{stats.observations}</div>
           </div>
-          <div className="metricCard">
+          <div className={`metricCard ${isPro ? "proMetricCard" : ""}`}>
             <div className="metricLabel">Verified</div>
             <div className="metricValue">{stats.verified}</div>
           </div>
-          <div className="metricCard">
+          <div className={`metricCard ${isPro ? "proMetricCard" : ""}`}>
             <div className="metricLabel">Media posts</div>
             <div className="metricValue">{stats.mediaPosts}</div>
           </div>
-          <div className="metricCard">
+          <div className={`metricCard ${isPro ? "proMetricCard" : ""}`}>
             <div className="metricLabel">Last active</div>
             <div className="metricValue smallMetric">{formatDate(stats.latestAt)}</div>
           </div>
         </div>
 
-        <div className="profileActionCard">
+        <div className={`profileActionCard ${isPro ? "profileActionCardPro" : ""}`}>
           <div>
             <div className="sectionKicker">BILLING + SAVE</div>
             <h3 className="profileActionTitle">Manage your operator account</h3>
@@ -979,6 +1012,25 @@ export default function Profile() {
       </section>
 
       <style>{`
+        .solarGoldText{
+          color:${SOLAR_GOLD};
+          text-shadow:0 0 18px rgba(242,191,87,0.18);
+        }
+
+        .solarGoldChip{
+          display:inline-flex;
+          align-items:center;
+          gap:8px;
+          padding:10px 12px;
+          border-radius:999px;
+          border:1px solid rgba(242,191,87,0.24);
+          background:rgba(242,191,87,0.08);
+          color:#ffe4a5;
+          font-weight:700;
+          letter-spacing:0.03em;
+          white-space:nowrap;
+        }
+
         .profileHeroBanner{
           border-radius: 24px;
           overflow: hidden;
@@ -990,6 +1042,13 @@ export default function Profile() {
           background-size: cover;
           background-position: center;
           border: 1px solid rgba(255,255,255,0.06);
+        }
+
+        .profilePro .profileHeroBanner{
+          border-color: rgba(242,191,87,0.18);
+          box-shadow:
+            0 28px 80px rgba(242,191,87,0.06),
+            0 0 0 1px rgba(242,191,87,0.04);
         }
 
         .profileHeroContent{
@@ -1017,12 +1076,29 @@ export default function Profile() {
           flex-shrink:0;
         }
 
+        .profileAvatarPro{
+          border-color: rgba(242,191,87,0.34);
+          box-shadow: 0 0 26px rgba(242,191,87,0.14);
+        }
+
         .profileAvatar.fallback,
         .profilePreviewAvatar.fallback{
           display:grid;
           place-items:center;
           font-weight:900;
           color: var(--cyan);
+        }
+
+        .profileAvatarFallbackPro{
+          color:${SOLAR_GOLD};
+          background:rgba(242,191,87,0.08);
+        }
+
+        .profileTitleRow{
+          display:flex;
+          flex-wrap:wrap;
+          align-items:center;
+          gap:12px;
         }
 
         .profileMetaRow{
@@ -1048,6 +1124,11 @@ export default function Profile() {
           display:grid;
           grid-template-columns: repeat(4, minmax(0, 1fr));
           gap: 12px;
+        }
+
+        .proMetricCard{
+          border-color: rgba(242,191,87,0.14);
+          box-shadow: inset 0 1px 0 rgba(242,191,87,0.03);
         }
 
         .profileMainGrid{
@@ -1124,6 +1205,13 @@ export default function Profile() {
           overflow:hidden;
         }
 
+        .profilePreviewCardPro{
+          border-color: rgba(242,191,87,0.18);
+          background:
+            radial-gradient(circle at top right, rgba(242,191,87,0.08), transparent 34%),
+            linear-gradient(180deg, rgba(12,20,38,0.92), rgba(8,14,28,0.92));
+        }
+
         .profilePreviewContent{
           display:grid;
           gap: 18px;
@@ -1145,6 +1233,11 @@ export default function Profile() {
           border: 1px solid rgba(255,255,255,0.12);
           background: rgba(255,255,255,0.05);
           flex-shrink:0;
+        }
+
+        .profilePreviewAvatarPro{
+          border-color: rgba(242,191,87,0.28);
+          box-shadow: 0 0 20px rgba(242,191,87,0.12);
         }
 
         .profilePreviewName{
@@ -1170,6 +1263,16 @@ export default function Profile() {
           background: rgba(92,214,255,0.08);
         }
 
+        .profilePreviewCallsignPro{
+          border-color: rgba(242,191,87,0.20);
+          background: rgba(242,191,87,0.09);
+          color: #ffe4a5;
+        }
+
+        .profilePreviewMemberRow{
+          margin-top: -4px;
+        }
+
         .previewBodyText{
           margin: 0;
         }
@@ -1191,6 +1294,11 @@ export default function Profile() {
           border: 1px solid rgba(255,255,255,0.06);
           display:grid;
           gap: 8px;
+        }
+
+        .previewMetaCardPro{
+          border-color: rgba(242,191,87,0.12);
+          background: rgba(255,255,255,0.035);
         }
 
         .previewMetaCard span{
@@ -1229,6 +1337,13 @@ export default function Profile() {
             linear-gradient(180deg, rgba(11,18,34,0.88), rgba(8,14,28,0.92));
         }
 
+        .profileActionCardPro{
+          border-color: rgba(242,191,87,0.16);
+          background:
+            radial-gradient(circle at top left, rgba(242,191,87,0.06), transparent 42%),
+            linear-gradient(180deg, rgba(11,18,34,0.88), rgba(8,14,28,0.92));
+        }
+
         .profileActionTitle{
           margin: 6px 0 0;
           font-size: 24px;
@@ -1258,6 +1373,11 @@ export default function Profile() {
           color: var(--text);
         }
 
+        .feedTagPro{
+          border-color: rgba(242,191,87,0.16);
+          background: rgba(242,191,87,0.07);
+        }
+
         .accentViolet .profileHeroBanner{
           box-shadow: 0 28px 80px rgba(124,58,237,0.10);
         }
@@ -1270,6 +1390,14 @@ export default function Profile() {
           box-shadow: 0 28px 80px rgba(246,196,83,0.10);
         }
 
+        .profilePro.accentViolet .profileHeroBanner,
+        .profilePro.accentCyan .profileHeroBanner,
+        .profilePro.accentAmber .profileHeroBanner{
+          box-shadow:
+            0 28px 80px rgba(242,191,87,0.08),
+            0 0 0 1px rgba(242,191,87,0.04);
+        }
+
         .accentCyan .profilePreviewCallsign,
         .accentCyan .feedTag{
           border-color: rgba(41,217,255,0.20);
@@ -1280,6 +1408,12 @@ export default function Profile() {
         .accentAmber .feedTag{
           border-color: rgba(246,196,83,0.20);
           background: rgba(246,196,83,0.10);
+        }
+
+        .profilePro .profilePreviewCallsignPro,
+        .profilePro .feedTagPro{
+          border-color: rgba(242,191,87,0.20);
+          background: rgba(242,191,87,0.08);
         }
 
         @media (max-width: 980px){
@@ -1302,6 +1436,10 @@ export default function Profile() {
           .profileAvatar{
             width: 92px;
             height: 92px;
+          }
+
+          .profileTitleRow{
+            align-items:flex-start;
           }
         }
 
