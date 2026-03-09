@@ -13,6 +13,7 @@ type ProfileRow = {
   avatar_url?: string | null;
   observation_index?: number | null;
   campaign_impact?: number | null;
+  is_pro?: boolean | null;
 };
 
 type CampaignRow = {
@@ -59,6 +60,7 @@ type UserScoreRow = {
   role: string | null;
   location: string | null;
   avatarUrl: string | null;
+  isPro: boolean;
 
   oi: number;
   ci: number;
@@ -338,7 +340,7 @@ export default function Leaderboard() {
           await Promise.all([
             supabase
               .from("profiles")
-              .select("id,callsign,role,city,country,avatar_url,observation_index,campaign_impact"),
+              .select("id,callsign,role,city,country,avatar_url,observation_index,campaign_impact,is_pro"),
             supabase.from("observations").select("*").order("created_at", { ascending: false }).limit(3000),
           ]);
 
@@ -380,6 +382,7 @@ export default function Leaderboard() {
             role: profile?.role ?? null,
             location: buildLocation(profile),
             avatarUrl: profile?.avatar_url ?? null,
+            isPro: Boolean(profile?.is_pro),
             oi: 0,
             ci: 0,
             observations: 0,
@@ -416,6 +419,7 @@ export default function Leaderboard() {
             role: profile.role ?? null,
             location: buildLocation(profile),
             avatarUrl: profile.avatar_url ?? null,
+            isPro: Boolean(profile.is_pro),
             oi: Number(profile.observation_index ?? 0),
             ci: Number(profile.campaign_impact ?? 0),
             observations: 0,
@@ -478,6 +482,7 @@ export default function Leaderboard() {
       observations: rows.reduce((sum, row) => sum + row.observations, 0),
       totalOI: rows.reduce((sum, row) => sum + row.oi, 0),
       totalCI: rows.reduce((sum, row) => sum + row.ci, 0),
+      proOperators: rows.filter((row) => row.isPro).length,
     };
   }, [rows]);
 
@@ -537,8 +542,8 @@ export default function Leaderboard() {
             <div className="metricValue">{myOiRank ? formatRank(myOiRank) : "—"}</div>
           </div>
           <div className="metricCard">
-            <div className="metricLabel">Your CI rank</div>
-            <div className="metricValue">{myCiRank ? formatRank(myCiRank) : "—"}</div>
+            <div className="metricLabel">Solar gold</div>
+            <div className="metricValue">{totals.proOperators.toLocaleString()}</div>
           </div>
         </div>
       </section>
@@ -664,7 +669,7 @@ export default function Leaderboard() {
                 return (
                   <article
                     key={`${tab}-${row.userId}`}
-                    className={`topRankCard rank-${row.rank} ${isSelf ? "isSelf" : ""}`}
+                    className={`topRankCard rank-${row.rank} ${isSelf ? "isSelf" : ""} ${row.isPro ? "isPro" : ""}`}
                   >
                     <div className="topRankTop">
                       <div className="topRankNumber">{row.rank}</div>
@@ -675,16 +680,19 @@ export default function Leaderboard() {
 
                     <div className="topRankIdentity">
                       {row.avatarUrl ? (
-                        <img className="topRankAvatar" src={row.avatarUrl} alt={row.callsign} />
+                        <img className={`topRankAvatar ${row.isPro ? "goldAvatarRing" : ""}`} src={row.avatarUrl} alt={row.callsign} />
                       ) : (
-                        <div className="topRankAvatar fallback">
+                        <div className={`topRankAvatar fallback ${row.isPro ? "goldAvatarRing goldFallbackAvatar" : ""}`}>
                           {row.callsign.slice(0, 1).toUpperCase()}
                         </div>
                       )}
 
                       <div>
-                        <div className={`topRankName ${isSelf ? "selfName" : ""}`}>
-                          {row.callsign}
+                        <div className="rankNameRow">
+                          <div className={`topRankName ${isSelf ? "selfName" : ""} ${row.isPro ? "solarGoldText" : ""}`}>
+                            {row.callsign}
+                          </div>
+                          {row.isPro ? <span className="solarGoldChip">PRO</span> : null}
                         </div>
                         <div className="topRankSub">
                           {[row.role, row.location].filter(Boolean).join(" • ") || "Network Operator"}
@@ -735,22 +743,25 @@ export default function Leaderboard() {
                   return (
                     <div
                       key={`${tab}-row-${row.userId}`}
-                      className={`ladderRow ${isSelf ? "isSelf" : ""}`}
+                      className={`ladderRow ${isSelf ? "isSelf" : ""} ${row.isPro ? "isPro" : ""}`}
                     >
                       <div className="ladderRank">{row.rank}</div>
 
                       <div className="ladderIdentity">
                         {row.avatarUrl ? (
-                          <img className="ladderAvatar" src={row.avatarUrl} alt={row.callsign} />
+                          <img className={`ladderAvatar ${row.isPro ? "goldAvatarRing" : ""}`} src={row.avatarUrl} alt={row.callsign} />
                         ) : (
-                          <div className="ladderAvatar fallback">
+                          <div className={`ladderAvatar fallback ${row.isPro ? "goldAvatarRing goldFallbackAvatar" : ""}`}>
                             {row.callsign.slice(0, 1).toUpperCase()}
                           </div>
                         )}
 
                         <div className="ladderIdentityText">
-                          <div className={`ladderName ${isSelf ? "selfName" : ""}`}>
-                            {row.callsign}
+                          <div className="rankNameRow">
+                            <div className={`ladderName ${isSelf ? "selfName" : ""} ${row.isPro ? "solarGoldText" : ""}`}>
+                              {row.callsign}
+                            </div>
+                            {row.isPro ? <span className="solarGoldChip compact">PRO</span> : null}
                           </div>
                           <div className="ladderSub">
                             {[row.role, row.location].filter(Boolean).join(" • ") || "Network Operator"}
@@ -846,6 +857,15 @@ export default function Leaderboard() {
           box-shadow: 0 24px 70px rgba(124,58,237,0.14);
         }
 
+        .topRankCard.isPro{
+          border-color: rgba(242,191,87,0.22);
+          box-shadow: 0 22px 56px rgba(242,191,87,0.08);
+        }
+
+        .topRankCard.isSelf.isPro{
+          box-shadow: 0 24px 70px rgba(124,58,237,0.14), 0 0 0 1px rgba(242,191,87,0.08);
+        }
+
         .topRankTop{
           display:flex;
           justify-content:space-between;
@@ -897,6 +917,48 @@ export default function Leaderboard() {
         .ladderName{
           font-weight: 800;
           letter-spacing: 0.01em;
+        }
+
+        .solarGoldText{
+          color: #f2bf57;
+          text-shadow: 0 0 18px rgba(242,191,87,0.18);
+        }
+
+        .solarGoldChip{
+          display:inline-flex;
+          align-items:center;
+          gap:8px;
+          padding:6px 10px;
+          border-radius:999px;
+          border:1px solid rgba(242,191,87,0.24);
+          background:rgba(242,191,87,0.08);
+          color:#ffe4a5;
+          font-weight:800;
+          font-size:11px;
+          letter-spacing:0.08em;
+          white-space:nowrap;
+        }
+
+        .solarGoldChip.compact{
+          padding:4px 8px;
+          font-size:10px;
+        }
+
+        .rankNameRow{
+          display:flex;
+          align-items:center;
+          gap:8px;
+          flex-wrap:wrap;
+        }
+
+        .goldAvatarRing{
+          border-color: rgba(242,191,87,0.32);
+          box-shadow: 0 0 22px rgba(242,191,87,0.12);
+        }
+
+        .goldFallbackAvatar{
+          color: #f2bf57;
+          background: rgba(242,191,87,0.08);
         }
 
         .selfName{
@@ -959,6 +1021,15 @@ export default function Leaderboard() {
         .ladderRow.isSelf{
           border-color: rgba(124,58,237,0.32);
           background: linear-gradient(90deg, rgba(124,58,237,0.10), rgba(255,255,255,0.03));
+        }
+
+        .ladderRow.isPro{
+          border-color: rgba(242,191,87,0.18);
+          background: linear-gradient(90deg, rgba(242,191,87,0.06), rgba(255,255,255,0.03));
+        }
+
+        .ladderRow.isSelf.isPro{
+          background: linear-gradient(90deg, rgba(124,58,237,0.10), rgba(242,191,87,0.05), rgba(255,255,255,0.03));
         }
 
         .ladderRank{
