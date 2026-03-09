@@ -595,7 +595,7 @@ export default function Profile() {
         </section>
       ) : null}
 
-      <div className="gridTwo profileMainGrid">
+      <div className="gridTwo profileMainGrid profileTopGrid">
         <section className="panel">
           <div className="sectionHeader">
             <div>
@@ -702,7 +702,7 @@ export default function Profile() {
           </div>
         </section>
 
-        <section className="panel">
+        <section className="panel livePreviewPanel">
           <div className="sectionHeader">
             <div>
               <div className="sectionKicker">LIVE PREVIEW</div>
@@ -1052,6 +1052,10 @@ export default function Profile() {
           align-items:start;
         }
 
+        .profileTopGrid{
+          align-items: stretch;
+        }
+
         .fullWidthPanel{
           width: 100%;
         }
@@ -1102,6 +1106,11 @@ export default function Profile() {
           border:0;
         }
 
+        .livePreviewPanel{
+          display:flex;
+          flex-direction:column;
+        }
+
         .profilePreviewCard{
           display:grid;
           gap: 18px;
@@ -1109,6 +1118,11 @@ export default function Profile() {
           border-radius: 20px;
           border: 1px solid rgba(92,214,255,0.12);
           background: linear-gradient(180deg, rgba(12,20,38,0.92), rgba(8,14,28,0.92));
+        }
+
+        .livePreviewPanel .profilePreviewCard{
+          flex:1;
+          min-height:100%;
         }
 
         .profilePreviewTop{
@@ -1269,6 +1283,10 @@ export default function Profile() {
         }
 
         @media (max-width: 820px){
+          .profileTopGrid{
+            align-items:start;
+          }
+
           .profileIdentity,
           .profilePreviewTop{
             display:grid;
