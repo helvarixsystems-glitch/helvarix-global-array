@@ -299,6 +299,26 @@ function StatCard({ label, value, hint }: { label: string; value: string; hint?:
   );
 }
 
+function TelemetryCard({
+  label,
+  value,
+  hint,
+  compact = false,
+}: {
+  label: string;
+  value: string;
+  hint: string;
+  compact?: boolean;
+}) {
+  return (
+    <div className={`telemetryCard ${compact ? "compact" : ""}`}>
+      <div className="eyebrow">{label}</div>
+      <div className="telemetryValue">{value}</div>
+      <div className="telemetrySub">{hint}</div>
+    </div>
+  );
+}
+
 export default function Home() {
   const navigate = useNavigate();
 
@@ -668,6 +688,7 @@ export default function Home() {
           font-weight: 800;
           cursor: pointer;
           transition: transform .12s ease, border-color .12s ease, background .12s ease;
+          flex-shrink: 0;
         }
 
         .btn:hover{
@@ -818,6 +839,17 @@ export default function Home() {
           gap: 12px;
           margin-bottom: 16px;
           min-width: 0;
+        }
+
+        @media (max-width: 640px){
+          .sectionHeader{
+            flex-direction: column;
+            align-items: stretch;
+          }
+
+          .sectionHeader .btn{
+            width: 100%;
+          }
         }
 
         .sectionTitle{
@@ -1099,34 +1131,37 @@ export default function Home() {
 
         .telemetryGrid{
           display:grid;
-          grid-template-columns: repeat(4, minmax(0, 1fr));
-          gap: 14px;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 12px;
           min-width: 0;
         }
 
-        @media (max-width: 980px){
-          .telemetryGrid{
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-          }
-        }
-
-        @media (max-width: 600px){
+        @media (max-width: 560px){
           .telemetryGrid{
             grid-template-columns: 1fr;
           }
         }
 
         .telemetryCard{
-          padding: 18px;
-          border-radius: 20px;
+          padding: 16px;
+          border-radius: 18px;
           border: 1px solid var(--home-stroke);
           background: var(--home-panel);
           min-width: 0;
+          min-height: 148px;
+          display:flex;
+          flex-direction:column;
+          justify-content:flex-start;
+        }
+
+        .telemetryCard.compact{
+          min-height: 132px;
         }
 
         .telemetryValue{
           margin-top: 10px;
-          font-size: 22px;
+          font-size: clamp(18px, 2.2vw, 22px);
+          line-height: 1.08;
           font-weight: 900;
           overflow-wrap: anywhere;
           word-break: break-word;
@@ -1135,9 +1170,25 @@ export default function Home() {
         .telemetrySub{
           margin-top: 8px;
           font-size: 13px;
+          line-height: 1.4;
           color: var(--home-muted);
           overflow-wrap: anywhere;
           word-break: break-word;
+        }
+
+        @media (max-width: 820px){
+          .telemetryCard{
+            min-height: 132px;
+            padding: 14px;
+          }
+
+          .telemetryValue{
+            font-size: clamp(16px, 4.6vw, 20px);
+          }
+
+          .telemetrySub{
+            font-size: 12px;
+          }
         }
 
         .footerAction{
@@ -1407,65 +1458,55 @@ export default function Home() {
               </div>
 
               <div className="telemetryGrid">
-                <div className="telemetryCard">
-                  <div className="eyebrow">Sky State</div>
-                  <div className="telemetryValue">{telemetry?.skyState ?? "UNKNOWN"}</div>
-                  <div className="telemetrySub">Based on profile latitude and longitude</div>
-                </div>
+                <TelemetryCard
+                  label="Sky State"
+                  value={telemetry?.skyState ?? "UNKNOWN"}
+                  hint="Based on profile latitude and longitude"
+                />
 
-                <div className="telemetryCard">
-                  <div className="eyebrow">Sun Altitude</div>
-                  <div className="telemetryValue">
-                    {telemetry ? `${telemetry.sunAltitude.toFixed(1)}°` : "—"}
-                  </div>
-                  <div className="telemetrySub">Lower values favor night collection</div>
-                </div>
+                <TelemetryCard
+                  label="Sun Altitude"
+                  value={telemetry ? `${telemetry.sunAltitude.toFixed(1)}°` : "—"}
+                  hint="Lower values favor night collection"
+                />
 
-                <div className="telemetryCard">
-                  <div className="eyebrow">Photon Flux Stability</div>
-                  <div className="telemetryValue">
-                    {telemetry ? `${telemetry.photonFluxStabilityPct}%` : "—"}
-                  </div>
-                  <div className="telemetrySub">Estimated readiness window</div>
-                </div>
+                <TelemetryCard
+                  label="Photon Flux Stability"
+                  value={telemetry ? `${telemetry.photonFluxStabilityPct}%` : "—"}
+                  hint="Estimated readiness window"
+                />
 
-                <div className="telemetryCard">
-                  <div className="eyebrow">Geomagnetic Index</div>
-                  <div className="telemetryValue">{telemetry?.kpLabel ?? "UNKNOWN"}</div>
-                  <div className="telemetrySub">
-                    {telemetry?.kp != null ? `Kp ${telemetry.kp}` : "No index available"}
-                  </div>
-                </div>
+                <TelemetryCard
+                  label="Geomagnetic Index"
+                  value={telemetry?.kpLabel ?? "UNKNOWN"}
+                  hint={telemetry?.kp != null ? `Kp ${telemetry.kp}` : "No index available"}
+                />
 
-                <div className="telemetryCard">
-                  <div className="eyebrow">Collection Start</div>
-                  <div className="telemetryValue">
-                    {telemetry?.optimalCollectionStartLocal ?? "Pending"}
-                  </div>
-                  <div className="telemetrySub">Suggested start for useful observation</div>
-                </div>
+                <TelemetryCard
+                  label="Collection Start"
+                  value={telemetry?.optimalCollectionStartLocal ?? "Pending"}
+                  hint="Suggested start for useful observation"
+                  compact
+                />
 
-                <div className="telemetryCard">
-                  <div className="eyebrow">Night Remaining</div>
-                  <div className="telemetryValue">
-                    {telemetry?.nightRemaining ?? "Unavailable"}
-                  </div>
-                  <div className="telemetrySub">Simple planning estimate</div>
-                </div>
+                <TelemetryCard
+                  label="Night Remaining"
+                  value={telemetry?.nightRemaining ?? "Unavailable"}
+                  hint="Simple planning estimate"
+                  compact
+                />
 
-                <div className="telemetryCard">
-                  <div className="eyebrow">Local Time</div>
-                  <div className="telemetryValue">{telemetry?.localTime ?? "—"}</div>
-                  <div className="telemetrySub">Computed on page load</div>
-                </div>
+                <TelemetryCard
+                  label="Local Time"
+                  value={telemetry?.localTime ?? "—"}
+                  hint="Computed on page load"
+                />
 
-                <div className="telemetryCard">
-                  <div className="eyebrow">Sector Coordinates</div>
-                  <div className="telemetryValue" style={{ fontSize: "18px" }}>
-                    {sectorCoords}
-                  </div>
-                  <div className="telemetrySub">Update in profile to localize this section</div>
-                </div>
+                <TelemetryCard
+                  label="Sector Coordinates"
+                  value={sectorCoords}
+                  hint="Update in profile to localize this section"
+                />
               </div>
             </div>
           </div>
