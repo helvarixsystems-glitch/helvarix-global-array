@@ -1,6 +1,7 @@
 import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
+import { canUserSeeCampaign } from "../lib/campaignAccess";
 
 type SubmissionMode = "visual" | "radio";
 type CampaignCadence = "DAILY" | "WEEKLY" | "GLOBAL" | "RESEARCH" | "COLLECTIVE" | "UNKNOWN";
@@ -13,6 +14,7 @@ type ProfileRow = {
   country: string | null;
   avatar_url?: string | null;
   observation_index?: number | null;
+  guild_access?: boolean | null;
 };
 
 type CampaignRow = {
@@ -25,6 +27,7 @@ type CampaignRow = {
   tags?: string[] | null;
   description?: string | null;
   is_active?: boolean | null;
+  access_tier?: string | null;
 };
 
 type FormState = {
@@ -222,29 +225,37 @@ export default function Submit() {
         if (!mounted) return;
         setSessionUserId(user?.id ?? null);
 
+        let loadedProfile: ProfileRow | null = null;
+
         if (user) {
           const { data } = await supabase
             .from("profiles")
-            .select("id,callsign,role,city,country,avatar_url,observation_index")
+            .select("id,callsign,role,city,country,avatar_url,observation_index,guild_access")
             .eq("id", user.id)
             .maybeSingle();
 
-          if (mounted && data) setProfile(data as ProfileRow);
+          if (mounted && data) {
+            loadedProfile = data as ProfileRow;
+            setProfile(loadedProfile);
+          }
         }
 
         try {
           const { data, error: campaignsError } = await supabase
             .from("campaigns")
-            .select("id,title,name,cadence,scope,type,tags,description,is_active")
+            .select("id,title,name,cadence,scope,type,tags,description,is_active,access_tier")
             .order("is_active", { ascending: false })
             .order("title", { ascending: true });
 
           if (campaignsError) throw campaignsError;
 
           if (mounted) {
-            const usable = ((data as CampaignRow[] | null) ?? []).filter(
-              (campaign) => campaign.is_active !== false
+            const usable = ((data as CampaignRow[] | null) ?? []).filter((campaign) =>
+              canUserSeeCampaign(campaign, {
+                guild_access: loadedProfile?.guild_access,
+              })
             );
+
             setCampaigns(usable);
           }
         } catch (campaignErr) {
@@ -905,62 +916,54 @@ export default function Submit() {
           flex-wrap:wrap;
         }
 
-        .campaignInfoText,
+        .campaignInfoText{
+          color: var(--text);
+        }
+
         .campaignInfoSub{
           color: var(--muted);
+          font-size: 14px;
           line-height: 1.6;
-        }
-
-        .campaignInfoSub{
-          font-size: 13px;
-        }
-
-        .campaignBadge{
-          white-space: nowrap;
         }
 
         .helperError{
           margin-top: 10px;
-          color: #ff9cb1;
+          color: #ff8c8c;
           font-size: 13px;
         }
 
         .uploadPanel{
           display:grid;
-          gap: 16px;
+          gap: 18px;
         }
 
         .uploadDropZone{
           display:block;
-          cursor:pointer;
+          border: 1px dashed rgba(92,214,255,0.22);
+          border-radius: 18px;
+          padding: 20px;
+          background: rgba(255,255,255,0.025);
+          cursor: pointer;
+        }
+
+        .srOnlyInput{
+          display:none;
         }
 
         .uploadDropZoneInner{
-          border: 1px dashed rgba(92,214,255,0.28);
-          background: rgba(255,255,255,0.025);
-          border-radius: 18px;
-          padding: 24px;
           display:grid;
-          gap: 10px;
-          transition: border-color 0.18s ease, transform 0.18s ease, background 0.18s ease;
-        }
-
-        .uploadDropZone:hover .uploadDropZoneInner{
-          border-color: rgba(92,214,255,0.48);
-          background: rgba(92,214,255,0.04);
-          transform: translateY(-1px);
+          gap: 8px;
         }
 
         .uploadIcon{
           width: 42px;
           height: 42px;
+          border-radius: 12px;
           display:grid;
           place-items:center;
-          border-radius: 999px;
-          background: rgba(92,214,255,0.08);
+          background: rgba(92,214,255,0.12);
           border: 1px solid rgba(92,214,255,0.16);
-          font-size: 18px;
-          color: var(--cyan);
+          font-size: 20px;
         }
 
         .uploadTitle{
@@ -968,20 +971,8 @@ export default function Submit() {
           line-height: 1.5;
         }
 
-        .srOnlyInput{
-          position:absolute;
-          width:1px;
-          height:1px;
-          padding:0;
-          margin:-1px;
-          overflow:hidden;
-          clip:rect(0,0,0,0);
-          white-space:nowrap;
-          border:0;
-        }
-
         .uploadEmpty{
-          padding: 18px;
+          padding: 16px;
         }
 
         .assetList{
@@ -991,8 +982,8 @@ export default function Submit() {
 
         .assetRow{
           display:grid;
-          grid-template-columns: 84px minmax(0,1fr) auto;
-          gap: 14px;
+          grid-template-columns: 72px minmax(0,1fr) auto;
+          gap: 12px;
           align-items:center;
           padding: 12px;
           border-radius: 16px;
@@ -1001,30 +992,28 @@ export default function Submit() {
         }
 
         .assetThumb{
-          width: 84px;
-          height: 84px;
+          width: 72px;
+          height: 72px;
           border-radius: 14px;
           overflow:hidden;
           background: rgba(255,255,255,0.04);
           display:grid;
           place-items:center;
-          border: 1px solid rgba(255,255,255,0.06);
         }
 
         .assetImage{
           width:100%;
           height:100%;
           object-fit:cover;
-          display:block;
         }
 
         .assetFileBadge{
           font-size: 12px;
-          text-transform: uppercase;
-          color: var(--cyan);
-          letter-spacing: 0.12em;
-          padding: 10px;
-          text-align:center;
+          font-weight: 700;
+          padding: 8px 10px;
+          border-radius: 999px;
+          background: rgba(92,214,255,0.08);
+          border: 1px solid rgba(92,214,255,0.16);
         }
 
         .assetMeta{
@@ -1032,43 +1021,33 @@ export default function Submit() {
         }
 
         .assetName{
-          font-weight: 700;
+          font-weight:700;
+          white-space:nowrap;
           overflow:hidden;
           text-overflow:ellipsis;
-          white-space:nowrap;
         }
 
         .assetSub{
-          margin-top: 6px;
+          margin-top: 4px;
           color: var(--muted);
           font-size: 13px;
-          line-height: 1.4;
-        }
-
-        .removeAssetBtn{
-          width:auto;
-          white-space:nowrap;
         }
 
         .submitActionCard{
           display:grid;
-          gap: 18px;
-          padding: 18px;
+          gap: 16px;
+          padding: 16px;
           border-radius: 18px;
-          border: 1px solid rgba(92,214,255,0.14);
-          background:
-            radial-gradient(circle at top left, rgba(92,214,255,0.07), transparent 42%),
-            linear-gradient(180deg, rgba(11,18,34,0.88), rgba(8,14,28,0.92));
+          border: 1px solid rgba(255,255,255,0.06);
+          background: rgba(255,255,255,0.03);
         }
 
         .submitActionTitle{
-          margin: 6px 0 0;
-          font-size: 24px;
-          line-height: 1.1;
+          margin: 4px 0 0;
         }
 
         .submitActionText{
-          margin: 10px 0 0;
+          margin: 8px 0 0;
           color: var(--muted);
           line-height: 1.6;
         }
@@ -1077,114 +1056,100 @@ export default function Submit() {
           display:flex;
           gap: 12px;
           flex-wrap:wrap;
-          align-items:center;
-        }
-
-        .actionPrimary,
-        .actionSecondary{
-          width:auto;
-          white-space:nowrap;
         }
 
         .submitPreviewCard{
-          overflow:hidden;
-          border-radius: var(--radius-md);
-          border: 1px solid rgba(92,214,255,0.12);
-          background: linear-gradient(180deg, rgba(12,20,38,0.9), rgba(8,14,28,0.92));
+          display:grid;
+          gap: 18px;
         }
 
-        .submitPreviewHeader,
-        .submitPreviewBody{
-          padding: 18px;
+        .submitPreviewHeader{
+          display:flex;
+          justify-content:space-between;
+          align-items:flex-start;
+          gap: 12px;
         }
 
         .submitIdentity{
           display:flex;
-          gap: 12px;
           align-items:center;
+          gap: 14px;
         }
 
         .submitAvatar{
-          width: 46px;
-          height: 46px;
-          border-radius: 999px;
+          width: 56px;
+          height: 56px;
+          border-radius: 50%;
           object-fit:cover;
-          border: 1px solid rgba(255,255,255,0.12);
-          background: rgba(255,255,255,0.05);
         }
 
         .submitAvatar.fallback{
           display:grid;
           place-items:center;
-          font-weight:800;
-          color: var(--cyan);
+          font-weight:700;
+          background: rgba(92,214,255,0.12);
+          border: 1px solid rgba(92,214,255,0.18);
         }
 
         .submitCallsignRow{
           display:flex;
-          gap: 8px;
           align-items:center;
+          gap: 10px;
           flex-wrap:wrap;
         }
 
         .submitIdentitySub{
           margin-top: 4px;
           color: var(--muted);
-          font-size: 13px;
-          line-height:1.4;
-        }
-
-        .statusPill.tiny{
-          padding: 5px 8px;
-          font-size: 11px;
+          font-size: 14px;
         }
 
         .submitPreviewMedia{
-          aspect-ratio: 4 / 3;
-          border-top: 1px solid rgba(255,255,255,0.06);
-          border-bottom: 1px solid rgba(255,255,255,0.06);
-          background: linear-gradient(180deg, rgba(11,18,34,0.95), rgba(7,12,24,0.95));
+          border-radius: 18px;
           overflow:hidden;
+          background: rgba(255,255,255,0.03);
+          border: 1px solid rgba(255,255,255,0.06);
+          min-height: 260px;
+          display:grid;
+          place-items:center;
         }
 
         .submitPreviewImage{
           width:100%;
           height:100%;
           object-fit:cover;
-          display:block;
         }
 
         .submitPreviewPlaceholder{
           width:100%;
-          height:100%;
-          display:flex;
-          flex-direction:column;
-          justify-content:flex-end;
-          padding: 22px;
-          background:
-            radial-gradient(circle at top left, rgba(92,214,255,0.16), transparent 38%),
-            radial-gradient(circle at bottom right, rgba(143,114,255,0.18), transparent 36%),
-            linear-gradient(180deg, rgba(14,22,44,0.96), rgba(8,14,28,0.98));
+          min-height: 260px;
+          display:grid;
+          place-items:center;
+          gap: 10px;
+          padding: 24px;
+          text-align:center;
         }
 
         .placeholderMode{
           font-size: 12px;
-          letter-spacing: 0.24em;
-          text-transform:uppercase;
-          color: var(--cyan);
+          letter-spacing: 0.18em;
+          color: var(--muted);
         }
 
         .placeholderTarget{
-          margin-top: 12px;
-          font-size: clamp(22px, 3vw, 32px);
-          font-weight: 800;
+          font-size: 28px;
+          font-weight: 700;
+          line-height: 1.08;
           max-width: 80%;
-          line-height:1.08;
         }
 
         .placeholderSub{
-          margin-top: 8px;
           color: var(--muted);
+        }
+
+        .submitPreviewBody{
+          display:grid;
+          gap: 0;
         }
 
         .submitPreviewTarget{
