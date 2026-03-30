@@ -230,7 +230,8 @@ function computeSectorTelemetry(lat: number | null, lon: number | null): SectorT
       : 5;
 
   let kpLabel: SectorTelemetry["kpLabel"] = "LOW";
-  if (kp >= 5) kpLabel = "HIGH";
+  if (kp >= 7) kpLabel = "SEVERE";
+  else if (kp >= 5) kpLabel = "HIGH";
   else if (kp >= 3) kpLabel = "MODERATE";
 
   let optimalCollectionStartLocal: string | null = null;
@@ -550,11 +551,13 @@ export default function Home() {
             radial-gradient(900px 540px at 100% 0%, rgba(157,124,255,.16), transparent 50%),
             linear-gradient(180deg, #040711 0%, #070b14 40%, #050812 100%);
           padding: 26px 18px 110px;
+          box-sizing: border-box;
         }
 
         .homeContainer{
           max-width: 1180px;
           margin: 0 auto;
+          width: 100%;
         }
 
         .eyebrow{
@@ -566,7 +569,7 @@ export default function Home() {
 
         .hero{
           display:grid;
-          grid-template-columns: 1.4fr .9fr;
+          grid-template-columns: minmax(0, 1.4fr) minmax(0, .9fr);
           gap: 16px;
           margin-bottom: 18px;
         }
@@ -578,6 +581,8 @@ export default function Home() {
         }
 
         .panel{
+          min-width: 0;
+          overflow: hidden;
           border: 1px solid var(--home-stroke);
           background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
           border-radius: 24px;
@@ -608,12 +613,14 @@ export default function Home() {
           gap:16px;
           align-items:flex-start;
           flex-wrap:wrap;
+          min-width: 0;
         }
 
         .brandWrap{
           display:flex;
           gap:14px;
           align-items:flex-start;
+          min-width: 0;
         }
 
         .brandMark{
@@ -634,6 +641,7 @@ export default function Home() {
           font-weight: 900;
           margin: 8px 0 8px;
           letter-spacing: -.03em;
+          overflow-wrap: anywhere;
         }
 
         .heroText{
@@ -641,6 +649,7 @@ export default function Home() {
           color: var(--home-muted);
           line-height: 1.55;
           font-size: 14px;
+          overflow-wrap: anywhere;
         }
 
         .actionRow{
@@ -677,6 +686,7 @@ export default function Home() {
           display:flex;
           flex-direction:column;
           gap: 14px;
+          min-width: 0;
         }
 
         .statusCard{
@@ -684,18 +694,21 @@ export default function Home() {
           border-radius: 18px;
           background: var(--home-panel-2);
           border: 1px solid rgba(255,255,255,.06);
+          min-width: 0;
         }
 
         .statusValue{
           margin-top: 8px;
           font-size: 24px;
           font-weight: 900;
+          overflow-wrap: anywhere;
         }
 
         .statusSub{
           margin-top: 6px;
           color: var(--home-muted);
           font-size: 13px;
+          overflow-wrap: anywhere;
         }
 
         .chip{
@@ -711,6 +724,7 @@ export default function Home() {
           border: 1px solid rgba(255,255,255,.08);
           background: rgba(255,255,255,.04);
           color: var(--home-text);
+          flex-shrink: 0;
         }
 
         .chip.cyan{
@@ -734,14 +748,14 @@ export default function Home() {
 
         .statsGrid{
           display:grid;
-          grid-template-columns: repeat(4, 1fr);
+          grid-template-columns: repeat(4, minmax(0, 1fr));
           gap: 14px;
           margin-bottom: 18px;
         }
 
         @media (max-width: 980px){
           .statsGrid{
-            grid-template-columns: repeat(2, 1fr);
+            grid-template-columns: repeat(2, minmax(0, 1fr));
           }
         }
 
@@ -756,6 +770,7 @@ export default function Home() {
           border-radius: 22px;
           border: 1px solid var(--home-stroke);
           background: var(--home-panel);
+          min-width: 0;
         }
 
         .statValue{
@@ -763,20 +778,26 @@ export default function Home() {
           font-size: 28px;
           font-weight: 900;
           letter-spacing: -.02em;
+          overflow-wrap: anywhere;
         }
 
         .statHint{
           margin-top: 8px;
           color: var(--home-muted);
           font-size: 13px;
+          overflow-wrap: anywhere;
         }
 
         .mainGrid{
           display:grid;
-          grid-template-columns: 1.2fr .8fr;
+          grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
           gap: 16px;
           margin-bottom: 16px;
           align-items:start;
+        }
+
+        .mainGrid > *{
+          min-width: 0;
         }
 
         @media (max-width: 980px){
@@ -787,6 +808,7 @@ export default function Home() {
 
         .section{
           padding: 20px;
+          min-width: 0;
         }
 
         .sectionHeader{
@@ -795,6 +817,7 @@ export default function Home() {
           justify-content:space-between;
           gap: 12px;
           margin-bottom: 16px;
+          min-width: 0;
         }
 
         .sectionTitle{
@@ -803,6 +826,7 @@ export default function Home() {
           line-height: 1.08;
           font-weight: 900;
           letter-spacing: -.02em;
+          overflow-wrap: anywhere;
         }
 
         .sectionText{
@@ -811,11 +835,13 @@ export default function Home() {
           line-height: 1.5;
           font-size: 14px;
           max-width: 620px;
+          overflow-wrap: anywhere;
         }
 
         .campaignSectionBody{
           display:grid;
           gap: 14px;
+          min-width: 0;
         }
 
         .campaignHero{
@@ -825,6 +851,7 @@ export default function Home() {
             radial-gradient(circle at top right, rgba(56,242,255,.08), transparent 38%),
             linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
           padding: 18px;
+          min-width: 0;
         }
 
         .campaignHeroTop{
@@ -833,6 +860,7 @@ export default function Home() {
           gap:12px;
           align-items:flex-start;
           flex-wrap:wrap;
+          min-width: 0;
         }
 
         .campaignName{
@@ -840,6 +868,7 @@ export default function Home() {
           font-size: 26px;
           font-weight: 900;
           line-height: 1.05;
+          overflow-wrap: anywhere;
         }
 
         .campaignDesc{
@@ -848,18 +877,19 @@ export default function Home() {
           line-height: 1.55;
           font-size: 14px;
           max-width: 720px;
+          overflow-wrap: anywhere;
         }
 
         .metaGrid{
           display:grid;
-          grid-template-columns: repeat(4, 1fr);
+          grid-template-columns: repeat(4, minmax(0, 1fr));
           gap: 10px;
           margin-top: 16px;
         }
 
         @media (max-width: 900px){
           .metaGrid{
-            grid-template-columns: repeat(2, 1fr);
+            grid-template-columns: repeat(2, minmax(0, 1fr));
           }
         }
 
@@ -874,16 +904,19 @@ export default function Home() {
           border-radius: 16px;
           background: rgba(255,255,255,.03);
           border: 1px solid rgba(255,255,255,.06);
+          min-width: 0;
         }
 
         .metaValue{
           margin-top: 8px;
           font-size: 16px;
           font-weight: 800;
+          overflow-wrap: anywhere;
         }
 
         .progressBlock{
           margin-top: 16px;
+          min-width: 0;
         }
 
         .progressTrack{
@@ -892,6 +925,8 @@ export default function Home() {
           overflow: hidden;
           background: rgba(255,255,255,.06);
           border: 1px solid rgba(255,255,255,.05);
+          width: 100%;
+          box-sizing: border-box;
         }
 
         .progressFill{
@@ -918,6 +953,8 @@ export default function Home() {
           gap: 12px;
           color: var(--home-muted);
           font-size: 13px;
+          flex-wrap: wrap;
+          min-width: 0;
         }
 
         .campaignListCompact{
@@ -927,6 +964,7 @@ export default function Home() {
           max-height: 420px;
           overflow:auto;
           padding-right: 4px;
+          min-width: 0;
         }
 
         @media (max-width: 900px){
@@ -952,12 +990,14 @@ export default function Home() {
           justify-content:space-between;
           align-items:flex-start;
           gap: 10px;
+          min-width: 0;
         }
 
         .campaignCompactTitle{
           font-size: 16px;
           font-weight: 800;
           line-height: 1.2;
+          overflow-wrap: anywhere;
         }
 
         .campaignCompactDesc{
@@ -976,6 +1016,8 @@ export default function Home() {
           gap: 10px;
           color: var(--home-muted);
           font-size: 12px;
+          flex-wrap: wrap;
+          min-width: 0;
         }
 
         .emptyState{
@@ -983,11 +1025,14 @@ export default function Home() {
           border-radius: 18px;
           border: 1px dashed rgba(255,255,255,.12);
           background: rgba(255,255,255,.02);
+          min-width: 0;
         }
 
         .emptyStateTitle{
           font-size: 18px;
           font-weight: 800;
+          overflow-wrap: anywhere;
+          word-break: break-word;
         }
 
         .emptyStateText{
@@ -995,16 +1040,21 @@ export default function Home() {
           color: var(--home-muted);
           line-height: 1.5;
           font-size: 14px;
+          overflow-wrap: anywhere;
+          word-break: break-word;
         }
 
         .sideStack{
           display:grid;
           gap: 16px;
+          min-width: 0;
+          width: 100%;
         }
 
         .obsList{
           display:grid;
           gap: 12px;
+          min-width: 0;
         }
 
         .obsCard{
@@ -1012,6 +1062,7 @@ export default function Home() {
           border-radius: 16px;
           border: 1px solid rgba(255,255,255,.06);
           background: rgba(255,255,255,.03);
+          min-width: 0;
         }
 
         .obsTop{
@@ -1020,18 +1071,23 @@ export default function Home() {
           gap: 10px;
           align-items:flex-start;
           flex-wrap: wrap;
+          min-width: 0;
         }
 
         .obsTitle{
           margin-top: 8px;
           font-size: 16px;
           font-weight: 800;
+          overflow-wrap: anywhere;
+          word-break: break-word;
         }
 
         .obsMeta{
           margin-top: 8px;
           color: var(--home-muted);
           font-size: 13px;
+          overflow-wrap: anywhere;
+          word-break: break-word;
         }
 
         .tagRow{
@@ -1043,13 +1099,14 @@ export default function Home() {
 
         .telemetryGrid{
           display:grid;
-          grid-template-columns: repeat(4, 1fr);
+          grid-template-columns: repeat(4, minmax(0, 1fr));
           gap: 14px;
+          min-width: 0;
         }
 
         @media (max-width: 980px){
           .telemetryGrid{
-            grid-template-columns: repeat(2, 1fr);
+            grid-template-columns: repeat(2, minmax(0, 1fr));
           }
         }
 
@@ -1064,18 +1121,23 @@ export default function Home() {
           border-radius: 20px;
           border: 1px solid var(--home-stroke);
           background: var(--home-panel);
+          min-width: 0;
         }
 
         .telemetryValue{
           margin-top: 10px;
           font-size: 22px;
           font-weight: 900;
+          overflow-wrap: anywhere;
+          word-break: break-word;
         }
 
         .telemetrySub{
           margin-top: 8px;
           font-size: 13px;
           color: var(--home-muted);
+          overflow-wrap: anywhere;
+          word-break: break-word;
         }
 
         .footerAction{
