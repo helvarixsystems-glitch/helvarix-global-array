@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 
-type CampaignCadence = "DAILY" | "WEEKLY" | "GLOBAL";
+type CampaignCadence = "DAILY" | "WEEKLY" | "GLOBAL" | "RESEARCH";
 
 type CampaignRow = {
   id: string;
@@ -16,6 +16,7 @@ type CampaignRow = {
   tags: string[] | null;
   is_active: boolean | null;
   target_type?: string | null;
+  access_tier?: string | null;
 };
 
 type CampaignProgressRow = {
@@ -65,7 +66,7 @@ type HomeCampaignCard = {
   tags: string[];
 };
 
-type SectorState = "DAYLIGHT" | "CIVIL" | "NAUTICAL" | "ASTRONOMICAL" | "NIGHT";
+type SectorState = "DAYLIGHT" | "CIVIL" | "NAUTICAL" | "ASTRONOMICAL" | "NIGHT" | "UNKNOWN";
 
 type SectorTelemetry = {
   lat: number | null;
@@ -177,6 +178,20 @@ function formatDateRange(startAt: string | null, endAt: string | null) {
   return `${startText} — ${endText}`;
 }
 
+function cadenceTone(cadence: CampaignCadence | null | undefined): "cyan" | "violet" | "amber" {
+  if (cadence === "DAILY") return "cyan";
+  if (cadence === "WEEKLY") return "violet";
+  return "amber";
+}
+
+function cadenceSortValue(cadence: CampaignCadence | null | undefined) {
+  if (cadence === "DAILY") return 1;
+  if (cadence === "WEEKLY") return 2;
+  if (cadence === "GLOBAL") return 3;
+  if (cadence === "RESEARCH") return 4;
+  return 9;
+}
+
 function computeSectorTelemetry(lat: number | null, lon: number | null): SectorTelemetry {
   const now = new Date();
 
@@ -185,7 +200,7 @@ function computeSectorTelemetry(lat: number | null, lon: number | null): SectorT
       lat,
       lon,
       localTime: now.toLocaleString(),
-      skyState: "UNKNOWN" as SectorState,
+      skyState: "UNKNOWN",
       sunAltitude: 0,
       photonFluxStabilityPct: 50,
       kpLabel: "UNKNOWN",
@@ -422,21 +437,23 @@ export default function Home() {
         });
 
         if (!error && Array.isArray(data) && data.length > 0) {
-          const mapped = (data as CampaignProgressRow[]).map((row) => ({
-            id: row.id,
-            cadence: row.cadence ?? "GLOBAL",
-            title: row.title ?? "Untitled Campaign",
-            description: row.description ?? "Array-wide observation objective.",
-            startAt: null,
-            endAt: row.end_at ?? null,
-            progress:
-              row.completion_pct != null
-                ? clamp(Number(row.completion_pct) / 100)
-                : clamp(Number(row.progress ?? 0)),
-            participantCount: Number(row.participant_count ?? 0),
-            targetType: null,
-            tags: [],
-          }));
+          const mapped = (data as CampaignProgressRow[])
+            .map((row) => ({
+              id: row.id,
+              cadence: (row.cadence ?? "GLOBAL") as CampaignCadence,
+              title: row.title ?? "Untitled Campaign",
+              description: row.description ?? "Array-wide observation objective.",
+              startAt: null,
+              endAt: row.end_at ?? null,
+              progress:
+                row.completion_pct != null
+                  ? clamp(Number(row.completion_pct) / 100)
+                  : clamp(Number(row.progress ?? 0)),
+              participantCount: Number(row.participant_count ?? 0),
+              targetType: null,
+              tags: [],
+            }))
+            .sort((a, b) => cadenceSortValue(a.cadence) - cadenceSortValue(b.cadence));
 
           setCampaignCards(mapped);
           return;
@@ -450,11 +467,11 @@ export default function Home() {
       const { data, error } = await supabase
         .from("campaigns")
         .select(
-          "id,cadence,title,description,start_at,end_at,goal_user,goal_global,tags,is_active,target_type"
+          "id,cadence,title,description,start_at,end_at,goal_user,goal_global,tags,is_active,target_type,access_tier"
         )
         .eq("is_active", true)
         .order("start_at", { ascending: false })
-        .limit(3);
+        .limit(6);
 
       if (error) {
         console.warn("Campaign table query failed:", error.message);
@@ -463,18 +480,20 @@ export default function Home() {
         return;
       }
 
-      const rows = ((data as CampaignRow[]) ?? []).map((row) => ({
-        id: row.id,
-        cadence: row.cadence ?? "GLOBAL",
-        title: row.title ?? "Untitled Campaign",
-        description: row.description ?? "Array-wide observation objective.",
-        startAt: row.start_at ?? null,
-        endAt: row.end_at ?? null,
-        progress: 0,
-        participantCount: 0,
-        targetType: row.target_type ?? null,
-        tags: row.tags ?? [],
-      }));
+      const rows = ((data as CampaignRow[]) ?? [])
+        .map((row) => ({
+          id: row.id,
+          cadence: (row.cadence ?? "GLOBAL") as CampaignCadence,
+          title: row.title ?? "Untitled Campaign",
+          description: row.description ?? "Array-wide observation objective.",
+          startAt: row.start_at ?? null,
+          endAt: row.end_at ?? null,
+          progress: 0,
+          participantCount: 0,
+          targetType: row.target_type ?? null,
+          tags: row.tags ?? [],
+        }))
+        .sort((a, b) => cadenceSortValue(a.cadence) - cadenceSortValue(b.cadence));
 
       setCampaignCards(rows);
     } catch (error) {
@@ -504,6 +523,7 @@ export default function Home() {
   );
 
   const topCampaign = campaignCards[0] ?? null;
+  const secondaryCampaigns = campaignCards.slice(1, 5);
 
   return (
     <div className="homePage">
@@ -756,6 +776,7 @@ export default function Home() {
           grid-template-columns: 1.2fr .8fr;
           gap: 16px;
           margin-bottom: 16px;
+          align-items:start;
         }
 
         @media (max-width: 980px){
@@ -792,6 +813,11 @@ export default function Home() {
           max-width: 620px;
         }
 
+        .campaignSectionBody{
+          display:grid;
+          gap: 14px;
+        }
+
         .campaignHero{
           border-radius: 22px;
           border: 1px solid rgba(56,242,255,.14);
@@ -799,7 +825,6 @@ export default function Home() {
             radial-gradient(circle at top right, rgba(56,242,255,.08), transparent 38%),
             linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
           padding: 18px;
-          margin-bottom: 14px;
         }
 
         .campaignHeroTop{
@@ -895,37 +920,62 @@ export default function Home() {
           font-size: 13px;
         }
 
-        .campaignList{
+        .campaignListCompact{
           display:grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
           gap: 12px;
+          max-height: 420px;
+          overflow:auto;
+          padding-right: 4px;
         }
 
-        .campaignItem{
-          padding: 16px;
+        @media (max-width: 900px){
+          .campaignListCompact{
+            grid-template-columns: 1fr;
+            max-height:none;
+            overflow:visible;
+          }
+        }
+
+        .campaignCompact{
+          padding: 14px;
           border-radius: 18px;
           border: 1px solid rgba(255,255,255,.06);
           background: rgba(255,255,255,.03);
+          display:grid;
+          gap: 10px;
+          min-width: 0;
         }
 
-        .campaignItemTop{
+        .campaignCompactTop{
           display:flex;
           justify-content:space-between;
           align-items:flex-start;
           gap: 10px;
-          flex-wrap: wrap;
-          margin-bottom: 10px;
         }
 
-        .campaignItemTitle{
-          font-size: 17px;
+        .campaignCompactTitle{
+          font-size: 16px;
           font-weight: 800;
+          line-height: 1.2;
         }
 
-        .campaignItemDesc{
+        .campaignCompactDesc{
           color: var(--home-muted);
-          margin-top: 6px;
-          font-size: 14px;
+          font-size: 13px;
           line-height: 1.45;
+          display: -webkit-box;
+          -webkit-line-clamp: 3;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+        }
+
+        .campaignCompactMeta{
+          display:flex;
+          justify-content:space-between;
+          gap: 10px;
+          color: var(--home-muted);
+          font-size: 12px;
         }
 
         .emptyState{
@@ -1074,16 +1124,13 @@ export default function Home() {
               <button className="btn" onClick={() => navigate("/collective")}>
                 Campaign Hub
               </button>
-              <button className="btn" onClick={() => navigate("/telemetry")}>
-                Telemetry
-              </button>
-              <button className="btn" onClick={() => navigate("/profile")}>
-                Profile
+              <button className="btn" onClick={() => navigate("/array")}>
+                Open Array
               </button>
             </div>
           </div>
 
-          <aside className="panel heroAside">
+          <div className="panel heroAside">
             <div className="statusCard">
               <div className="eyebrow">Operator</div>
               <div className="statusValue">{operatorCallsign}</div>
@@ -1091,43 +1138,41 @@ export default function Home() {
             </div>
 
             <div className="statusCard">
-              <div className="eyebrow">Assigned Sector</div>
-              <div className="statusValue" style={{ fontSize: "18px" }}>{profileLocation}</div>
+              <div className="eyebrow">Sector</div>
+              <div className="statusValue">{profileLocation}</div>
               <div className="statusSub">{sectorCoords}</div>
             </div>
 
             <div className="statusCard">
-              <div className="eyebrow">Current Campaign Status</div>
-              <div className="statusValue" style={{ fontSize: "18px" }}>
-                {topCampaign ? topCampaign.title : "No active campaign"}
-              </div>
+              <div className="eyebrow">Network Status</div>
+              <div className="statusValue">{loading ? "Syncing…" : "Operational"}</div>
               <div className="statusSub">
-                {topCampaign ? formatEndsIn(topCampaign.endAt) : "Awaiting next array objective"}
+                Campaigns, submissions, and telemetry surface here first.
               </div>
             </div>
-          </aside>
+          </div>
         </section>
 
         <section className="statsGrid">
           <StatCard
             label="Observation Index"
-            value={String(profile?.observation_index ?? 0)}
-            hint="Personal contribution score"
+            value={String(profile?.observation_index ?? observationCount ?? 0)}
+            hint="Your current personal submission count."
           />
           <StatCard
             label="Campaign Impact"
             value={String(profile?.campaign_impact ?? 0)}
-            hint="Points earned through campaign work"
+            hint="Campaign-weighted contribution across the array."
           />
           <StatCard
-            label="Current Streak"
-            value={`${profile?.streak_days ?? 0} days`}
-            hint="Consecutive active days"
+            label="Active Streak"
+            value={`${profile?.streak_days ?? 0}d`}
+            hint="Consecutive days with submitted activity."
           />
           <StatCard
-            label="Submissions"
-            value={String(observationCount)}
-            hint="Observations attributed to this account"
+            label="Network Feed"
+            value={`${recentObservations.length}`}
+            hint="Most recent observations surfaced on this page."
           />
         </section>
 
@@ -1142,124 +1187,102 @@ export default function Home() {
                   campaign first, then any additional active campaigns below it.
                 </div>
               </div>
-
               <button className="btn" onClick={() => navigate("/collective")}>
                 Open Collective
               </button>
             </div>
 
-            {topCampaign ? (
-              <div className="campaignHero">
-                <div className="campaignHeroTop">
-                  <div>
-                    <Chip tone={topCampaign.cadence === "DAILY" ? "cyan" : topCampaign.cadence === "WEEKLY" ? "violet" : "amber"}>
-                      {topCampaign.cadence}
-                    </Chip>
-                    <div className="campaignName">{topCampaign.title}</div>
-                    <div className="campaignDesc">{topCampaign.description}</div>
-                  </div>
-
-                  <Chip tone="cyan">{formatEndsIn(topCampaign.endAt)}</Chip>
-                </div>
-
-                <div className="metaGrid">
-                  <div className="metaCard">
-                    <div className="eyebrow">Window</div>
-                    <div className="metaValue">{formatDateRange(topCampaign.startAt, topCampaign.endAt)}</div>
-                  </div>
-                  <div className="metaCard">
-                    <div className="eyebrow">Target</div>
-                    <div className="metaValue">{topCampaign.targetType ?? "General observation"}</div>
-                  </div>
-                  <div className="metaCard">
-                    <div className="eyebrow">Participants</div>
-                    <div className="metaValue">{topCampaign.participantCount}</div>
-                  </div>
-                  <div className="metaCard">
-                    <div className="eyebrow">Progress</div>
-                    <div className="metaValue">{Math.round(topCampaign.progress * 100)}%</div>
-                  </div>
-                </div>
-
-                <div className="progressBlock">
-                  <Progress
-                    value={topCampaign.progress}
-                    tone={topCampaign.cadence === "DAILY" ? "cyan" : topCampaign.cadence === "WEEKLY" ? "violet" : "amber"}
-                  />
-                  <div className="progressMeta">
-                    <span>
-                      {topCampaign.tags.length > 0 ? topCampaign.tags.join(" • ") : "Array-wide mission objective"}
-                    </span>
-                    <span>{Math.round(topCampaign.progress * 100)}% complete</span>
-                  </div>
-                </div>
-
-                <div className="footerAction">
-                  <button className="btn primary" onClick={() => navigate("/submit")}>
-                    Submit to Campaign
-                  </button>
-                  <button className="btn" onClick={() => navigate("/collective")}>
-                    Campaign Details
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="emptyState">
-                <div className="emptyStateTitle">No active campaign right now</div>
-                <div className="emptyStateText">
-                  The campaign block remains here even when there is no current objective. That
-                  keeps the home page stable and avoids the section disappearing.
-                </div>
-                <div className="footerAction">
-                  <button className="btn" onClick={() => navigate("/collective")}>
-                    Open Campaign Hub
-                  </button>
-                </div>
-                {campaignError ? <div className="warning">{campaignError}</div> : null}
-              </div>
-            )}
-
-            {campaignCards.length > 1 ? (
-              <div className="campaignList" style={{ marginTop: "14px" }}>
-                {campaignCards.slice(1).map((campaign) => (
-                  <div className="campaignItem" key={campaign.id}>
-                    <div className="campaignItemTop">
-                      <div>
-                        <div className="campaignItemTitle">{campaign.title}</div>
-                        <div className="campaignItemDesc">{campaign.description}</div>
-                      </div>
-                      <Chip
-                        tone={
-                          campaign.cadence === "DAILY"
-                            ? "cyan"
-                            : campaign.cadence === "WEEKLY"
-                            ? "violet"
-                            : "amber"
-                        }
-                      >
-                        {campaign.cadence}
-                      </Chip>
+            <div className="campaignSectionBody">
+              {topCampaign ? (
+                <div className="campaignHero">
+                  <div className="campaignHeroTop">
+                    <div>
+                      <Chip tone={cadenceTone(topCampaign.cadence)}>{topCampaign.cadence}</Chip>
+                      <div className="campaignName">{topCampaign.title}</div>
+                      <div className="campaignDesc">{topCampaign.description}</div>
                     </div>
 
-                    <Progress
-                      value={campaign.progress}
-                      tone={
-                        campaign.cadence === "DAILY"
-                          ? "cyan"
-                          : campaign.cadence === "WEEKLY"
-                          ? "violet"
-                          : "amber"
-                      }
-                    />
+                    <Chip tone={cadenceTone(topCampaign.cadence)}>{formatEndsIn(topCampaign.endAt)}</Chip>
+                  </div>
 
+                  <div className="metaGrid">
+                    <div className="metaCard">
+                      <div className="eyebrow">Window</div>
+                      <div className="metaValue">{formatDateRange(topCampaign.startAt, topCampaign.endAt)}</div>
+                    </div>
+                    <div className="metaCard">
+                      <div className="eyebrow">Target</div>
+                      <div className="metaValue">{topCampaign.targetType ?? "General observation"}</div>
+                    </div>
+                    <div className="metaCard">
+                      <div className="eyebrow">Participants</div>
+                      <div className="metaValue">{topCampaign.participantCount}</div>
+                    </div>
+                    <div className="metaCard">
+                      <div className="eyebrow">Progress</div>
+                      <div className="metaValue">{Math.round(topCampaign.progress * 100)}%</div>
+                    </div>
+                  </div>
+
+                  <div className="progressBlock">
+                    <Progress value={topCampaign.progress} tone={cadenceTone(topCampaign.cadence)} />
                     <div className="progressMeta">
-                      <span>{formatDateRange(campaign.startAt, campaign.endAt)}</span>
-                      <span>{Math.round(campaign.progress * 100)}%</span>
+                      <span>
+                        {topCampaign.tags.length > 0
+                          ? topCampaign.tags.join(" • ")
+                          : "Array-wide mission objective"}
+                      </span>
+                      <span>{Math.round(topCampaign.progress * 100)}% complete</span>
                     </div>
                   </div>
-                ))}
-              </div>
-            ) : null}
+
+                  <div className="footerAction">
+                    <button className="btn primary" onClick={() => navigate("/submit")}>
+                      Submit to Campaign
+                    </button>
+                    <button className="btn" onClick={() => navigate("/collective")}>
+                      Campaign Details
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="emptyState">
+                  <div className="emptyStateTitle">No active campaign right now</div>
+                  <div className="emptyStateText">
+                    The campaign block remains here even when there is no current objective. That
+                    keeps the home page stable and avoids the section disappearing.
+                  </div>
+                  <div className="footerAction">
+                    <button className="btn" onClick={() => navigate("/collective")}>
+                      Open Campaign Hub
+                    </button>
+                  </div>
+                  {campaignError ? <div className="warning">{campaignError}</div> : null}
+                </div>
+              )}
+
+              {secondaryCampaigns.length > 0 ? (
+                <div className="campaignListCompact">
+                  {secondaryCampaigns.map((campaign) => (
+                    <div className="campaignCompact" key={campaign.id}>
+                      <div className="campaignCompactTop">
+                        <div className="campaignCompactTitle">{campaign.title}</div>
+                        <Chip tone={cadenceTone(campaign.cadence)}>{campaign.cadence}</Chip>
+                      </div>
+
+                      <div className="campaignCompactDesc">{campaign.description}</div>
+
+                      <Progress value={campaign.progress} tone={cadenceTone(campaign.cadence)} />
+
+                      <div className="campaignCompactMeta">
+                        <span>{formatDateRange(campaign.startAt, campaign.endAt)}</span>
+                        <span>{Math.round(campaign.progress * 100)}%</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
           </div>
 
           <div className="sideStack">
@@ -1346,9 +1369,7 @@ export default function Home() {
 
                 <div className="telemetryCard">
                   <div className="eyebrow">Geomagnetic Index</div>
-                  <div className="telemetryValue">
-                    {telemetry?.kpLabel ?? "UNKNOWN"}
-                  </div>
+                  <div className="telemetryValue">{telemetry?.kpLabel ?? "UNKNOWN"}</div>
                   <div className="telemetrySub">
                     {telemetry?.kp != null ? `Kp ${telemetry.kp}` : "No index available"}
                   </div>
@@ -1372,9 +1393,7 @@ export default function Home() {
 
                 <div className="telemetryCard">
                   <div className="eyebrow">Local Time</div>
-                  <div className="telemetryValue">
-                    {telemetry?.localTime ?? "—"}
-                  </div>
+                  <div className="telemetryValue">{telemetry?.localTime ?? "—"}</div>
                   <div className="telemetrySub">Computed on page load</div>
                 </div>
 
