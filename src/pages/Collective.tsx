@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { openCustomerPortal, startCheckout } from "../lib/stripe";
+import { openCustomerPortal } from "../lib/stripe";
 import { supabase } from "../lib/supabaseClient";
 
 type SessionUser = {
@@ -26,11 +26,6 @@ type Coordinates = {
 };
 
 const SOLAR_GOLD = "#f2bf57";
-const COLLECTIVE_PRICE_ID =
-  (import.meta as any)?.env?.VITE_STRIPE_COLLECTIVE_PRICE_ID ||
-  (import.meta as any)?.env?.VITE_STRIPE_PRICE_ID ||
-  "";
-
 const MONTHLY_PRICE_LABEL = "$15/month";
 
 function formatClock(value: string | null) {
@@ -268,7 +263,7 @@ export default function Collective() {
 
         const nextProfile = (row as ProfileRecord) ?? null;
         setProfile(nextProfile);
-        setIsPro(Boolean(nextProfile?.is_pro));
+        setIsPro(Boolean(nextProfile?.guild_access ?? nextProfile?.is_pro));
 
         const params = new URLSearchParams(window.location.search);
         if (params.get("success") === "1") {
@@ -366,10 +361,32 @@ export default function Collective() {
     setError(null);
 
     try {
-      if (!COLLECTIVE_PRICE_ID) {
-        throw new Error("Unable to open checkout right now.");
+      if (!sessionUser) {
+        throw new Error("You must be signed in before starting checkout.");
       }
-      await startCheckout(COLLECTIVE_PRICE_ID);
+
+      const res = await fetch("/api/create-checkout-session", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userId: sessionUser.id,
+          email: sessionUser.email,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data?.error || "Unable to open checkout right now.");
+      }
+
+      if (!data?.url) {
+        throw new Error("Checkout URL was not returned.");
+      }
+
+      window.location.href = data.url;
     } catch (err: any) {
       setError(err?.message ?? "Unable to start checkout.");
     } finally {
