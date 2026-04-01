@@ -687,61 +687,38 @@ export default function Collective() {
       const [{ data: memberData, error: memberError }, { data: ownedData, error: ownedError }] = await Promise.all([
         supabase
           .from("team_members")
-          .select(
-            `
-              team_id,
-              user_id,
-              status,
-              teams (
-                id,
-                name,
-                slug,
-                description,
-                owner_id,
-                is_private,
-                max_members,
-                created_at
-              )
-            `
-          )
-          .eq("user_id", userId)
-          .in("status", ["active", "owner", "accepted"]),
+          .select("team_id,user_id,role,status")
+          .eq("user_id", userId),
         supabase
           .from("teams")
-          .select("id,name,slug,description,owner_id,is_private,max_members,created_at")
-          .eq("owner_id", userId),
+          .select("id,name,slug,description,owner_id,is_private,max_members,created_at"),
       ]);
 
       if (memberError) throw memberError;
       if (ownedError) throw ownedError;
 
       const membershipMap: Record<string, TeamMemberRow> = {};
-      for (const row of (memberData ?? []) as any[]) {
+      const teamIds = new Set<string>();
+
+      for (const row of (memberData ?? []) as Array<{ team_id: string; user_id: string; role?: string | null; status?: string | null }>) {
+        const effectiveStatus = row.status ?? row.role ?? "member";
+        if (!["active", "accepted", "owner", "member"].includes(String(effectiveStatus).toLowerCase())) continue;
+
         membershipMap[row.team_id] = {
           team_id: row.team_id,
           user_id: row.user_id,
-          status: row.status ?? null,
+          status: effectiveStatus,
         };
+        teamIds.add(row.team_id);
       }
 
       const combined = new Map<string, TeamRecord>();
 
-      for (const row of (memberData ?? []) as any[]) {
-        const team = row.teams;
-        if (!team) continue;
-        combined.set(team.id, {
-          id: team.id,
-          name: team.name ?? "Untitled Team",
-          slug: team.slug ?? null,
-          description: team.description ?? null,
-          owner_id: team.owner_id ?? null,
-          is_private: team.is_private ?? true,
-          max_members: team.max_members ?? null,
-          created_at: team.created_at ?? null,
-        });
-      }
-
       for (const team of (ownedData ?? []) as any[]) {
+        const isOwned = team.owner_id === userId;
+        const isMember = teamIds.has(team.id);
+        if (!isOwned && !isMember) continue;
+
         combined.set(team.id, {
           id: team.id,
           name: team.name ?? "Untitled Team",
@@ -753,7 +730,7 @@ export default function Collective() {
           created_at: team.created_at ?? null,
         });
 
-        if (!membershipMap[team.id]) {
+        if (!membershipMap[team.id] && isOwned) {
           membershipMap[team.id] = {
             team_id: team.id,
             user_id: userId,
@@ -773,13 +750,10 @@ export default function Collective() {
       setMyTeamMemberships(membershipMap);
       setTeamsEnabled(true);
     } catch (err: any) {
-      if (looksLikeMissingRelation(err)) {
-        setTeamsEnabled(false);
-        setTeams([]);
-        setMyTeamMemberships({});
-      } else {
-        setError((current) => current ?? err?.message ?? "Unable to load teams.");
-      }
+      setTeamsEnabled(false);
+      setTeams([]);
+      setMyTeamMemberships({});
+      setError((current) => current ?? err?.message ?? "Unable to load teams.");
     } finally {
       setTeamsLoading(false);
     }
@@ -979,6 +953,7 @@ export default function Collective() {
         {
           team_id: team.id,
           user_id: sessionUser.id,
+          role: "owner",
           status: "owner",
         },
         { onConflict: "team_id,user_id" }
@@ -1303,8 +1278,7 @@ export default function Collective() {
             <div className="sectionKicker">COLLECTIVE TOOLS</div>
             <h2 className="sectionTitle">Operational layer</h2>
             <p className="sectionHint">
-              This page now suppresses duplicate public campaigns, replaces weak placeholders, and restores
-              team ownership controls directly inside the Collective view.
+              Membership status, campaign availability, and team access.
             </p>
           </div>
         </div>
@@ -1334,7 +1308,7 @@ export default function Collective() {
         </div>
 
         {!teamsEnabled ? (
-          <div className="emptyState">Team tables are not available in this database yet.</div>
+          <div className="emptyState">Unable to load teams right now. The tables exist, but the current query failed.</div>
         ) : (
           <>
             <div className="teamCreateCard">
@@ -1554,8 +1528,8 @@ export default function Collective() {
             <div className="sectionKicker">RESEARCH COLLECTIVE</div>
             <h2 className="sectionTitle">Limited-entry research assignments</h2>
             <p className="sectionHint">
-              This premium layer is reserved for Research Collective subscribers and capped to the top 3–4 live
-              assignments so the page stays focused.
+              This premium layer is reserved for Research Collective subscribers. Individuals or teams can enter,
+              and each entry uses one slot.
             </p>
           </div>
           <span className="statusBadge">{campaignLoading ? "Syncing…" : `${researchCampaigns.length} limited-entry`}</span>
@@ -1638,7 +1612,7 @@ export default function Collective() {
                         onClick={() => handleJoinCampaign(campaign)}
                         disabled={campaignActionBusy === `join-${campaign.id}` || !campaignMembershipsEnabled || isFull}
                       >
-                        {campaignActionBusy === `join-${campaign.id}` ? "Joining…" : isFull ? "Campaign Full" : "Join research assignment"}
+                        {campaignActionBusy === `join-${campaign.id}` ? "Joining…" : isFull ? "Campaign Full" : "Join Research"}
                       </button>
                     )}
 
@@ -1707,18 +1681,19 @@ const styles = `
   radial-gradient(circle at top right, rgba(242,191,87,.13), transparent 28%),
   radial-gradient(circle at top left, rgba(92,214,255,.10), transparent 32%),
   linear-gradient(180deg, rgba(15,24,46,.96), rgba(9,16,31,.92)); }
-.collectiveHeroGrid{ display:grid; grid-template-columns:minmax(0,1.2fr) minmax(320px,.8fr); gap:18px; align-items:stretch; position:relative; z-index:1; }
+.collectiveHeroGrid{ display:grid; grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr); gap:18px; align-items:stretch; position:relative; z-index:1; }
 .collectiveKicker{ color:${SOLAR_GOLD}; font-size:12px; letter-spacing:.28em; text-transform:uppercase; font-weight:800; }
 .collectiveLead{ max-width:820px; margin-top:14px; color:rgba(255,255,255,.72); line-height:1.7; }
 .collectiveHeroMeta{ display:flex; flex-wrap:wrap; gap:12px; margin-top:18px; }
 .goldBadge{ display:inline-flex; align-items:center; gap:8px; padding:10px 14px; border-radius:999px; border:1px solid rgba(242,191,87,.30); background:rgba(242,191,87,.10); color:#ffe4a5; font-weight:700; }
-.collectiveStatusCard{ min-height:100%; display:grid; gap:16px; padding:22px; border-radius:24px; border:1px solid rgba(242,191,87,.16); background:linear-gradient(180deg, rgba(15,24,46,.88), rgba(9,14,28,.94)); }
-.collectiveStatusTop{ display:flex; justify-content:space-between; gap:16px; align-items:flex-start; }
+.collectiveStatusCard{ min-height:100%; min-width:0; width:100%; display:grid; gap:16px; padding:22px; border-radius:24px; border:1px solid rgba(242,191,87,.16); background:linear-gradient(180deg, rgba(15,24,46,.88), rgba(9,14,28,.94)); overflow:hidden; }
+.collectiveStatusTop{ display:grid; grid-template-columns:minmax(0,1fr) auto; gap:16px; align-items:flex-start; }
 .collectivePrice{ font-size:34px; font-weight:800; line-height:1; }
 .collectivePrice small{ font-size:14px; color:rgba(255,255,255,.64); font-weight:600; margin-left:4px; }
 .collectiveMiniList{ display:grid; gap:10px; }
-.collectiveMiniRow{ display:flex; justify-content:space-between; gap:16px; padding:12px 14px; border-radius:14px; background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.06); }
-.collectiveMiniRow span{ color:rgba(255,255,255,.66); }
+.collectiveMiniRow{ display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:16px; padding:12px 14px; border-radius:14px; background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.06); min-width:0; }
+.collectiveMiniRow span{ color:rgba(255,255,255,.66); min-width:0; }
+.collectiveMiniRow strong{ min-width:0; text-align:right; white-space:normal; overflow-wrap:anywhere; }
 .statusBadge{ display:inline-flex; align-items:center; gap:8px; padding:9px 12px; border-radius:999px; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.08); font-weight:700; }
 .statusLive{ color:#94f5c7; }
 .statusLocked{ color:#ffcf78; }
@@ -1774,8 +1749,22 @@ textarea{ resize:vertical; min-height:96px; }
 .teamGrid,.ownerEditGrid{ display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:14px; }
 .ownerFullWidth{ grid-column:1 / -1; }
 .emptyState{ padding:18px; border-radius:16px; background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.06); color:rgba(255,255,255,.70); }
+@media (max-width: 1280px){
+  .collectiveHeroGrid{ grid-template-columns:minmax(0,1fr); }
+  .collectiveStatusCard{ width:100%; }
+  .collectiveStatusTop{ grid-template-columns:minmax(0,1fr); }
+  .collectiveMiniRow{ grid-template-columns:1fr; }
+  .collectiveMiniRow strong{ text-align:left; }
+}
 @media (max-width: 980px){
   .collectiveHeroGrid,.collectiveMetricGrid,.campaignStatRow,.teamGrid,.ownerEditGrid,.collectiveToolsGrid{ grid-template-columns:1fr; }
+  .collectiveStatusTop{ grid-template-columns:1fr; }
+  .collectiveStatusCard{ width:100%; }
+  .collectiveHeroMeta{ gap:10px; }
+  .goldBadge{ max-width:100%; }
+  .collectivePrice{ font-size:46px; }
+  .collectiveMiniRow{ grid-template-columns:1fr; }
+  .collectiveMiniRow strong{ text-align:left; }
   select.campaignAssignSelect{ max-width:none; }
 }
 `;
