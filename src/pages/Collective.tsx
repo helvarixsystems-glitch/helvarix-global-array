@@ -43,7 +43,6 @@ type CampaignRow = {
   is_limited_entry?: boolean | null;
   priority_rank?: number | null;
   template_key?: string | null;
-  updated_at?: string | null;
   created_at?: string | null;
 };
 
@@ -63,7 +62,6 @@ type CollectiveCampaign = {
   priorityRank: number | null;
   isActive: boolean;
   templateKey: string | null;
-  updatedAt: string | null;
   createdAt: string | null;
 };
 
@@ -320,21 +318,23 @@ function normalizeCampaign(row: CampaignRow): CollectiveCampaign {
     priorityRank: row.priority_rank ?? null,
     isActive: Boolean(row.is_active ?? true),
     templateKey: row.template_key ?? null,
-    updatedAt: row.updated_at ?? null,
     createdAt: row.created_at ?? null,
   };
 }
 
 function campaignFreshnessValue(campaign: CollectiveCampaign) {
-  const updated = campaign.updatedAt ? new Date(campaign.updatedAt).getTime() : 0;
   const created = campaign.createdAt ? new Date(campaign.createdAt).getTime() : 0;
   const start = campaign.startAt ? new Date(campaign.startAt).getTime() : 0;
-  return Math.max(updated || 0, created || 0, start || 0);
+  return Math.max(created || 0, start || 0);
 }
 
 function scoreCampaign(campaign: CollectiveCampaign) {
   let score = 0;
+  const title = campaign.title.toLowerCase();
+  const templateish = title.includes("template") || title.includes("untitled campaign template");
+
   if (!isBadCampaignTitle(campaign.title)) score += 1000;
+  if (!templateish) score += 800;
   if (campaign.description && !campaign.description.toLowerCase().includes("array-wide campaign objective")) score += 100;
   if (campaign.isActive) score += 20;
   if (campaign.priorityRank != null) score += Math.max(0, 50 - campaign.priorityRank);
@@ -601,12 +601,12 @@ export default function Collective() {
       const { data, error } = await supabase
         .from("campaigns")
         .select(
-          "id,cadence,title,description,start_at,end_at,target_type,tags,is_active,access_tier,campaign_class,slot_capacity,is_limited_entry,priority_rank,template_key,updated_at,created_at"
+          "id,cadence,title,description,start_at,end_at,target_type,tags,is_active,access_tier,campaign_class,slot_capacity,is_limited_entry,priority_rank,template_key,created_at"
         )
         .eq("is_active", true)
         .order("campaign_class", { ascending: true })
         .order("priority_rank", { ascending: true, nullsFirst: false })
-        .order("updated_at", { ascending: false, nullsFirst: false })
+        .order("created_at", { ascending: false })
         .order("start_at", { ascending: false });
 
       if (error) throw error;
