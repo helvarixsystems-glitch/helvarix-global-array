@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { openCustomerPortal } from "../lib/stripe";
 import { supabase } from "../lib/supabaseClient";
-import { canUserSeeCampaign } from "../lib/campaignAccess";
 
 type SessionUser = {
   id: string;
@@ -35,16 +34,15 @@ type CampaignRow = {
   description: string | null;
   start_at: string | null;
   end_at: string | null;
-  goal_user: number | null;
-  goal_global: number | null;
+  target_type?: string | null;
   tags: string[] | null;
   is_active: boolean | null;
-  target_type?: string | null;
   access_tier?: string | null;
   campaign_class?: string | null;
   slot_capacity?: number | null;
   is_limited_entry?: boolean | null;
   priority_rank?: number | null;
+  template_key?: string | null;
 };
 
 type CollectiveCampaign = {
@@ -56,12 +54,13 @@ type CollectiveCampaign = {
   endAt: string | null;
   targetType: string | null;
   tags: string[];
-  accessTier: string | null;
+  accessTier: string;
   campaignClass: string;
   slotCapacity: number | null;
   isLimitedEntry: boolean;
   priorityRank: number | null;
   isActive: boolean;
+  templateKey: string | null;
 };
 
 type CampaignMembershipRecord = {
@@ -69,11 +68,6 @@ type CampaignMembershipRecord = {
   user_id: string;
   team_id: string | null;
   status: string | null;
-};
-
-type CampaignSlotRow = {
-  campaign_id: string;
-  filled_slots: number;
 };
 
 type TeamRecord = {
@@ -89,10 +83,6 @@ type TeamRecord = {
 
 const SOLAR_GOLD = "#f2bf57";
 const MONTHLY_PRICE_LABEL = "$15/month";
-
-function clamp(value: number, min = 0, max = 1) {
-  return Math.max(min, Math.min(max, value));
-}
 
 function toNumber(value: unknown) {
   const num = Number(value);
@@ -143,14 +133,6 @@ function cadenceTone(cadence: CampaignCadence | null | undefined): "cyan" | "vio
   if (cadence === "DAILY") return "cyan";
   if (cadence === "WEEKLY") return "violet";
   return "amber";
-}
-
-function cadenceSortValue(cadence: CampaignCadence | null | undefined) {
-  if (cadence === "DAILY") return 1;
-  if (cadence === "WEEKLY") return 2;
-  if (cadence === "GLOBAL") return 3;
-  if (cadence === "RESEARCH") return 4;
-  return 9;
 }
 
 function generateAlias(seed: string) {
@@ -269,9 +251,13 @@ function looksLikeMissingRelation(error: any) {
     message.includes("relation") ||
     message.includes("schema cache") ||
     message.includes("could not find the table") ||
-    message.includes("column") ||
     message.includes("not found")
   );
+}
+
+function canSeeCampaign(campaign: { accessTier: string }, isPro: boolean) {
+  if (campaign.accessTier === "research_collective") return isPro;
+  return true;
 }
 
 async function geocodePlace(query: string): Promise<Coordinates | null> {
@@ -377,7 +363,6 @@ export default function Collective() {
 
         const user = session?.user;
         if (!user) throw new Error("You must be signed in to access Collective.");
-
         if (!active) return;
 
         setSessionUser({
@@ -506,9 +491,10 @@ export default function Collective() {
       const { data, error } = await supabase
         .from("campaigns")
         .select(
-          "id,cadence,title,description,start_at,end_at,goal_user,goal_global,tags,is_active,target_type,access_tier,campaign_class,slot_capacity,is_limited_entry,priority_rank"
+          "id,cadence,title,description,start_at,end_at,target_type,tags,is_active,access_tier,campaign_class,slot_capacity,is_limited_entry,priority_rank,template_key"
         )
         .eq("is_active", true)
+        .order("campaign_class", { ascending: true })
         .order("priority_rank", { ascending: true, nullsFirst: false })
         .order("start_at", { ascending: false });
 
@@ -518,7 +504,7 @@ export default function Collective() {
         id: row.id,
         cadence: (row.cadence ?? "GLOBAL") as CampaignCadence,
         title: row.title ?? "Untitled Campaign",
-        description: row.description ?? "Array-wide observation objective.",
+        description: row.description ?? "Array-wide campaign objective.",
         startAt: row.start_at ?? null,
         endAt: row.end_at ?? null,
         targetType: row.target_type ?? null,
@@ -529,20 +515,8 @@ export default function Collective() {
         isLimitedEntry: Boolean(row.is_limited_entry),
         priorityRank: row.priority_rank ?? null,
         isActive: Boolean(row.is_active ?? true),
+        templateKey: row.template_key ?? null,
       }));
-
-      rows.sort((a, b) => {
-        if (a.campaignClass !== b.campaignClass) {
-          if (a.campaignClass === "public") return -1;
-          if (b.campaignClass === "public") return 1;
-        }
-
-        const priorityA = a.priorityRank ?? 9999;
-        const priorityB = b.priorityRank ?? 9999;
-        if (priorityA !== priorityB) return priorityA - priorityB;
-
-        return cadenceSortValue(a.cadence) - cadenceSortValue(b.cadence);
-      });
 
       setCampaigns(rows);
       await loadSlotCounts(rows.map((row) => row.id));
@@ -732,18 +706,7 @@ export default function Collective() {
         throw new Error("Campaign membership table is not available yet.");
       }
 
-      if (
-        !canUserSeeCampaign(
-          {
-            access_tier: campaign.accessTier,
-            is_active: campaign.isActive,
-          },
-          {
-            guild_access: isPro,
-            is_pro: isPro,
-          }
-        )
-      ) {
+      if (!canSeeCampaign(campaign, isPro)) {
         throw new Error("This campaign requires Research Collective membership.");
       }
 
@@ -772,6 +735,8 @@ export default function Collective() {
 
       if (error) throw error;
 
+      const alreadyJoined = Boolean(myCampaignMemberships[campaign.id]);
+
       setMyCampaignMemberships((current) => ({
         ...current,
         [campaign.id]: {
@@ -782,14 +747,12 @@ export default function Collective() {
         },
       }));
 
-      setSlotCounts((current) => {
-        const existsAlready = Boolean(myCampaignMemberships[campaign.id]);
-        if (existsAlready) return current;
-        return {
+      if (!alreadyJoined) {
+        setSlotCounts((current) => ({
           ...current,
           [campaign.id]: (current[campaign.id] ?? 0) + 1,
-        };
-      });
+        }));
+      }
 
       setNotice(teamId ? "Campaign joined with team assignment." : "Campaign joined.");
     } catch (err: any) {
@@ -871,23 +834,23 @@ export default function Collective() {
   const observationIndex = toNumber(profile?.observation_index);
   const campaignImpact = toNumber(profile?.campaign_impact);
 
-  const visiblePublicCampaigns = useMemo(() => {
-    return campaigns.filter((campaign) => campaign.campaignClass === "public");
+  const publicCampaigns = useMemo(() => {
+    return campaigns
+      .filter((campaign) => campaign.campaignClass === "public")
+      .sort((a, b) => {
+        const order: Record<string, number> = { DAILY: 1, WEEKLY: 2, GLOBAL: 3, RESEARCH: 4 };
+        return (order[a.cadence] ?? 9) - (order[b.cadence] ?? 9);
+      });
   }, [campaigns]);
 
-  const visibleResearchCampaigns = useMemo(() => {
-    const allResearch = campaigns
+  const researchCampaigns = useMemo(() => {
+    return campaigns
       .filter((campaign) => campaign.campaignClass === "research_collective")
-      .sort((a, b) => (a.priorityRank ?? 9999) - (b.priorityRank ?? 9999));
+      .sort((a, b) => (a.priorityRank ?? 999) - (b.priorityRank ?? 999))
+      .slice(0, 4);
+  }, [campaigns]);
 
-    if (isPro) {
-      return allResearch.slice(0, 4);
-    }
-
-    return allResearch.slice(0, 4);
-  }, [campaigns, isPro]);
-
-  const activeCampaignCount = visiblePublicCampaigns.length + visibleResearchCampaigns.length;
+  const activeCampaignCount = publicCampaigns.length + researchCampaigns.length;
 
   const toolCards = [
     {
@@ -922,13 +885,13 @@ export default function Collective() {
     },
     {
       title: "Public Campaign Access",
-      value: `${visiblePublicCampaigns.length} active`,
+      value: `${publicCampaigns.length} active`,
       body: "Subscribers still retain full access to all public daily, weekly, and global campaigns.",
       locked: false,
     },
     {
       title: "Research Assignments",
-      value: `${visibleResearchCampaigns.length} limited-entry`,
+      value: `${researchCampaigns.length} limited-entry`,
       body: "Research Collective subscribers unlock the premium limited-entry campaign layer.",
       locked: false,
     },
@@ -941,7 +904,7 @@ export default function Collective() {
     {
       title: "Live Campaign Layer",
       value: `${activeCampaignCount} total`,
-      body: "This page now reflects real campaign data instead of static placeholder cards.",
+      body: "This page reflects live campaign data from your database generator.",
       locked: false,
     },
   ];
@@ -1310,8 +1273,8 @@ export default function Collective() {
             <h1 className="pageTitle">Helvarix Research Collective</h1>
             <p className="collectiveLead">
               Public campaigns remain the heartbeat of the Array. Research Collective subscribers
-              get an additional premium layer of limited-entry assignments, reserved for
-              higher-focus work and coordinated campaign participation.
+              get an additional premium layer of limited-entry assignments, reserved for focused
+              work and coordinated campaign participation.
             </p>
 
             <div className="collectiveHeroMeta">
@@ -1488,11 +1451,11 @@ export default function Collective() {
             <div className="collectiveDataList">
               <div className="collectiveDataRow">
                 <span>Public campaigns</span>
-                <strong>{visiblePublicCampaigns.length}</strong>
+                <strong>{publicCampaigns.length}</strong>
               </div>
               <div className="collectiveDataRow">
                 <span>Research assignments</span>
-                <strong>{visibleResearchCampaigns.length}</strong>
+                <strong>{researchCampaigns.length}</strong>
               </div>
               <div className="collectiveDataRow">
                 <span>Your teams</span>
@@ -1546,11 +1509,11 @@ export default function Collective() {
               These campaigns remain open to the wider Array. Research Collective subscribers still retain full access to them.
             </p>
           </div>
-          <span className="statusBadge">{campaignLoading ? "Syncing…" : `${visiblePublicCampaigns.length} active`}</span>
+          <span className="statusBadge">{campaignLoading ? "Syncing…" : `${publicCampaigns.length} active`}</span>
         </div>
 
         <div className="campaignGrid">
-          {visiblePublicCampaigns.length === 0 ? (
+          {publicCampaigns.length === 0 ? (
             <div className="campaignCard">
               <div className="campaignTitle">No public campaigns available</div>
               <div className="campaignDesc">
@@ -1558,7 +1521,7 @@ export default function Collective() {
               </div>
             </div>
           ) : (
-            visiblePublicCampaigns.map((campaign) => {
+            publicCampaigns.map((campaign) => {
               const membership = myCampaignMemberships[campaign.id] ?? null;
               const joined = Boolean(membership);
               const tone = cadenceTone(campaign.cadence);
@@ -1664,16 +1627,16 @@ export default function Collective() {
             <div className="sectionKicker">RESEARCH COLLECTIVE</div>
             <h2 className="sectionTitle">Limited-entry research assignments</h2>
             <p className="sectionHint">
-              This premium layer is reserved for Research Collective subscribers. Keep only 3–4 of these active at a time for a focused, special-assignment feel.
+              This premium layer is reserved for Research Collective subscribers. Keep only 3–4 of these active at a time for a focused special-assignment feel.
             </p>
           </div>
           <span className="statusBadge">
-            {campaignLoading ? "Syncing…" : `${visibleResearchCampaigns.length} limited-entry`}
+            {campaignLoading ? "Syncing…" : `${researchCampaigns.length} limited-entry`}
           </span>
         </div>
 
         <div className="campaignGrid">
-          {visibleResearchCampaigns.length === 0 ? (
+          {researchCampaigns.length === 0 ? (
             <div className="campaignCard premium">
               <div className="campaignTitle">No research assignments available</div>
               <div className="campaignDesc">
@@ -1681,7 +1644,7 @@ export default function Collective() {
               </div>
             </div>
           ) : (
-            visibleResearchCampaigns.map((campaign) => {
+            researchCampaigns.map((campaign) => {
               const membership = myCampaignMemberships[campaign.id] ?? null;
               const joined = Boolean(membership);
               const filledSlots = slotCounts[campaign.id] ?? 0;
