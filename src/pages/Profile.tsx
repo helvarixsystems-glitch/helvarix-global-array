@@ -26,6 +26,7 @@ type ProfileRow = {
   observation_index?: number | null;
   campaign_impact?: number | null;
   is_pro?: boolean | null;
+  guild_access?: boolean | null;
 };
 
 type FormState = {
@@ -339,7 +340,7 @@ export default function Profile() {
           await Promise.all([
             supabase
               .from("profiles")
-              .select(`
+                            .select(`
                 id,
                 callsign,
                 display_name,
@@ -362,7 +363,8 @@ export default function Profile() {
                 accent_pref,
                 observation_index,
                 campaign_impact,
-                is_pro
+                is_pro,
+                guild_access
               `)
               .eq("id", user.id)
               .maybeSingle(),
@@ -408,7 +410,7 @@ export default function Profile() {
         setBannerUrl(profile?.banner_url ?? "");
         setStoredOI(oi);
         setStoredCI(ci);
-        setIsPro(Boolean(profile?.is_pro));
+        setIsPro(Boolean(profile?.guild_access ?? profile?.is_pro));
 
         const verified = observationRows.filter((obs) => {
           const raw = String(obs.verification_status ?? obs.status ?? "").toLowerCase();
@@ -446,7 +448,7 @@ export default function Profile() {
     setForm((current) => ({ ...current, [key]: value }));
   }
 
-  async function handleImageUpload(
+   async function handleImageUpload(
     event: ChangeEvent<HTMLInputElement>,
     type: "avatar" | "banner"
   ) {
@@ -460,6 +462,8 @@ export default function Profile() {
 
     try {
       setError(null);
+      setMessage(null);
+
       if (type === "avatar") setAvatarUploading(true);
       else setBannerUploading(true);
 
@@ -467,6 +471,13 @@ export default function Profile() {
 
       if (type === "avatar") setAvatarUrl(publicUrl);
       else setBannerUrl(publicUrl);
+
+      await saveProfileWithFallback({
+        id: sessionUserId,
+        [type === "avatar" ? "avatar_url" : "banner_url"]: publicUrl,
+      });
+
+      setMessage(type === "avatar" ? "Avatar updated." : "Banner updated.");
     } catch (err) {
       console.error(err);
       setError(err instanceof Error ? err.message : "Unable to upload image.");
