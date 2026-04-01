@@ -28,17 +28,6 @@ type Coordinates = {
 
 type CampaignCadence = "DAILY" | "WEEKLY" | "GLOBAL" | "RESEARCH";
 
-type CampaignProgressRow = {
-  id: string;
-  title: string | null;
-  cadence: CampaignCadence | null;
-  description: string | null;
-  end_at: string | null;
-  progress: number | null;
-  participant_count?: number | null;
-  completion_pct?: number | null;
-};
-
 type CampaignRow = {
   id: string;
   cadence: CampaignCadence | null;
@@ -52,6 +41,10 @@ type CampaignRow = {
   is_active: boolean | null;
   target_type?: string | null;
   access_tier?: string | null;
+  campaign_class?: string | null;
+  slot_capacity?: number | null;
+  is_limited_entry?: boolean | null;
+  priority_rank?: number | null;
 };
 
 type CollectiveCampaign = {
@@ -61,12 +54,26 @@ type CollectiveCampaign = {
   description: string;
   startAt: string | null;
   endAt: string | null;
-  progress: number;
-  participantCount: number;
   targetType: string | null;
   tags: string[];
   accessTier: string | null;
+  campaignClass: string;
+  slotCapacity: number | null;
+  isLimitedEntry: boolean;
+  priorityRank: number | null;
   isActive: boolean;
+};
+
+type CampaignMembershipRecord = {
+  campaign_id: string;
+  user_id: string;
+  team_id: string | null;
+  status: string | null;
+};
+
+type CampaignSlotRow = {
+  campaign_id: string;
+  filled_slots: number;
 };
 
 type TeamRecord = {
@@ -78,28 +85,6 @@ type TeamRecord = {
   is_private: boolean | null;
   max_members: number | null;
   created_at: string | null;
-};
-
-type TeamMemberRecord = {
-  id?: string;
-  team_id: string;
-  user_id: string;
-  role: string | null;
-  status: string | null;
-  created_at?: string | null;
-  profile?: {
-    display_name?: string | null;
-    callsign?: string | null;
-  } | null;
-};
-
-type CampaignMembershipRecord = {
-  id?: string;
-  campaign_id: string;
-  user_id: string;
-  team_id: string | null;
-  status: string | null;
-  created_at?: string | null;
 };
 
 const SOLAR_GOLD = "#f2bf57";
@@ -135,19 +120,6 @@ function formatDate(value: string | null) {
   });
 }
 
-function formatDateTime(value: string | null) {
-  if (!value) return "Open";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Open";
-  return date.toLocaleString([], {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
 function formatDateRange(startAt: string | null, endAt: string | null) {
   return `${formatDate(startAt)} — ${formatDate(endAt)}`;
 }
@@ -167,18 +139,18 @@ function formatEndsIn(endAt: string | null) {
   return `ENDS IN ${minutes}M`;
 }
 
+function cadenceTone(cadence: CampaignCadence | null | undefined): "cyan" | "violet" | "amber" {
+  if (cadence === "DAILY") return "cyan";
+  if (cadence === "WEEKLY") return "violet";
+  return "amber";
+}
+
 function cadenceSortValue(cadence: CampaignCadence | null | undefined) {
   if (cadence === "DAILY") return 1;
   if (cadence === "WEEKLY") return 2;
   if (cadence === "GLOBAL") return 3;
   if (cadence === "RESEARCH") return 4;
   return 9;
-}
-
-function cadenceTone(cadence: CampaignCadence | null | undefined): "cyan" | "violet" | "amber" {
-  if (cadence === "DAILY") return "cyan";
-  if (cadence === "WEEKLY") return "violet";
-  return "amber";
 }
 
 function generateAlias(seed: string) {
@@ -302,14 +274,6 @@ function looksLikeMissingRelation(error: any) {
   );
 }
 
-function teamDisplayName(member: TeamMemberRecord | null | undefined) {
-  const display = String(member?.profile?.display_name ?? "").trim();
-  if (display) return display;
-  const callsign = String(member?.profile?.callsign ?? "").trim();
-  if (callsign) return callsign;
-  return "Operator";
-}
-
 async function geocodePlace(query: string): Promise<Coordinates | null> {
   const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(
     query
@@ -377,8 +341,8 @@ export default function Collective() {
   const [loading, setLoading] = useState(true);
   const [busyCheckout, setBusyCheckout] = useState(false);
   const [busyPortal, setBusyPortal] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const [sessionUser, setSessionUser] = useState<SessionUser | null>(null);
   const [profile, setProfile] = useState<ProfileRecord>(null);
@@ -390,25 +354,14 @@ export default function Collective() {
 
   const [campaigns, setCampaigns] = useState<CollectiveCampaign[]>([]);
   const [campaignLoading, setCampaignLoading] = useState(false);
-  const [campaignError, setCampaignError] = useState<string | null>(null);
-
-  const [teamsEnabled, setTeamsEnabled] = useState(true);
-  const [membershipsEnabled, setMembershipsEnabled] = useState(true);
-
-  const [teams, setTeams] = useState<TeamRecord[]>([]);
-  const [teamMembersByTeam, setTeamMembersByTeam] = useState<Record<string, TeamMemberRecord[]>>({});
+  const [campaignMembershipsEnabled, setCampaignMembershipsEnabled] = useState(true);
   const [myCampaignMemberships, setMyCampaignMemberships] = useState<Record<string, CampaignMembershipRecord>>({});
-
-  const [teamsLoading, setTeamsLoading] = useState(false);
-  const [teamActionBusy, setTeamActionBusy] = useState<string | null>(null);
+  const [slotCounts, setSlotCounts] = useState<Record<string, number>>({});
   const [campaignActionBusy, setCampaignActionBusy] = useState<string | null>(null);
 
-  const [createTeamOpen, setCreateTeamOpen] = useState(false);
-  const [newTeamName, setNewTeamName] = useState("");
-  const [newTeamDescription, setNewTeamDescription] = useState("");
-  const [newTeamPrivacy, setNewTeamPrivacy] = useState(true);
-
-  const [campaignFilter, setCampaignFilter] = useState<"ALL" | "PUBLIC" | "MEMBER" | "ACTIVE" | "UPCOMING">("ALL");
+  const [teamsEnabled, setTeamsEnabled] = useState(true);
+  const [teams, setTeams] = useState<TeamRecord[]>([]);
+  const [teamsLoading, setTeamsLoading] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -424,6 +377,7 @@ export default function Collective() {
 
         const user = session?.user;
         if (!user) throw new Error("You must be signed in to access Collective.");
+
         if (!active) return;
 
         setSessionUser({
@@ -539,87 +493,122 @@ export default function Collective() {
 
   useEffect(() => {
     if (!sessionUser) return;
-    loadCampaigns(sessionUser.id);
-    loadTeams(sessionUser.id);
+    loadCampaigns();
     loadCampaignMemberships(sessionUser.id);
+    loadTeams(sessionUser.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionUser, isPro]);
 
-  async function loadCampaigns(userId: string | null) {
+  async function loadCampaigns() {
     setCampaignLoading(true);
-    setCampaignError(null);
-
-    if (userId) {
-      try {
-        const { data, error } = await supabase.rpc("get_home_campaign_progress", {
-          user_id: userId,
-        });
-
-        if (!error && Array.isArray(data) && data.length > 0) {
-          const mapped = (data as CampaignProgressRow[])
-            .map((row) => ({
-              id: row.id,
-              cadence: (row.cadence ?? "GLOBAL") as CampaignCadence,
-              title: row.title ?? "Untitled Campaign",
-              description: row.description ?? "Array-wide observation objective.",
-              startAt: null,
-              endAt: row.end_at ?? null,
-              progress:
-                row.completion_pct != null
-                  ? clamp(Number(row.completion_pct) / 100)
-                  : clamp(Number(row.progress ?? 0)),
-              participantCount: Number(row.participant_count ?? 0),
-              targetType: null,
-              tags: [],
-              accessTier: null,
-              isActive: true,
-            }))
-            .sort((a, b) => cadenceSortValue(a.cadence) - cadenceSortValue(b.cadence));
-
-          setCampaigns(mapped);
-          setCampaignLoading(false);
-          return;
-        }
-      } catch (err) {
-        console.warn("Campaign RPC failed:", err);
-      }
-    }
 
     try {
       const { data, error } = await supabase
         .from("campaigns")
         .select(
-          "id,cadence,title,description,start_at,end_at,goal_user,goal_global,tags,is_active,target_type,access_tier"
+          "id,cadence,title,description,start_at,end_at,goal_user,goal_global,tags,is_active,target_type,access_tier,campaign_class,slot_capacity,is_limited_entry,priority_rank"
         )
         .eq("is_active", true)
-        .order("start_at", { ascending: false })
-        .limit(12);
+        .order("priority_rank", { ascending: true, nullsFirst: false })
+        .order("start_at", { ascending: false });
 
       if (error) throw error;
 
-      const rows = ((data as CampaignRow[]) ?? [])
-        .map((row) => ({
-          id: row.id,
-          cadence: (row.cadence ?? "GLOBAL") as CampaignCadence,
-          title: row.title ?? "Untitled Campaign",
-          description: row.description ?? "Array-wide observation objective.",
-          startAt: row.start_at ?? null,
-          endAt: row.end_at ?? null,
-          progress: 0,
-          participantCount: 0,
-          targetType: row.target_type ?? null,
-          tags: row.tags ?? [],
-          accessTier: row.access_tier ?? "free",
-          isActive: Boolean(row.is_active ?? true),
-        }))
-        .sort((a, b) => cadenceSortValue(a.cadence) - cadenceSortValue(b.cadence));
+      const rows = ((data as CampaignRow[]) ?? []).map((row) => ({
+        id: row.id,
+        cadence: (row.cadence ?? "GLOBAL") as CampaignCadence,
+        title: row.title ?? "Untitled Campaign",
+        description: row.description ?? "Array-wide observation objective.",
+        startAt: row.start_at ?? null,
+        endAt: row.end_at ?? null,
+        targetType: row.target_type ?? null,
+        tags: row.tags ?? [],
+        accessTier: row.access_tier ?? "free",
+        campaignClass: row.campaign_class ?? "public",
+        slotCapacity: row.slot_capacity ?? null,
+        isLimitedEntry: Boolean(row.is_limited_entry),
+        priorityRank: row.priority_rank ?? null,
+        isActive: Boolean(row.is_active ?? true),
+      }));
+
+      rows.sort((a, b) => {
+        if (a.campaignClass !== b.campaignClass) {
+          if (a.campaignClass === "public") return -1;
+          if (b.campaignClass === "public") return 1;
+        }
+
+        const priorityA = a.priorityRank ?? 9999;
+        const priorityB = b.priorityRank ?? 9999;
+        if (priorityA !== priorityB) return priorityA - priorityB;
+
+        return cadenceSortValue(a.cadence) - cadenceSortValue(b.cadence);
+      });
 
       setCampaigns(rows);
+      await loadSlotCounts(rows.map((row) => row.id));
     } catch (err: any) {
       setCampaigns([]);
-      setCampaignError(err?.message ?? "Campaign data is not available yet.");
+      setError((current) => current ?? err?.message ?? "Unable to load campaign data.");
     } finally {
       setCampaignLoading(false);
+    }
+  }
+
+  async function loadSlotCounts(campaignIds: string[]) {
+    if (!campaignIds.length) {
+      setSlotCounts({});
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from("campaign_memberships")
+        .select("campaign_id,status")
+        .in("campaign_id", campaignIds);
+
+      if (error) throw error;
+
+      const counts: Record<string, number> = {};
+      for (const row of (data ?? []) as { campaign_id: string; status: string | null }[]) {
+        if ((row.status ?? "active") !== "active") continue;
+        counts[row.campaign_id] = (counts[row.campaign_id] ?? 0) + 1;
+      }
+
+      setSlotCounts(counts);
+      setCampaignMembershipsEnabled(true);
+    } catch (err: any) {
+      if (looksLikeMissingRelation(err)) {
+        setCampaignMembershipsEnabled(false);
+        setSlotCounts({});
+      } else {
+        setError((current) => current ?? err?.message ?? "Unable to load campaign slot counts.");
+      }
+    }
+  }
+
+  async function loadCampaignMemberships(userId: string) {
+    try {
+      const { data, error } = await supabase
+        .from("campaign_memberships")
+        .select("campaign_id,user_id,team_id,status")
+        .eq("user_id", userId);
+
+      if (error) throw error;
+
+      const mapped: Record<string, CampaignMembershipRecord> = {};
+      for (const row of (data ?? []) as CampaignMembershipRecord[]) {
+        mapped[row.campaign_id] = row;
+      }
+
+      setMyCampaignMemberships(mapped);
+      setCampaignMembershipsEnabled(true);
+    } catch (err: any) {
+      if (looksLikeMissingRelation(err)) {
+        setCampaignMembershipsEnabled(false);
+        setMyCampaignMemberships({});
+      } else {
+        setError((current) => current ?? err?.message ?? "Unable to load your campaign memberships.");
+      }
     }
   }
 
@@ -632,8 +621,6 @@ export default function Collective() {
         .select(
           `
             team_id,
-            role,
-            status,
             teams (
               id,
               name,
@@ -673,17 +660,10 @@ export default function Collective() {
 
       setTeams(nextTeams);
       setTeamsEnabled(true);
-
-      if (nextTeams.length > 0) {
-        await loadTeamMembers(nextTeams.map((team) => team.id));
-      } else {
-        setTeamMembersByTeam({});
-      }
     } catch (err: any) {
       if (looksLikeMissingRelation(err)) {
         setTeamsEnabled(false);
         setTeams([]);
-        setTeamMembersByTeam({});
       } else {
         setError((current) => current ?? err?.message ?? "Unable to load teams.");
       }
@@ -692,76 +672,12 @@ export default function Collective() {
     }
   }
 
-  async function loadTeamMembers(teamIds: string[]) {
-    if (!teamIds.length) {
-      setTeamMembersByTeam({});
-      return;
-    }
-
-    try {
-      const { data, error } = await supabase
-        .from("team_members")
-        .select("team_id,user_id,role,status")
-        .in("team_id", teamIds)
-        .order("created_at", { ascending: true });
-
-      if (error) throw error;
-
-      const rows = (data ?? []) as TeamMemberRecord[];
-      const grouped: Record<string, TeamMemberRecord[]> = {};
-
-      for (const row of rows) {
-        if (!grouped[row.team_id]) grouped[row.team_id] = [];
-        grouped[row.team_id].push({
-          team_id: row.team_id,
-          user_id: row.user_id,
-          role: row.role ?? "member",
-          status: row.status ?? "active",
-        });
-      }
-
-      setTeamMembersByTeam(grouped);
-    } catch (err: any) {
-      if (!looksLikeMissingRelation(err)) {
-        setError((current) => current ?? err?.message ?? "Unable to load team members.");
-      }
-    }
-  }
-
-  async function loadCampaignMemberships(userId: string) {
-    try {
-      const { data, error } = await supabase
-        .from("campaign_memberships")
-        .select("campaign_id,user_id,team_id,status,created_at")
-        .eq("user_id", userId);
-
-      if (error) throw error;
-
-      const mapped: Record<string, CampaignMembershipRecord> = {};
-      for (const row of (data ?? []) as CampaignMembershipRecord[]) {
-        mapped[row.campaign_id] = row;
-      }
-
-      setMyCampaignMemberships(mapped);
-      setMembershipsEnabled(true);
-    } catch (err: any) {
-      if (looksLikeMissingRelation(err)) {
-        setMembershipsEnabled(false);
-        setMyCampaignMemberships({});
-      } else {
-        setError((current) => current ?? err?.message ?? "Unable to load campaign memberships.");
-      }
-    }
-  }
-
   async function handleUpgrade() {
     setBusyCheckout(true);
     setError(null);
 
     try {
-      if (!sessionUser) {
-        throw new Error("You must be signed in before starting checkout.");
-      }
+      if (!sessionUser) throw new Error("You must be signed in before starting checkout.");
 
       const res = await fetch("/api/create-checkout-session", {
         method: "POST",
@@ -805,124 +721,46 @@ export default function Collective() {
     }
   }
 
-  async function handleCreateTeam() {
+  async function handleJoinCampaign(campaign: CollectiveCampaign, teamId: string | null = null) {
     if (!sessionUser) return;
-    setTeamActionBusy("create");
+    setCampaignActionBusy(`join-${campaign.id}`);
     setError(null);
     setNotice(null);
 
     try {
-      if (!isPro) {
-        throw new Error("Collective membership is required to create teams.");
+      if (!campaignMembershipsEnabled) {
+        throw new Error("Campaign membership table is not available yet.");
       }
 
-      if (!teamsEnabled) {
-        throw new Error("Team tables are not available yet in Supabase.");
+      if (
+        !canUserSeeCampaign(
+          {
+            access_tier: campaign.accessTier,
+            is_active: campaign.isActive,
+          },
+          {
+            guild_access: isPro,
+            is_pro: isPro,
+          }
+        )
+      ) {
+        throw new Error("This campaign requires Research Collective membership.");
       }
 
-      const cleanName = newTeamName.trim();
-      if (!cleanName) throw new Error("Team name is required.");
+      const filledSlots = slotCounts[campaign.id] ?? 0;
+      const isFull =
+        campaign.isLimitedEntry &&
+        campaign.slotCapacity != null &&
+        filledSlots >= campaign.slotCapacity &&
+        !myCampaignMemberships[campaign.id];
 
-      const slug = cleanName
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-+|-+$/g, "")
-        .slice(0, 48);
-
-      const { data: createdTeam, error: teamError } = await supabase
-        .from("teams")
-        .insert({
-          name: cleanName,
-          slug: slug || null,
-          description: newTeamDescription.trim() || null,
-          owner_id: sessionUser.id,
-          is_private: newTeamPrivacy,
-          max_members: 8,
-        })
-        .select("*")
-        .single();
-
-      if (teamError) throw teamError;
-
-      const { error: memberError } = await supabase.from("team_members").insert({
-        team_id: createdTeam.id,
-        user_id: sessionUser.id,
-        role: "owner",
-        status: "active",
-      });
-
-      if (memberError) throw memberError;
-
-      setNotice("Team created.");
-      setCreateTeamOpen(false);
-      setNewTeamName("");
-      setNewTeamDescription("");
-      setNewTeamPrivacy(true);
-      await loadTeams(sessionUser.id);
-    } catch (err: any) {
-      setError(err?.message ?? "Unable to create team.");
-    } finally {
-      setTeamActionBusy(null);
-    }
-  }
-
-  async function handleLeaveTeam(teamId: string) {
-    if (!sessionUser) return;
-    setTeamActionBusy(`leave-${teamId}`);
-    setError(null);
-
-    try {
-      if (!teamsEnabled) throw new Error("Team tables are not available yet.");
-
-      const { error } = await supabase
-        .from("team_members")
-        .delete()
-        .eq("team_id", teamId)
-        .eq("user_id", sessionUser.id);
-
-      if (error) throw error;
-
-      setNotice("You left the team.");
-      await loadTeams(sessionUser.id);
-    } catch (err: any) {
-      setError(err?.message ?? "Unable to leave team.");
-    } finally {
-      setTeamActionBusy(null);
-    }
-  }
-
-  async function handleJoinCampaign(campaignId: string, teamId: string | null = null) {
-    if (!sessionUser) return;
-    setCampaignActionBusy(`join-${campaignId}`);
-    setError(null);
-    setNotice(null);
-
-    try {
-      if (!membershipsEnabled) {
-        throw new Error("Campaign membership tables are not available yet.");
-      }
-
-      const campaign = campaigns.find((entry) => entry.id === campaignId);
-      if (!campaign) throw new Error("Campaign not found.");
-
-      const visible = canUserSeeCampaign(
-        {
-          access_tier: campaign.accessTier,
-          is_active: campaign.isActive,
-        },
-        {
-          guild_access: isPro,
-          is_pro: isPro,
-        }
-      );
-
-      if (!visible) {
-        throw new Error("This campaign requires Collective membership.");
+      if (isFull) {
+        throw new Error("This research campaign is already full.");
       }
 
       const { error } = await supabase.from("campaign_memberships").upsert(
         {
-          campaign_id: campaignId,
+          campaign_id: campaign.id,
           user_id: sessionUser.id,
           team_id: teamId,
           status: "active",
@@ -936,13 +774,22 @@ export default function Collective() {
 
       setMyCampaignMemberships((current) => ({
         ...current,
-        [campaignId]: {
-          campaign_id: campaignId,
+        [campaign.id]: {
+          campaign_id: campaign.id,
           user_id: sessionUser.id,
           team_id: teamId,
           status: "active",
         },
       }));
+
+      setSlotCounts((current) => {
+        const existsAlready = Boolean(myCampaignMemberships[campaign.id]);
+        if (existsAlready) return current;
+        return {
+          ...current,
+          [campaign.id]: (current[campaign.id] ?? 0) + 1,
+        };
+      });
 
       setNotice(teamId ? "Campaign joined with team assignment." : "Campaign joined.");
     } catch (err: any) {
@@ -952,30 +799,39 @@ export default function Collective() {
     }
   }
 
-  async function handleLeaveCampaign(campaignId: string) {
+  async function handleLeaveCampaign(campaign: CollectiveCampaign) {
     if (!sessionUser) return;
-    setCampaignActionBusy(`leave-${campaignId}`);
+    setCampaignActionBusy(`leave-${campaign.id}`);
     setError(null);
     setNotice(null);
 
     try {
-      if (!membershipsEnabled) {
-        throw new Error("Campaign membership tables are not available yet.");
+      if (!campaignMembershipsEnabled) {
+        throw new Error("Campaign membership table is not available yet.");
       }
+
+      const existed = Boolean(myCampaignMemberships[campaign.id]);
 
       const { error } = await supabase
         .from("campaign_memberships")
         .delete()
-        .eq("campaign_id", campaignId)
+        .eq("campaign_id", campaign.id)
         .eq("user_id", sessionUser.id);
 
       if (error) throw error;
 
       setMyCampaignMemberships((current) => {
         const next = { ...current };
-        delete next[campaignId];
+        delete next[campaign.id];
         return next;
       });
+
+      if (existed) {
+        setSlotCounts((current) => ({
+          ...current,
+          [campaign.id]: Math.max(0, (current[campaign.id] ?? 0) - 1),
+        }));
+      }
 
       setNotice("Campaign left.");
     } catch (err: any) {
@@ -983,10 +839,6 @@ export default function Collective() {
     } finally {
       setCampaignActionBusy(null);
     }
-  }
-
-  async function handleAssignTeamToCampaign(campaignId: string, teamId: string) {
-    await handleJoinCampaign(campaignId, teamId);
   }
 
   const displayName = useMemo(() => {
@@ -1018,49 +870,24 @@ export default function Collective() {
 
   const observationIndex = toNumber(profile?.observation_index);
   const campaignImpact = toNumber(profile?.campaign_impact);
-  const teamCount = teams.length;
-  const activeCampaignCount = campaigns.filter((campaign) => {
-    const endTime = campaign.endAt ? new Date(campaign.endAt).getTime() : null;
-    return endTime == null || endTime > Date.now();
-  }).length;
 
-  const visibleCampaigns = useMemo(() => {
-    const next = campaigns.filter((campaign) =>
-      canUserSeeCampaign(
-        {
-          access_tier: campaign.accessTier,
-          is_active: campaign.isActive,
-        },
-        {
-          guild_access: isPro,
-          is_pro: isPro,
-        }
-      )
-    );
+  const visiblePublicCampaigns = useMemo(() => {
+    return campaigns.filter((campaign) => campaign.campaignClass === "public");
+  }, [campaigns]);
 
-    return next.filter((campaign) => {
-      const endTime = campaign.endAt ? new Date(campaign.endAt).getTime() : null;
-      const startTime = campaign.startAt ? new Date(campaign.startAt).getTime() : null;
-      const isUpcoming = startTime != null && startTime > Date.now();
-      const isActiveNow = !isUpcoming && (endTime == null || endTime > Date.now());
-      const isMemberOnly = (campaign.accessTier ?? "free").toLowerCase() !== "free";
+  const visibleResearchCampaigns = useMemo(() => {
+    const allResearch = campaigns
+      .filter((campaign) => campaign.campaignClass === "research_collective")
+      .sort((a, b) => (a.priorityRank ?? 9999) - (b.priorityRank ?? 9999));
 
-      if (campaignFilter === "PUBLIC") return !isMemberOnly;
-      if (campaignFilter === "MEMBER") return isMemberOnly;
-      if (campaignFilter === "ACTIVE") return isActiveNow;
-      if (campaignFilter === "UPCOMING") return isUpcoming;
-      return true;
-    });
-  }, [campaigns, campaignFilter, isPro]);
+    if (isPro) {
+      return allResearch.slice(0, 4);
+    }
 
-  const publicCampaigns = visibleCampaigns.filter(
-    (campaign) => (campaign.accessTier ?? "free").toLowerCase() === "free"
-  );
-  const memberCampaigns = visibleCampaigns.filter(
-    (campaign) => (campaign.accessTier ?? "free").toLowerCase() !== "free"
-  );
+    return allResearch.slice(0, 4);
+  }, [campaigns, isPro]);
 
-  const topTeam = teams[0] ?? null;
+  const activeCampaignCount = visiblePublicCampaigns.length + visibleResearchCampaigns.length;
 
   const toolCards = [
     {
@@ -1094,27 +921,27 @@ export default function Collective() {
       locked: false,
     },
     {
-      title: "Team Operations",
-      value: isPro ? `${teamCount} active team${teamCount === 1 ? "" : "s"}` : "Members only",
-      body: "Create, manage, and deploy private research teams against live campaigns.",
-      locked: !isPro,
-    },
-    {
-      title: "Live Campaigns",
-      value: `${activeCampaignCount} active`,
-      body: "This page now reflects real campaigns pulled from your campaign system.",
+      title: "Public Campaign Access",
+      value: `${visiblePublicCampaigns.length} active`,
+      body: "Subscribers still retain full access to all public daily, weekly, and global campaigns.",
       locked: false,
     },
     {
-      title: "Campaign Enrollment",
-      value: membershipsEnabled ? "Operational" : "Requires DB table",
-      body: "Users can join or leave campaigns directly from this page.",
+      title: "Research Assignments",
+      value: `${visibleResearchCampaigns.length} limited-entry`,
+      body: "Research Collective subscribers unlock the premium limited-entry campaign layer.",
       locked: false,
     },
     {
       title: "Team Assignment",
-      value: teamsEnabled && membershipsEnabled ? "Operational" : "Requires DB table",
-      body: "Assign a team to a campaign for coordinated runs and shared operating structure.",
+      value: teamsEnabled ? `${teams.length} team${teams.length === 1 ? "" : "s"} available` : "Requires DB table",
+      body: "Subscribers can optionally attach a team to a campaign when joining.",
+      locked: !teamsEnabled,
+    },
+    {
+      title: "Live Campaign Layer",
+      value: `${activeCampaignCount} total`,
+      body: "This page now reflects real campaign data instead of static placeholder cards.",
       locked: false,
     },
   ];
@@ -1143,7 +970,7 @@ export default function Collective() {
         }
         .collectiveHeroGrid{
           display:grid;
-          grid-template-columns:minmax(0,1.25fr) minmax(320px,0.75fr);
+          grid-template-columns:minmax(0,1.2fr) minmax(320px,0.8fr);
           gap:18px;
           align-items:stretch;
           position:relative;
@@ -1237,9 +1064,9 @@ export default function Collective() {
           font-size:28px;
           font-weight:800;
         }
-        .collectiveThreeCol{
+        .collectiveTwoCol{
           display:grid;
-          grid-template-columns:minmax(0,1.1fr) minmax(0,1.1fr) minmax(320px,0.8fr);
+          grid-template-columns:minmax(0,1.1fr) minmax(0,0.9fr);
           gap:18px;
         }
         .collectiveToolsGrid{
@@ -1270,25 +1097,13 @@ export default function Collective() {
           color:var(--muted);
           line-height:1.6;
         }
-        .campaignFilterRow{
+        .campaignSectionHeader{
           display:flex;
-          gap:10px;
+          align-items:flex-start;
+          justify-content:space-between;
+          gap:14px;
           flex-wrap:wrap;
-          margin-top:16px;
-        }
-        .filterChip{
-          border:1px solid rgba(255,255,255,0.08);
-          background:rgba(255,255,255,0.03);
-          color:var(--text);
-          padding:10px 12px;
-          border-radius:999px;
-          cursor:pointer;
-          font-weight:700;
-        }
-        .filterChip.active{
-          border-color:rgba(242,191,87,0.36);
-          background:rgba(242,191,87,0.10);
-          color:#ffe4a5;
+          margin-top:20px;
         }
         .campaignGrid{
           display:grid;
@@ -1302,6 +1117,15 @@ export default function Collective() {
           border:1px solid rgba(255,255,255,0.06);
           display:grid;
           gap:14px;
+        }
+        .campaignCard.premium{
+          border:1px solid rgba(242,191,87,0.22);
+          background:
+            radial-gradient(circle at top right, rgba(242,191,87,0.08), transparent 32%),
+            linear-gradient(180deg, rgba(18, 22, 38, 0.95), rgba(9, 14, 29, 0.92));
+        }
+        .campaignCard.locked{
+          opacity:0.92;
         }
         .campaignTop{
           display:flex;
@@ -1336,21 +1160,24 @@ export default function Collective() {
           letter-spacing:0.04em;
           text-transform:uppercase;
         }
+        .campaignMetaChip.gold{
+          border-color:rgba(242,191,87,0.24);
+          background:rgba(242,191,87,0.08);
+          color:#ffe4a5;
+        }
+        .campaignMetaChip.full{
+          border-color:rgba(255,120,120,0.25);
+          background:rgba(255,120,120,0.08);
+          color:#ffb3b3;
+        }
+        .campaignMetaChip.locked{
+          border-color:rgba(255,207,120,0.22);
+          background:rgba(255,207,120,0.08);
+          color:#ffcf78;
+        }
         .toneCyan{ color:#7cefff; }
         .toneViolet{ color:#cab3ff; }
         .toneAmber{ color:#ffd07a; }
-        .campaignProgressTrack{
-          width:100%;
-          height:10px;
-          border-radius:999px;
-          background:rgba(255,255,255,0.06);
-          overflow:hidden;
-        }
-        .campaignProgressFill{
-          height:100%;
-          border-radius:999px;
-          background:linear-gradient(90deg, rgba(92,214,255,0.9), rgba(242,191,87,0.9));
-        }
         .campaignStatRow{
           display:grid;
           grid-template-columns:repeat(4, minmax(0,1fr));
@@ -1385,70 +1212,6 @@ export default function Collective() {
           background:rgba(255,255,255,0.04);
           color:var(--text);
           border:1px solid rgba(255,255,255,0.08);
-        }
-        .teamGrid{
-          display:grid;
-          gap:14px;
-          margin-top:18px;
-        }
-        .teamCard{
-          padding:18px;
-          border-radius:18px;
-          background:rgba(8, 14, 30, 0.72);
-          border:1px solid rgba(255,255,255,0.06);
-          display:grid;
-          gap:14px;
-        }
-        .teamHeader{
-          display:flex;
-          justify-content:space-between;
-          gap:12px;
-          align-items:flex-start;
-          flex-wrap:wrap;
-        }
-        .teamName{
-          font-size:18px;
-          font-weight:800;
-        }
-        .teamDesc{
-          color:var(--muted);
-          line-height:1.6;
-        }
-        .teamMemberList{
-          display:grid;
-          gap:10px;
-        }
-        .teamMemberRow{
-          display:flex;
-          justify-content:space-between;
-          gap:16px;
-          padding:12px 14px;
-          border-radius:14px;
-          background:rgba(255,255,255,0.03);
-          border:1px solid rgba(255,255,255,0.06);
-        }
-        .createTeamPanel{
-          display:grid;
-          gap:12px;
-          margin-top:18px;
-          padding:18px;
-          border-radius:18px;
-          background:rgba(255,255,255,0.03);
-          border:1px solid rgba(255,255,255,0.06);
-        }
-        .collectiveInput,
-        .collectiveTextarea,
-        .collectiveSelect{
-          width:100%;
-          padding:12px 14px;
-          border-radius:14px;
-          border:1px solid rgba(255,255,255,0.08);
-          background:rgba(255,255,255,0.04);
-          color:var(--text);
-        }
-        .collectiveTextarea{
-          min-height:110px;
-          resize:vertical;
         }
         .publicIdentityPreview{
           display:grid;
@@ -1511,18 +1274,14 @@ export default function Collective() {
         .collectiveDataRow span{
           color:var(--muted);
         }
-        .miniMuted{
+        .sectionHint{
           color:var(--muted);
-          font-size:13px;
           line-height:1.6;
-        }
-        @media (max-width: 1180px){
-          .collectiveThreeCol{
-            grid-template-columns:1fr;
-          }
+          margin-top:10px;
         }
         @media (max-width: 1024px){
-          .collectiveHeroGrid{
+          .collectiveHeroGrid,
+          .collectiveTwoCol{
             grid-template-columns:1fr;
           }
           .collectiveMetricGrid,
@@ -1550,16 +1309,16 @@ export default function Collective() {
             <div className="collectiveKicker">COLLECTIVE OPERATIONS</div>
             <h1 className="pageTitle">Helvarix Research Collective</h1>
             <p className="collectiveLead">
-              The Collective page now acts as a live operations layer for membership, teams, and
-              campaign enrollment. Instead of static placeholders, this page is built around real
-              campaign records and optional team deployment against those campaigns.
+              Public campaigns remain the heartbeat of the Array. Research Collective subscribers
+              get an additional premium layer of limited-entry assignments, reserved for
+              higher-focus work and coordinated campaign participation.
             </p>
 
             <div className="collectiveHeroMeta">
               <span className="goldBadge">{isPro ? "COLLECTIVE ACTIVE" : "COLLECTIVE LOCKED"}</span>
-              <span className="statusBadge">Live campaigns</span>
-              <span className="statusBadge">Team management</span>
-              <span className="statusBadge">Weather-aware planning</span>
+              <span className="statusBadge">Public campaign access</span>
+              <span className="statusBadge">Research assignments</span>
+              <span className="statusBadge">Limited entry slots</span>
             </div>
           </div>
 
@@ -1626,24 +1385,22 @@ export default function Collective() {
       {loading ? (
         <section className="panel">
           <div className="stateTitle">Loading Collective…</div>
-          <div className="stateText">Syncing membership, campaigns, teams, and observatory context.</div>
+          <div className="stateText">Syncing membership, campaigns, and observatory context.</div>
         </section>
       ) : null}
 
       {notice ? <div className="alert info">{notice}</div> : null}
       {error ? <div className="alert error">{error}</div> : null}
-      {campaignError ? <div className="alert error">{campaignError}</div> : null}
 
-      {!teamsEnabled ? (
+      {!campaignMembershipsEnabled ? (
         <div className="alert info">
-          Team controls are wired into this page, but your Supabase team tables do not exist yet.
+          Campaign membership controls are wired in, but the campaign membership table is not available yet.
         </div>
       ) : null}
 
-      {!membershipsEnabled ? (
+      {!teamsEnabled ? (
         <div className="alert info">
-          Campaign join/leave controls are wired into this page, but your campaign membership table
-          does not exist yet.
+          Team assignment is wired in, but the team tables are not available yet.
         </div>
       ) : null}
 
@@ -1680,14 +1437,14 @@ export default function Collective() {
         </div>
       </section>
 
-      <div className="collectiveThreeCol">
+      <div className="collectiveTwoCol">
         <section className="panel">
           <div className="sectionHeader">
             <div>
               <div className="sectionKicker">MEMBER TOOLS</div>
               <h2 className="sectionTitle">Premium operator toolkit</h2>
               <p className="sectionText" style={{ marginTop: 10 }}>
-                Built for collaboration, field planning, real campaign enrollment, and optional team deployment.
+                Public campaigns remain available to everyone. Research Collective campaigns add a premium limited-entry assignment layer.
               </p>
             </div>
             <span className="statusBadge">{weatherLoading ? "Syncing weather…" : "Live context"}</span>
@@ -1703,156 +1460,6 @@ export default function Collective() {
                 <div className="collectiveToolBody">{tool.body}</div>
               </div>
             ))}
-          </div>
-        </section>
-
-        <section className="panel">
-          <div className="sectionHeader">
-            <div>
-              <div className="sectionKicker">TEAM OPERATIONS</div>
-              <h2 className="sectionTitle">Live team management</h2>
-              <p className="sectionText" style={{ marginTop: 10 }}>
-                Create teams, review memberships, and use them for coordinated campaign participation.
-              </p>
-            </div>
-            <span className="statusBadge">
-              {!isPro ? "Members only" : teamsLoading ? "Syncing teams…" : "Operational"}
-            </span>
-          </div>
-
-          <div className="buttonRow" style={{ marginTop: 0 }}>
-            <button
-              className="primaryBtn"
-              type="button"
-              disabled={!isPro || !teamsEnabled}
-              onClick={() => setCreateTeamOpen((current) => !current)}
-            >
-              {createTeamOpen ? "Close team creator" : "Create team"}
-            </button>
-
-            <button
-              className="ghostBtn"
-              type="button"
-              disabled={!sessionUser}
-              onClick={() => sessionUser && loadTeams(sessionUser.id)}
-            >
-              Refresh teams
-            </button>
-          </div>
-
-          {createTeamOpen ? (
-            <div className="createTeamPanel">
-              <div className="fieldLabel">Team name</div>
-              <input
-                className="collectiveInput"
-                value={newTeamName}
-                onChange={(e) => setNewTeamName(e.target.value)}
-                placeholder="Example: Echo Survey Group"
-              />
-
-              <div className="fieldLabel">Description</div>
-              <textarea
-                className="collectiveTextarea"
-                value={newTeamDescription}
-                onChange={(e) => setNewTeamDescription(e.target.value)}
-                placeholder="Describe the team mission, preferred targets, or operating role."
-              />
-
-              <div className="fieldLabel">Privacy</div>
-              <select
-                className="collectiveSelect"
-                value={newTeamPrivacy ? "private" : "public"}
-                onChange={(e) => setNewTeamPrivacy(e.target.value === "private")}
-              >
-                <option value="private">Private team</option>
-                <option value="public">Public team</option>
-              </select>
-
-              <div className="buttonRow" style={{ marginTop: 0 }}>
-                <button
-                  className="primaryBtn"
-                  type="button"
-                  onClick={handleCreateTeam}
-                  disabled={!isPro || !teamsEnabled || teamActionBusy === "create"}
-                >
-                  {teamActionBusy === "create" ? "Creating team…" : "Create team"}
-                </button>
-              </div>
-            </div>
-          ) : null}
-
-          <div className="teamGrid">
-            {teams.length === 0 ? (
-              <div className="teamCard">
-                <div className="teamName">No teams yet</div>
-                <div className="teamDesc">
-                  {isPro
-                    ? "You can create a research team and use it to organize coordinated observing runs."
-                    : "Upgrade to Collective to unlock private team creation and team campaign deployment."}
-                </div>
-              </div>
-            ) : (
-              teams.map((team) => {
-                const members = teamMembersByTeam[team.id] ?? [];
-                return (
-                  <div key={team.id} className="teamCard">
-                    <div className="teamHeader">
-                      <div>
-                        <div className="teamName">{team.name}</div>
-                        <div className="teamDesc">
-                          {team.description || "No team description provided yet."}
-                        </div>
-                      </div>
-                      <span className="statusBadge">
-                        {team.is_private ? "Private" : "Public"}
-                      </span>
-                    </div>
-
-                    <div className="collectiveDataList">
-                      <div className="collectiveDataRow">
-                        <span>Created</span>
-                        <strong>{formatDateTime(team.created_at)}</strong>
-                      </div>
-                      <div className="collectiveDataRow">
-                        <span>Members</span>
-                        <strong>{members.length}{team.max_members ? ` / ${team.max_members}` : ""}</strong>
-                      </div>
-                      <div className="collectiveDataRow">
-                        <span>Slug</span>
-                        <strong>{team.slug ?? "—"}</strong>
-                      </div>
-                    </div>
-
-                    <div className="teamMemberList">
-                      {members.length === 0 ? (
-                        <div className="miniMuted">No member rows returned yet.</div>
-                      ) : (
-                        members.map((member, index) => (
-                          <div
-                            key={`${team.id}-${member.user_id}-${index}`}
-                            className="teamMemberRow"
-                          >
-                            <span>{member.user_id === sessionUser?.id ? "You" : teamDisplayName(member)}</span>
-                            <strong>{String(member.role ?? "member").toUpperCase()}</strong>
-                          </div>
-                        ))
-                      )}
-                    </div>
-
-                    <div className="buttonRow" style={{ marginTop: 0 }}>
-                      <button
-                        className="ghostBtn"
-                        type="button"
-                        onClick={() => handleLeaveTeam(team.id)}
-                        disabled={teamActionBusy === `leave-${team.id}`}
-                      >
-                        {teamActionBusy === `leave-${team.id}` ? "Leaving…" : "Leave team"}
-                      </button>
-                    </div>
-                  </div>
-                );
-              })
-            )}
           </div>
         </section>
 
@@ -1880,12 +1487,16 @@ export default function Collective() {
 
             <div className="collectiveDataList">
               <div className="collectiveDataRow">
-                <span>Teams</span>
-                <strong>{isPro ? `${teamCount} active` : "Locked"}</strong>
+                <span>Public campaigns</span>
+                <strong>{visiblePublicCampaigns.length}</strong>
               </div>
               <div className="collectiveDataRow">
-                <span>Primary team</span>
-                <strong>{topTeam?.name ?? "None"}</strong>
+                <span>Research assignments</span>
+                <strong>{visibleResearchCampaigns.length}</strong>
+              </div>
+              <div className="collectiveDataRow">
+                <span>Your teams</span>
+                <strong>{teamsEnabled ? (teamsLoading ? "Loading…" : teams.length) : "Unavailable"}</strong>
               </div>
               <div className="collectiveDataRow">
                 <span>Weather now</span>
@@ -1927,43 +1538,29 @@ export default function Collective() {
       </div>
 
       <section className="panel">
-        <div className="sectionHeader">
+        <div className="campaignSectionHeader">
           <div>
-            <div className="sectionKicker">CAMPAIGN BOARD</div>
-            <h2 className="sectionTitle">Real campaign operations</h2>
-            <p className="sectionText" style={{ marginTop: 10 }}>
-              This section is driven by your actual campaign data, not hard-coded placeholders.
+            <div className="sectionKicker">PUBLIC OPERATIONS</div>
+            <h2 className="sectionTitle">Daily, weekly, and global campaigns</h2>
+            <p className="sectionHint">
+              These campaigns remain open to the wider Array. Research Collective subscribers still retain full access to them.
             </p>
           </div>
-          <span className="statusBadge">{campaignLoading ? "Syncing campaigns…" : `${visibleCampaigns.length} visible`}</span>
-        </div>
-
-        <div className="campaignFilterRow">
-          {(["ALL", "PUBLIC", "MEMBER", "ACTIVE", "UPCOMING"] as const).map((filter) => (
-            <button
-              key={filter}
-              className={`filterChip ${campaignFilter === filter ? "active" : ""}`}
-              type="button"
-              onClick={() => setCampaignFilter(filter)}
-            >
-              {filter}
-            </button>
-          ))}
+          <span className="statusBadge">{campaignLoading ? "Syncing…" : `${visiblePublicCampaigns.length} active`}</span>
         </div>
 
         <div className="campaignGrid">
-          {visibleCampaigns.length === 0 ? (
+          {visiblePublicCampaigns.length === 0 ? (
             <div className="campaignCard">
-              <div className="campaignTitle">No campaigns available</div>
+              <div className="campaignTitle">No public campaigns available</div>
               <div className="campaignDesc">
-                No campaigns matched the current filter, or active campaign records have not been generated yet.
+                No active public campaigns were returned from the database.
               </div>
             </div>
           ) : (
-            visibleCampaigns.map((campaign) => {
+            visiblePublicCampaigns.map((campaign) => {
               const membership = myCampaignMemberships[campaign.id] ?? null;
               const joined = Boolean(membership);
-              const isMemberOnly = (campaign.accessTier ?? "free").toLowerCase() !== "free";
               const tone = cadenceTone(campaign.cadence);
 
               return (
@@ -1978,31 +1575,12 @@ export default function Collective() {
                       <span className={`campaignMetaChip ${tone === "cyan" ? "toneCyan" : tone === "violet" ? "toneViolet" : "toneAmber"}`}>
                         {campaign.cadence}
                       </span>
-                      <span className="campaignMetaChip">
-                        {isMemberOnly ? "COLLECTIVE" : "PUBLIC"}
-                      </span>
-                      <span className="campaignMetaChip">
-                        {formatEndsIn(campaign.endAt)}
-                      </span>
+                      <span className="campaignMetaChip">PUBLIC</span>
+                      <span className="campaignMetaChip">{formatEndsIn(campaign.endAt)}</span>
                     </div>
-                  </div>
-
-                  <div className="campaignProgressTrack">
-                    <div
-                      className="campaignProgressFill"
-                      style={{ width: `${Math.round(clamp(campaign.progress) * 100)}%` }}
-                    />
                   </div>
 
                   <div className="campaignStatRow">
-                    <div className="campaignStat">
-                      <div className="campaignStatLabel">Progress</div>
-                      <div className="campaignStatValue">{Math.round(clamp(campaign.progress) * 100)}%</div>
-                    </div>
-                    <div className="campaignStat">
-                      <div className="campaignStatLabel">Participants</div>
-                      <div className="campaignStatValue">{campaign.participantCount}</div>
-                    </div>
                     <div className="campaignStat">
                       <div className="campaignStatLabel">Window</div>
                       <div className="campaignStatValue">{formatDateRange(campaign.startAt, campaign.endAt)}</div>
@@ -2010,6 +1588,14 @@ export default function Collective() {
                     <div className="campaignStat">
                       <div className="campaignStatLabel">Target type</div>
                       <div className="campaignStatValue">{campaign.targetType ?? "General"}</div>
+                    </div>
+                    <div className="campaignStat">
+                      <div className="campaignStatLabel">Cadence</div>
+                      <div className="campaignStatValue">{campaign.cadence}</div>
+                    </div>
+                    <div className="campaignStat">
+                      <div className="campaignStatLabel">Availability</div>
+                      <div className="campaignStatValue">Open access</div>
                     </div>
                   </div>
 
@@ -2028,8 +1614,8 @@ export default function Collective() {
                       <button
                         className="ghostBtn"
                         type="button"
-                        onClick={() => handleLeaveCampaign(campaign.id)}
-                        disabled={campaignActionBusy === `leave-${campaign.id}` || !membershipsEnabled}
+                        onClick={() => handleLeaveCampaign(campaign)}
+                        disabled={campaignActionBusy === `leave-${campaign.id}` || !campaignMembershipsEnabled}
                       >
                         {campaignActionBusy === `leave-${campaign.id}` ? "Leaving…" : "Leave campaign"}
                       </button>
@@ -2037,40 +1623,32 @@ export default function Collective() {
                       <button
                         className="primaryBtn"
                         type="button"
-                        onClick={() => handleJoinCampaign(campaign.id, null)}
-                        disabled={campaignActionBusy === `join-${campaign.id}` || !membershipsEnabled}
+                        onClick={() => handleJoinCampaign(campaign)}
+                        disabled={campaignActionBusy === `join-${campaign.id}` || !campaignMembershipsEnabled}
                       >
                         {campaignActionBusy === `join-${campaign.id}` ? "Joining…" : "Join campaign"}
                       </button>
                     )}
 
-                    {teamsEnabled && membershipsEnabled && teams.length > 0 ? (
-                      <>
-                        <select
-                          className="campaignAssignSelect"
-                          defaultValue=""
-                          onChange={(e) => {
-                            const teamId = e.target.value;
-                            if (teamId) {
-                              handleAssignTeamToCampaign(campaign.id, teamId);
-                              e.currentTarget.value = "";
-                            }
-                          }}
-                        >
-                          <option value="">Assign team…</option>
-                          {teams.map((team) => (
-                            <option key={`${campaign.id}-${team.id}`} value={team.id}>
-                              {team.name}
-                            </option>
-                          ))}
-                        </select>
-
-                        {membership?.team_id ? (
-                          <span className="statusBadge">
-                            Team linked
-                          </span>
-                        ) : null}
-                      </>
+                    {teamsEnabled && teams.length > 0 ? (
+                      <select
+                        className="campaignAssignSelect"
+                        defaultValue=""
+                        onChange={(e) => {
+                          const teamId = e.target.value;
+                          if (teamId) {
+                            handleJoinCampaign(campaign, teamId);
+                            e.currentTarget.value = "";
+                          }
+                        }}
+                      >
+                        <option value="">Assign team…</option>
+                        {teams.map((team) => (
+                          <option key={`${campaign.id}-${team.id}`} value={team.id}>
+                            {team.name}
+                          </option>
+                        ))}
+                      </select>
                     ) : null}
                   </div>
                 </div>
@@ -2078,34 +1656,166 @@ export default function Collective() {
             })
           )}
         </div>
+      </section>
 
-        {(publicCampaigns.length > 0 || memberCampaigns.length > 0) ? (
-          <div className="collectiveThreeCol" style={{ marginTop: 18 }}>
-            <div className="panel" style={{ margin: 0 }}>
-              <div className="sectionKicker">PUBLIC ACCESS</div>
-              <h3 className="sectionTitle" style={{ fontSize: 20 }}>Open campaigns</h3>
-              <div className="miniMuted" style={{ marginTop: 8 }}>
-                {publicCampaigns.length} campaign{publicCampaigns.length === 1 ? "" : "s"} visible to all operators.
-              </div>
-            </div>
-
-            <div className="panel" style={{ margin: 0 }}>
-              <div className="sectionKicker">MEMBER ACCESS</div>
-              <h3 className="sectionTitle" style={{ fontSize: 20 }}>Collective campaigns</h3>
-              <div className="miniMuted" style={{ marginTop: 8 }}>
-                {memberCampaigns.length} campaign{memberCampaigns.length === 1 ? "" : "s"} reserved for Collective members.
-              </div>
-            </div>
-
-            <div className="panel" style={{ margin: 0 }}>
-              <div className="sectionKicker">JOIN STATE</div>
-              <h3 className="sectionTitle" style={{ fontSize: 20 }}>Your enrollment</h3>
-              <div className="miniMuted" style={{ marginTop: 8 }}>
-                {Object.keys(myCampaignMemberships).length} campaign enrollment{Object.keys(myCampaignMemberships).length === 1 ? "" : "s"} currently attached to this account.
-              </div>
-            </div>
+      <section className="panel">
+        <div className="campaignSectionHeader">
+          <div>
+            <div className="sectionKicker">RESEARCH COLLECTIVE</div>
+            <h2 className="sectionTitle">Limited-entry research assignments</h2>
+            <p className="sectionHint">
+              This premium layer is reserved for Research Collective subscribers. Keep only 3–4 of these active at a time for a focused, special-assignment feel.
+            </p>
           </div>
-        ) : null}
+          <span className="statusBadge">
+            {campaignLoading ? "Syncing…" : `${visibleResearchCampaigns.length} limited-entry`}
+          </span>
+        </div>
+
+        <div className="campaignGrid">
+          {visibleResearchCampaigns.length === 0 ? (
+            <div className="campaignCard premium">
+              <div className="campaignTitle">No research assignments available</div>
+              <div className="campaignDesc">
+                No active subscriber-only research campaigns were returned from the database.
+              </div>
+            </div>
+          ) : (
+            visibleResearchCampaigns.map((campaign) => {
+              const membership = myCampaignMemberships[campaign.id] ?? null;
+              const joined = Boolean(membership);
+              const filledSlots = slotCounts[campaign.id] ?? 0;
+              const slotCapacity = campaign.slotCapacity ?? 0;
+              const slotsRemaining = Math.max(0, slotCapacity - filledSlots);
+              const isFull =
+                campaign.isLimitedEntry &&
+                campaign.slotCapacity != null &&
+                filledSlots >= campaign.slotCapacity &&
+                !joined;
+              const locked = !isPro;
+
+              return (
+                <div
+                  key={campaign.id}
+                  className={`campaignCard premium ${locked ? "locked" : ""}`}
+                >
+                  <div className="campaignTop">
+                    <div>
+                      <div className="campaignTitle">{campaign.title}</div>
+                      <div className="campaignDesc">{campaign.description}</div>
+                    </div>
+
+                    <div className="campaignMetaRow">
+                      <span className="campaignMetaChip gold">RESEARCH COLLECTIVE</span>
+                      <span className="campaignMetaChip gold">LIMITED ENTRY</span>
+                      {locked ? (
+                        <span className="campaignMetaChip locked">SUBSCRIBER ONLY</span>
+                      ) : isFull ? (
+                        <span className="campaignMetaChip full">FULL</span>
+                      ) : (
+                        <span className="campaignMetaChip gold">
+                          {filledSlots} / {slotCapacity} FILLED
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="campaignStatRow">
+                    <div className="campaignStat">
+                      <div className="campaignStatLabel">Window</div>
+                      <div className="campaignStatValue">{formatDateRange(campaign.startAt, campaign.endAt)}</div>
+                    </div>
+                    <div className="campaignStat">
+                      <div className="campaignStatLabel">Target type</div>
+                      <div className="campaignStatValue">{campaign.targetType ?? "Research"}</div>
+                    </div>
+                    <div className="campaignStat">
+                      <div className="campaignStatLabel">Filled slots</div>
+                      <div className="campaignStatValue">{filledSlots}</div>
+                    </div>
+                    <div className="campaignStat">
+                      <div className="campaignStatLabel">Remaining</div>
+                      <div className="campaignStatValue">
+                        {campaign.slotCapacity != null ? slotsRemaining : "—"}
+                      </div>
+                    </div>
+                  </div>
+
+                  {campaign.tags.length > 0 ? (
+                    <div className="campaignMetaRow">
+                      {campaign.tags.map((tag) => (
+                        <span key={`${campaign.id}-${tag}`} className="campaignMetaChip gold">
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  <div className="campaignActionRow">
+                    {!isPro ? (
+                      <button
+                        className="primaryBtn"
+                        type="button"
+                        onClick={handleUpgrade}
+                        disabled={busyCheckout}
+                      >
+                        {busyCheckout ? "Opening Stripe…" : "Upgrade to unlock"}
+                      </button>
+                    ) : joined ? (
+                      <button
+                        className="ghostBtn"
+                        type="button"
+                        onClick={() => handleLeaveCampaign(campaign)}
+                        disabled={campaignActionBusy === `leave-${campaign.id}` || !campaignMembershipsEnabled}
+                      >
+                        {campaignActionBusy === `leave-${campaign.id}` ? "Leaving…" : "Leave assignment"}
+                      </button>
+                    ) : (
+                      <button
+                        className="primaryBtn"
+                        type="button"
+                        onClick={() => handleJoinCampaign(campaign)}
+                        disabled={
+                          campaignActionBusy === `join-${campaign.id}` ||
+                          !campaignMembershipsEnabled ||
+                          isFull
+                        }
+                      >
+                        {campaignActionBusy === `join-${campaign.id}`
+                          ? "Joining…"
+                          : isFull
+                          ? "Campaign Full"
+                          : "Join research assignment"}
+                      </button>
+                    )}
+
+                    {isPro && teamsEnabled && teams.length > 0 ? (
+                      <select
+                        className="campaignAssignSelect"
+                        defaultValue=""
+                        onChange={(e) => {
+                          const teamId = e.target.value;
+                          if (teamId) {
+                            handleJoinCampaign(campaign, teamId);
+                            e.currentTarget.value = "";
+                          }
+                        }}
+                        disabled={isFull && !joined}
+                      >
+                        <option value="">Assign team…</option>
+                        {teams.map((team) => (
+                          <option key={`${campaign.id}-${team.id}`} value={team.id}>
+                            {team.name}
+                          </option>
+                        ))}
+                      </select>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
       </section>
     </div>
   );
