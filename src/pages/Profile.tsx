@@ -1,4 +1,4 @@
-import { ChangeEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { openCustomerPortal } from "../lib/stripe";
 import { supabase } from "../lib/supabaseClient";
 
@@ -295,6 +295,38 @@ async function saveProfileWithFallback(payload: Record<string, unknown>) {
   }
 }
 
+function getReadableError(err: unknown) {
+  if (!err) return "Unable to save profile.";
+
+  if (typeof err === "string") return err;
+
+  if (err instanceof Error) return err.message;
+
+  if (typeof err === "object") {
+    const maybeError = err as {
+      message?: string;
+      error_description?: string;
+      details?: string;
+      hint?: string;
+      code?: string;
+    };
+
+    return (
+      [
+        maybeError.message,
+        maybeError.error_description,
+        maybeError.details,
+        maybeError.hint,
+        maybeError.code ? `Code: ${maybeError.code}` : null,
+      ]
+        .filter(Boolean)
+        .join(" • ") || "Unable to save profile."
+    );
+  }
+
+  return "Unable to save profile.";
+}
+
 export default function Profile() {
   const [form, setForm] = useState<FormState>(INITIAL_FORM);
   const [stats, setStats] = useState<ProfileStats>({
@@ -319,6 +351,12 @@ export default function Profile() {
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [bannerUploading, setBannerUploading] = useState(false);
 
+  const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+
+  const hasHydratedRef = useRef(false);
+  const lastSavedSnapshotRef = useRef<string>("");
+  const autoSaveTimerRef = useRef<number | null>(null);
+
   useEffect(() => {
     let active = true;
 
@@ -340,7 +378,7 @@ export default function Profile() {
           await Promise.all([
             supabase
               .from("profiles")
-                            .select(`
+              .select(`
                 id,
                 callsign,
                 display_name,
@@ -380,7 +418,7 @@ export default function Profile() {
         if (!active) return;
 
         const profile = (row as ProfileRow | null) ?? null;
-        const observationRows = ((observations as Record<string, unknown>[] | null) ?? []);
+        const observationRows = (observations as Record<string, unknown>[] | null) ?? [];
 
         const oi = Number(profile?.observation_index ?? 0);
         const ci = Number(profile?.campaign_impact ?? 0);
@@ -428,10 +466,37 @@ export default function Profile() {
               ? String(observationRows[0].created_at)
               : null,
         });
+
+        const initialPayload = {
+          id: user.id,
+          callsign: profile?.callsign ?? null,
+          display_name: safeDisplayName,
+          role: getOperatorLevel(oi, ci).role,
+          bio: profile?.bio ?? null,
+          city: profile?.city ?? null,
+          country: profile?.country ?? null,
+          avatar_url: profile?.avatar_url ?? null,
+          banner_url: profile?.banner_url ?? null,
+          observatory_name: profile?.observatory_name ?? null,
+          primary_mode: profile?.primary_mode ?? "visual",
+          equipment_summary: profile?.equipment_summary ?? null,
+          specialties: inputToArray(arrayToInput(profile?.specialties)),
+          favorite_targets: inputToArray(arrayToInput(profile?.favorite_targets)),
+          website_url: profile?.website_url ?? null,
+          x_url: profile?.x_url ?? null,
+          instagram_url: profile?.instagram_url ?? null,
+          discord_handle: profile?.discord_handle ?? null,
+          visibility: profile?.visibility ?? "public",
+          accent_pref: profile?.accent_pref ?? "violet",
+        };
+
+        lastSavedSnapshotRef.current = JSON.stringify(initialPayload);
+        hasHydratedRef.current = true;
+        setAutoSaveStatus("idle");
       } catch (err) {
         console.error(err);
         if (!active) return;
-        setError(err instanceof Error ? err.message : "Unable to load profile.");
+        setError(getReadableError(err));
       } finally {
         if (active) setLoading(false);
       }
@@ -448,7 +513,7 @@ export default function Profile() {
     setForm((current) => ({ ...current, [key]: value }));
   }
 
-   async function handleImageUpload(
+  async function handleImageUpload(
     event: ChangeEvent<HTMLInputElement>,
     type: "avatar" | "banner"
   ) {
@@ -463,6 +528,7 @@ export default function Profile() {
     try {
       setError(null);
       setMessage(null);
+      setAutoSaveStatus("saving");
 
       if (type === "avatar") setAvatarUploading(true);
       else setBannerUploading(true);
@@ -472,25 +538,35 @@ export default function Profile() {
       if (type === "avatar") setAvatarUrl(publicUrl);
       else setBannerUrl(publicUrl);
 
-      await saveProfileWithFallback({
+      const payload = {
         id: sessionUserId,
         [type === "avatar" ? "avatar_url" : "banner_url"]: publicUrl,
-      });
+      };
+
+      await saveProfileWithFallback(payload);
 
       setMessage(type === "avatar" ? "Avatar updated." : "Banner updated.");
+      setAutoSaveStatus("saved");
     } catch (err) {
       console.error(err);
-      setError(err instanceof Error ? err.message : "Unable to upload image.");
+      setError(getReadableError(err));
+      setAutoSaveStatus("error");
     } finally {
       if (type === "avatar") setAvatarUploading(false);
       else setBannerUploading(false);
     }
   }
 
-  async function saveProfile() {
-    setSaving(true);
+  async function saveProfile(options?: { silent?: boolean }) {
+    const silent = Boolean(options?.silent);
+
+    if (!silent) {
+      setSaving(true);
+      setMessage(null);
+    }
+
     setError(null);
-    setMessage(null);
+    setAutoSaveStatus("saving");
 
     try {
       const { data } = await supabase.auth.getSession();
@@ -523,14 +599,98 @@ export default function Profile() {
       };
 
       await saveProfileWithFallback(payload);
-      setMessage("Profile updated.");
+
+      lastSavedSnapshotRef.current = JSON.stringify(payload);
+      setAutoSaveStatus("saved");
+
+      if (!silent) {
+        setMessage("Profile updated.");
+      }
     } catch (err) {
       console.error(err);
-      setError(err instanceof Error ? err.message : "Unable to save profile.");
+      setError(getReadableError(err));
+      setAutoSaveStatus("error");
     } finally {
-      setSaving(false);
+      if (!silent) {
+        setSaving(false);
+      }
     }
   }
+
+  const autoSaveSnapshot = useMemo(() => {
+    if (!sessionUserId) return "";
+
+    const computedRole = getOperatorLevel(storedOI, storedCI).role;
+
+    return JSON.stringify({
+      id: sessionUserId,
+      callsign: form.callsign.trim() || null,
+      display_name: form.displayName.trim() || generateAlias(sessionUserId),
+      role: computedRole,
+      bio: form.bio.trim() || null,
+      city: form.city.trim() || null,
+      country: form.country.trim() || null,
+      avatar_url: avatarUrl || null,
+      banner_url: bannerUrl || null,
+      observatory_name: form.observatoryName.trim() || null,
+      primary_mode: form.primaryMode.trim() || null,
+      equipment_summary: form.equipmentSummary.trim() || null,
+      specialties: inputToArray(form.specialties),
+      favorite_targets: inputToArray(form.favoriteTargets),
+      website_url: form.websiteUrl.trim() || null,
+      x_url: form.xUrl.trim() || null,
+      instagram_url: form.instagramUrl.trim() || null,
+      discord_handle: form.discordHandle.trim() || null,
+      visibility: form.visibility.trim() || null,
+      accent_pref: form.accentPref.trim() || null,
+    });
+  }, [
+    sessionUserId,
+    storedOI,
+    storedCI,
+    form.callsign,
+    form.displayName,
+    form.bio,
+    form.city,
+    form.country,
+    form.observatoryName,
+    form.primaryMode,
+    form.equipmentSummary,
+    form.specialties,
+    form.favoriteTargets,
+    form.websiteUrl,
+    form.xUrl,
+    form.instagramUrl,
+    form.discordHandle,
+    form.visibility,
+    form.accentPref,
+    avatarUrl,
+    bannerUrl,
+  ]);
+
+  useEffect(() => {
+    if (!hasHydratedRef.current) return;
+    if (!sessionUserId) return;
+    if (!autoSaveSnapshot) return;
+    if (autoSaveSnapshot === lastSavedSnapshotRef.current) return;
+    if (avatarUploading || bannerUploading) return;
+
+    if (autoSaveTimerRef.current) {
+      window.clearTimeout(autoSaveTimerRef.current);
+    }
+
+    setAutoSaveStatus("saving");
+
+    autoSaveTimerRef.current = window.setTimeout(() => {
+      void saveProfile({ silent: true });
+    }, 900);
+
+    return () => {
+      if (autoSaveTimerRef.current) {
+        window.clearTimeout(autoSaveTimerRef.current);
+      }
+    };
+  }, [autoSaveSnapshot, sessionUserId, avatarUploading, bannerUploading]);
 
   const displayName =
     form.displayName.trim() || (sessionUserId ? generateAlias(sessionUserId) : "Array Operator");
@@ -992,13 +1152,19 @@ export default function Profile() {
             <p className="profileActionText">
               Save your customization changes to Supabase and manage subscription details from the billing portal.
             </p>
+            <div className="autoSaveStatusText">
+              {autoSaveStatus === "saving" && "Saving changes automatically…"}
+              {autoSaveStatus === "saved" && "All changes saved."}
+              {autoSaveStatus === "error" && "Autosave failed. Use Save profile after fixing the error below."}
+              {autoSaveStatus === "idle" && "Changes save automatically."}
+            </div>
           </div>
 
           <div className="buttonRow">
             <button
               className="primaryBtn"
               type="button"
-              onClick={saveProfile}
+              onClick={() => void saveProfile()}
               disabled={saving || avatarUploading || bannerUploading}
             >
               {saving ? "Saving…" : "Save profile"}
@@ -1365,6 +1531,13 @@ export default function Profile() {
           margin: 10px 0 0;
           color: var(--muted);
           line-height: 1.6;
+        }
+
+        .autoSaveStatusText{
+          margin-top: 10px;
+          color: var(--muted);
+          font-size: 14px;
+          line-height: 1.45;
         }
 
         .feedTags{
