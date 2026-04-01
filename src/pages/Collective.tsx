@@ -1191,20 +1191,26 @@ export default function Collective() {
     },
     {
       title: "Research Assignments",
-      value: `${researchCampaigns.length} limited-entry`,
-      body: "Research Collective subscribers unlock the premium private campaign layer.",
-      locked: false,
+      value: isPro ? `${researchCampaigns.length} limited-entry` : "Locked",
+      body: isPro
+        ? "Research Collective subscribers unlock the premium private campaign layer."
+        : "Upgrade to access subscriber-only research campaigns.",
+      locked: !isPro,
     },
     {
       title: "Team Ownership",
-      value: teamsEnabled ? `${ownedTeams.length} owned` : "Requires DB table",
-      body: "Create, update, and delete teams directly from the Collective page.",
-      locked: !teamsEnabled,
+      value: isPro ? `${ownedTeams.length} owned` : "Locked",
+      body: isPro
+        ? "Create, update, and delete teams directly from the Collective page."
+        : "Upgrade to create and manage Research Collective teams.",
+      locked: !isPro,
     },
     {
       title: "Live Campaign Layer",
-      value: `${activeCampaignCount} visible`,
-      body: "Duplicate public entries are suppressed here even if old rows still exist in the database.",
+      value: isPro ? `${activeCampaignCount} visible` : `${publicCampaigns.length} public`,
+      body: isPro
+        ? "Duplicate public entries are suppressed here even if old rows still exist in the database."
+        : "Public campaign layer only.",
       locked: false,
     },
   ];
@@ -1260,8 +1266,14 @@ export default function Collective() {
 
             <div className="collectiveMiniList">
               <div className="collectiveMiniRow"><span>Public campaign layer</span><strong>Daily / Weekly / Global</strong></div>
-              <div className="collectiveMiniRow"><span>Private campaign layer</span><strong>Limited-entry collective</strong></div>
-              <div className="collectiveMiniRow"><span>Team controls</span><strong>Create / edit / own</strong></div>
+              <div className="collectiveMiniRow">
+                <span>Private campaign layer</span>
+                <strong>{isPro ? "Limited-entry collective" : "Subscriber only"}</strong>
+              </div>
+              <div className="collectiveMiniRow">
+                <span>Team controls</span>
+                <strong>{isPro ? "Create / edit / own" : "Subscriber only"}</strong>
+              </div>
             </div>
 
             <div className="buttonRow">
@@ -1330,10 +1342,17 @@ export default function Collective() {
               Create teams, manage team settings, and attach a team to a campaign. An individual or a team only uses one slot.
             </p>
           </div>
-          <span className="statusBadge">{teamsLoading ? "Syncing…" : `${teams.length} available`}</span>
+          <span className="statusBadge">
+            {!isPro ? "Subscriber only" : teamsLoading ? "Syncing…" : `${teams.length} available`}
+          </span>
         </div>
 
-        <>
+        {!isPro ? (
+          <div className="emptyState">
+            Team controls are available to Research Collective members only.
+          </div>
+        ) : (
+          <>
             <div className="teamCreateCard">
               <div className="teamGrid">
                 <label className="fieldBlock">
@@ -1440,6 +1459,7 @@ export default function Collective() {
               )}
             </div>
           </>
+        )}
       </section>
 
       <section className="panel">
