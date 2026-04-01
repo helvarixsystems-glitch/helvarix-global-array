@@ -259,7 +259,10 @@ async function uploadProfileImage(userId: string, folder: "avatar" | "banner", f
 async function saveProfileWithFallback(payload: Record<string, unknown>) {
   const optionalKeys = [
     "display_name",
+    "role",
     "bio",
+    "city",
+    "country",
     "avatar_url",
     "banner_url",
     "observatory_name",
@@ -273,21 +276,44 @@ async function saveProfileWithFallback(payload: Record<string, unknown>) {
     "discord_handle",
     "visibility",
     "accent_pref",
-    "role",
+    "observation_index",
+    "campaign_impact",
+    "guild_access",
+    "is_pro",
+    "stripe_customer_id",
+    "stripe_subscription_id",
+    "subscription_status",
+    "plan",
   ];
 
   let workingPayload = { ...payload };
 
   while (true) {
-    const { error } = await supabase.from("profiles").upsert(workingPayload, { onConflict: "id" });
+    const { error } = await supabase
+      .from("profiles")
+      .upsert(workingPayload, { onConflict: "id" });
 
     if (!error) return;
 
-    const missingColumnMatch = error.message.match(/column ["']?([a-zA-Z0-9_]+)["']?/i);
-    const missingColumn = missingColumnMatch?.[1];
+    const errorText = [
+      error.message,
+      (error as { details?: string }).details,
+      (error as { hint?: string }).hint,
+    ]
+      .filter(Boolean)
+      .join(" ");
 
-    if (missingColumn && optionalKeys.includes(missingColumn) && missingColumn in workingPayload) {
-      delete workingPayload[missingColumn];
+    const matchedKey = optionalKeys.find(
+      (key) =>
+        errorText.includes(`.${key}`) ||
+        errorText.includes(`"${key}"`) ||
+        errorText.includes(`'${key}'`) ||
+        errorText.includes(` ${key} `) ||
+        errorText.includes(`(${key})`)
+    );
+
+    if (matchedKey && matchedKey in workingPayload) {
+      delete workingPayload[matchedKey];
       continue;
     }
 
