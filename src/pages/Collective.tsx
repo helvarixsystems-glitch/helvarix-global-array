@@ -330,11 +330,7 @@ function campaignFreshnessValue(campaign: CollectiveCampaign) {
 
 function scoreCampaign(campaign: CollectiveCampaign) {
   let score = 0;
-  const title = campaign.title.toLowerCase();
-  const templateish = title.includes("template") || title.includes("untitled campaign template");
-
   if (!isBadCampaignTitle(campaign.title)) score += 1000;
-  if (!templateish) score += 800;
   if (campaign.description && !campaign.description.toLowerCase().includes("array-wide campaign objective")) score += 100;
   if (campaign.isActive) score += 20;
   if (campaign.priorityRank != null) score += Math.max(0, 50 - campaign.priorityRank);
@@ -631,14 +627,18 @@ export default function Collective() {
     try {
       const { data, error } = await supabase
         .from("campaign_memberships")
-        .select("campaign_id,status")
+        .select("campaign_id,team_id,user_id,status")
         .in("campaign_id", campaignIds);
 
       if (error) throw error;
 
       const counts: Record<string, number> = {};
-      for (const row of (data ?? []) as { campaign_id: string; status: string | null }[]) {
+      const seen = new Set<string>();
+      for (const row of (data ?? []) as { campaign_id: string; team_id: string | null; user_id: string; status: string | null }[]) {
         if ((row.status ?? "active") !== "active") continue;
+        const entryKey = `${row.campaign_id}:${row.team_id ?? row.user_id}`;
+        if (seen.has(entryKey)) continue;
+        seen.add(entryKey);
         counts[row.campaign_id] = (counts[row.campaign_id] ?? 0) + 1;
       }
 
@@ -684,53 +684,39 @@ export default function Collective() {
     setTeamsLoading(true);
 
     try {
-      const [{ data: memberData, error: memberError }, { data: ownedData, error: ownedError }] = await Promise.all([
-        supabase
-          .from("team_members")
-          .select("team_id,user_id,role,status")
-          .eq("user_id", userId),
-        supabase
-          .from("teams")
-          .select("id,name,slug,description,owner_id,is_private,max_members,created_at"),
-      ]);
+      const { data: memberRows, error: memberError } = await supabase
+        .from("team_members")
+        .select("team_id,user_id,role,status")
+        .eq("user_id", userId);
 
       if (memberError) throw memberError;
-      if (ownedError) throw ownedError;
 
       const membershipMap: Record<string, TeamMemberRow> = {};
       const teamIds = new Set<string>();
 
-      for (const row of (memberData ?? []) as Array<{ team_id: string; user_id: string; role?: string | null; status?: string | null }>) {
-        const effectiveStatus = row.status ?? row.role ?? "member";
-        if (!["active", "accepted", "owner", "member"].includes(String(effectiveStatus).toLowerCase())) continue;
-
+      for (const row of (memberRows ?? []) as any[]) {
+        const membershipStatus = String(row.status ?? row.role ?? "active");
         membershipMap[row.team_id] = {
           team_id: row.team_id,
           user_id: row.user_id,
-          status: effectiveStatus,
+          status: membershipStatus,
         };
-        teamIds.add(row.team_id);
+
+        if (["active", "accepted", "owner"].includes(membershipStatus.toLowerCase())) {
+          teamIds.add(row.team_id);
+        }
       }
 
-      const combined = new Map<string, TeamRecord>();
+      const { data: ownedData, error: ownedError } = await supabase
+        .from("teams")
+        .select("id,name,slug,description,owner_id,is_private,max_members,created_at")
+        .eq("owner_id", userId);
+
+      if (ownedError) throw ownedError;
 
       for (const team of (ownedData ?? []) as any[]) {
-        const isOwned = team.owner_id === userId;
-        const isMember = teamIds.has(team.id);
-        if (!isOwned && !isMember) continue;
-
-        combined.set(team.id, {
-          id: team.id,
-          name: team.name ?? "Untitled Team",
-          slug: team.slug ?? null,
-          description: team.description ?? null,
-          owner_id: team.owner_id ?? null,
-          is_private: team.is_private ?? true,
-          max_members: team.max_members ?? null,
-          created_at: team.created_at ?? null,
-        });
-
-        if (!membershipMap[team.id] && isOwned) {
+        teamIds.add(team.id);
+        if (!membershipMap[team.id]) {
           membershipMap[team.id] = {
             team_id: team.id,
             user_id: userId,
@@ -739,21 +725,46 @@ export default function Collective() {
         }
       }
 
+      let teamData: any[] = [];
+      if (teamIds.size > 0) {
+        const { data, error } = await supabase
+          .from("teams")
+          .select("id,name,slug,description,owner_id,is_private,max_members,created_at")
+          .in("id", Array.from(teamIds));
+
+        if (error) throw error;
+        teamData = data ?? [];
+      }
+
       setTeams(
-        Array.from(combined.values()).sort((a, b) => {
-          const ownerA = a.owner_id === userId ? 0 : 1;
-          const ownerB = b.owner_id === userId ? 0 : 1;
-          if (ownerA !== ownerB) return ownerA - ownerB;
-          return a.name.localeCompare(b.name);
-        })
+        teamData
+          .map((team) => ({
+            id: team.id,
+            name: team.name ?? "Untitled Team",
+            slug: team.slug ?? null,
+            description: team.description ?? null,
+            owner_id: team.owner_id ?? null,
+            is_private: team.is_private ?? true,
+            max_members: team.max_members ?? null,
+            created_at: team.created_at ?? null,
+          }))
+          .sort((a, b) => {
+            const ownerA = a.owner_id === userId ? 0 : 1;
+            const ownerB = b.owner_id === userId ? 0 : 1;
+            if (ownerA !== ownerB) return ownerA - ownerB;
+            return a.name.localeCompare(b.name);
+          })
       );
       setMyTeamMemberships(membershipMap);
       setTeamsEnabled(true);
     } catch (err: any) {
-      setTeamsEnabled(false);
-      setTeams([]);
-      setMyTeamMemberships({});
-      setError((current) => current ?? err?.message ?? "Unable to load teams.");
+      if (looksLikeMissingRelation(err)) {
+        setTeamsEnabled(false);
+        setTeams([]);
+        setMyTeamMemberships({});
+      } else {
+        setError((current) => current ?? err?.message ?? "Unable to load teams.");
+      }
     } finally {
       setTeamsLoading(false);
     }
@@ -830,6 +841,21 @@ export default function Collective() {
         filledSlots >= campaign.slotCapacity &&
         !myCampaignMemberships[campaign.id];
 
+      if (teamId) {
+        const { data: existingTeamEntry, error: existingTeamError } = await supabase
+          .from("campaign_memberships")
+          .select("campaign_id,user_id,team_id,status")
+          .eq("campaign_id", campaign.id)
+          .eq("team_id", teamId)
+          .eq("status", "active")
+          .maybeSingle();
+
+        if (existingTeamError) throw existingTeamError;
+        if (existingTeamEntry && existingTeamEntry.user_id !== sessionUser.id) {
+          throw new Error("That team is already entered in this campaign.");
+        }
+      }
+
       if (isFull) {
         throw new Error("This research campaign is already full.");
       }
@@ -867,7 +893,7 @@ export default function Collective() {
         }));
       }
 
-      setNotice(teamId ? "Campaign joined with team assignment." : "Campaign joined.");
+      setNotice(teamId ? "Research joined with team assignment." : "Campaign joined.");
     } catch (err: any) {
       setError(err?.message ?? "Unable to join campaign.");
     } finally {
@@ -954,7 +980,7 @@ export default function Collective() {
           team_id: team.id,
           user_id: sessionUser.id,
           role: "owner",
-          status: "owner",
+          status: "active",
         },
         { onConflict: "team_id,user_id" }
       );
@@ -1277,9 +1303,7 @@ export default function Collective() {
           <div>
             <div className="sectionKicker">COLLECTIVE TOOLS</div>
             <h2 className="sectionTitle">Operational layer</h2>
-            <p className="sectionHint">
-              Membership status, campaign availability, and team access.
-            </p>
+
           </div>
         </div>
 
@@ -1300,15 +1324,14 @@ export default function Collective() {
             <div className="sectionKicker">TEAM CONTROL</div>
             <h2 className="sectionTitle">Create and manage teams</h2>
             <p className="sectionHint">
-              Owners can create teams, update settings, and delete them. Members can still attach their teams
-              to campaign joins.
+              Create teams, manage team settings, and attach a team to a campaign. An individual or a team only uses one slot.
             </p>
           </div>
           <span className="statusBadge">{teamsLoading ? "Syncing…" : `${teams.length} available`}</span>
         </div>
 
         {!teamsEnabled ? (
-          <div className="emptyState">Unable to load teams right now. The tables exist, but the current query failed.</div>
+          <div className="emptyState">Unable to load teams right now.</div>
         ) : (
           <>
             <div className="teamCreateCard">
@@ -1528,8 +1551,7 @@ export default function Collective() {
             <div className="sectionKicker">RESEARCH COLLECTIVE</div>
             <h2 className="sectionTitle">Limited-entry research assignments</h2>
             <p className="sectionHint">
-              This premium layer is reserved for Research Collective subscribers. Individuals or teams can enter,
-              and each entry uses one slot.
+              This premium layer is reserved for Research Collective subscribers. An individual or a team can enter, and each entry uses one slot.
             </p>
           </div>
           <span className="statusBadge">{campaignLoading ? "Syncing…" : `${researchCampaigns.length} limited-entry`}</span>
@@ -1687,13 +1709,13 @@ const styles = `
 .collectiveHeroMeta{ display:flex; flex-wrap:wrap; gap:12px; margin-top:18px; }
 .goldBadge{ display:inline-flex; align-items:center; gap:8px; padding:10px 14px; border-radius:999px; border:1px solid rgba(242,191,87,.30); background:rgba(242,191,87,.10); color:#ffe4a5; font-weight:700; }
 .collectiveStatusCard{ min-height:100%; min-width:0; width:100%; display:grid; gap:16px; padding:22px; border-radius:24px; border:1px solid rgba(242,191,87,.16); background:linear-gradient(180deg, rgba(15,24,46,.88), rgba(9,14,28,.94)); overflow:hidden; }
-.collectiveStatusTop{ display:grid; grid-template-columns:minmax(0,1fr) auto; gap:16px; align-items:flex-start; }
+.collectiveStatusTop{ display:flex; justify-content:space-between; gap:16px; align-items:flex-start; flex-wrap:wrap; min-width:0; }
 .collectivePrice{ font-size:34px; font-weight:800; line-height:1; }
 .collectivePrice small{ font-size:14px; color:rgba(255,255,255,.64); font-weight:600; margin-left:4px; }
 .collectiveMiniList{ display:grid; gap:10px; }
-.collectiveMiniRow{ display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:16px; padding:12px 14px; border-radius:14px; background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.06); min-width:0; }
+.collectiveMiniRow{ display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:16px; padding:12px 14px; border-radius:14px; background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.06); }
 .collectiveMiniRow span{ color:rgba(255,255,255,.66); min-width:0; }
-.collectiveMiniRow strong{ min-width:0; text-align:right; white-space:normal; overflow-wrap:anywhere; }
+.collectiveMiniRow strong{ text-align:right; max-width:100%; overflow-wrap:anywhere; }
 .statusBadge{ display:inline-flex; align-items:center; gap:8px; padding:9px 12px; border-radius:999px; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.08); font-weight:700; }
 .statusLive{ color:#94f5c7; }
 .statusLocked{ color:#ffcf78; }
@@ -1749,20 +1771,8 @@ textarea{ resize:vertical; min-height:96px; }
 .teamGrid,.ownerEditGrid{ display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:14px; }
 .ownerFullWidth{ grid-column:1 / -1; }
 .emptyState{ padding:18px; border-radius:16px; background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.06); color:rgba(255,255,255,.70); }
-@media (max-width: 1280px){
-  .collectiveHeroGrid{ grid-template-columns:minmax(0,1fr); }
-  .collectiveStatusCard{ width:100%; }
-  .collectiveStatusTop{ grid-template-columns:minmax(0,1fr); }
-  .collectiveMiniRow{ grid-template-columns:1fr; }
-  .collectiveMiniRow strong{ text-align:left; }
-}
 @media (max-width: 980px){
   .collectiveHeroGrid,.collectiveMetricGrid,.campaignStatRow,.teamGrid,.ownerEditGrid,.collectiveToolsGrid{ grid-template-columns:1fr; }
-  .collectiveStatusTop{ grid-template-columns:1fr; }
-  .collectiveStatusCard{ width:100%; }
-  .collectiveHeroMeta{ gap:10px; }
-  .goldBadge{ max-width:100%; }
-  .collectivePrice{ font-size:46px; }
   .collectiveMiniRow{ grid-template-columns:1fr; }
   .collectiveMiniRow strong{ text-align:left; }
   select.campaignAssignSelect{ max-width:none; }
