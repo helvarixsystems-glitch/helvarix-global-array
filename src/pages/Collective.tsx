@@ -758,13 +758,11 @@ export default function Collective() {
       setMyTeamMemberships(membershipMap);
       setTeamsEnabled(true);
     } catch (err: any) {
-      if (looksLikeMissingRelation(err)) {
-        setTeamsEnabled(false);
-        setTeams([]);
-        setMyTeamMemberships({});
-      } else {
-        setError((current) => current ?? err?.message ?? "Unable to load teams.");
-      }
+      console.error("TEAM LOAD ERROR:", err);
+      setTeamsEnabled(true);
+      setTeams([]);
+      setMyTeamMemberships({});
+      setError((current) => current ?? err?.message ?? "Unable to load teams right now.");
     } finally {
       setTeamsLoading(false);
     }
@@ -860,21 +858,24 @@ export default function Collective() {
         throw new Error("This research campaign is already full.");
       }
 
-      const { error } = await supabase.from("campaign_memberships").upsert(
-        {
-          campaign_id: campaign.id,
-          user_id: sessionUser.id,
-          team_id: teamId,
-          status: "active",
-        },
-        {
-          onConflict: "campaign_id,user_id",
-        }
-      );
+      const payload = {
+        campaign_id: campaign.id,
+        user_id: sessionUser.id,
+        team_id: teamId,
+        status: "active" as const,
+      };
+
+      const { error } = teamId
+        ? await supabase.from("campaign_memberships").insert(payload)
+        : await supabase.from("campaign_memberships").upsert(payload, {
+            onConflict: "campaign_id,user_id",
+          });
 
       if (error) throw error;
 
-      const alreadyJoined = Boolean(myCampaignMemberships[campaign.id]);
+      const previous = myCampaignMemberships[campaign.id] ?? null;
+      const previousEntryKey = previous ? `${campaign.id}:${previous.team_id ?? previous.user_id}` : null;
+      const nextEntryKey = `${campaign.id}:${teamId ?? sessionUser.id}`;
 
       setMyCampaignMemberships((current) => ({
         ...current,
@@ -886,14 +887,16 @@ export default function Collective() {
         },
       }));
 
-      if (!alreadyJoined) {
+      if (!previousEntryKey) {
         setSlotCounts((current) => ({
           ...current,
           [campaign.id]: (current[campaign.id] ?? 0) + 1,
         }));
+      } else if (previousEntryKey !== nextEntryKey) {
+        setSlotCounts((current) => ({ ...current }));
       }
 
-      setNotice(teamId ? "Research joined with team assignment." : "Campaign joined.");
+      setNotice(teamId ? "Team entered into research." : "Research joined.");
     } catch (err: any) {
       setError(err?.message ?? "Unable to join campaign.");
     } finally {
@@ -1330,10 +1333,7 @@ export default function Collective() {
           <span className="statusBadge">{teamsLoading ? "Syncing…" : `${teams.length} available`}</span>
         </div>
 
-        {!teamsEnabled ? (
-          <div className="emptyState">Unable to load teams right now.</div>
-        ) : (
-          <>
+        <>
             <div className="teamCreateCard">
               <div className="teamGrid">
                 <label className="fieldBlock">
@@ -1369,7 +1369,9 @@ export default function Collective() {
             </div>
 
             <div className="teamList">
-              {teams.length === 0 ? (
+              {teamsLoading ? (
+                <div className="emptyState">Loading teams…</div>
+              ) : teams.length === 0 ? (
                 <div className="emptyState">No teams are attached to your account yet.</div>
               ) : (
                 teams.map((team) => {
@@ -1438,7 +1440,6 @@ export default function Collective() {
               )}
             </div>
           </>
-        )}
       </section>
 
       <section className="panel">
@@ -1703,7 +1704,7 @@ const styles = `
   radial-gradient(circle at top right, rgba(242,191,87,.13), transparent 28%),
   radial-gradient(circle at top left, rgba(92,214,255,.10), transparent 32%),
   linear-gradient(180deg, rgba(15,24,46,.96), rgba(9,16,31,.92)); }
-.collectiveHeroGrid{ display:grid; grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr); gap:18px; align-items:stretch; position:relative; z-index:1; }
+.collectiveHeroGrid{ display:grid; grid-template-columns:minmax(0,1.15fr) minmax(320px,.85fr); gap:18px; align-items:stretch; position:relative; z-index:1; }
 .collectiveKicker{ color:${SOLAR_GOLD}; font-size:12px; letter-spacing:.28em; text-transform:uppercase; font-weight:800; }
 .collectiveLead{ max-width:820px; margin-top:14px; color:rgba(255,255,255,.72); line-height:1.7; }
 .collectiveHeroMeta{ display:flex; flex-wrap:wrap; gap:12px; margin-top:18px; }
@@ -1712,9 +1713,9 @@ const styles = `
 .collectiveStatusTop{ display:flex; justify-content:space-between; gap:16px; align-items:flex-start; flex-wrap:wrap; min-width:0; }
 .collectivePrice{ font-size:34px; font-weight:800; line-height:1; }
 .collectivePrice small{ font-size:14px; color:rgba(255,255,255,.64); font-weight:600; margin-left:4px; }
-.collectiveMiniList{ display:grid; gap:10px; }
-.collectiveMiniRow{ display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:16px; padding:12px 14px; border-radius:14px; background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.06); }
-.collectiveMiniRow span{ color:rgba(255,255,255,.66); min-width:0; }
+.collectiveMiniList{ display:grid; gap:12px; min-width:0; }
+.collectiveMiniRow{ display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:14px; padding:12px 14px; border-radius:14px; background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.06); min-width:0; }
+.collectiveMiniRow span{ color:rgba(255,255,255,.66); min-width:0; overflow-wrap:anywhere; }
 .collectiveMiniRow strong{ text-align:right; max-width:100%; overflow-wrap:anywhere; }
 .statusBadge{ display:inline-flex; align-items:center; gap:8px; padding:9px 12px; border-radius:999px; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.08); font-weight:700; }
 .statusLive{ color:#94f5c7; }
@@ -1771,6 +1772,9 @@ textarea{ resize:vertical; min-height:96px; }
 .teamGrid,.ownerEditGrid{ display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:14px; }
 .ownerFullWidth{ grid-column:1 / -1; }
 .emptyState{ padding:18px; border-radius:16px; background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.06); color:rgba(255,255,255,.70); }
+@media (max-width: 1180px){
+  .collectiveHeroGrid{ grid-template-columns:1fr; }
+}
 @media (max-width: 980px){
   .collectiveHeroGrid,.collectiveMetricGrid,.campaignStatRow,.teamGrid,.ownerEditGrid,.collectiveToolsGrid{ grid-template-columns:1fr; }
   .collectiveMiniRow{ grid-template-columns:1fr; }
