@@ -1199,12 +1199,93 @@ export default function Collective() {
 
   const activeCampaignCount = publicCampaigns.length + researchCampaigns.length;
 
+  const campaignBoard = useMemo(() => {
+    return [...publicCampaigns, ...researchCampaigns].sort((a, b) => {
+      const order = { DAILY: 0, WEEKLY: 1, GLOBAL: 2, RESEARCH: 3 } as const;
+      const cadenceDelta = order[a.cadence] - order[b.cadence];
+      if (cadenceDelta !== 0) return cadenceDelta;
+
+      const rankA = a.priorityRank ?? 9999;
+      const rankB = b.priorityRank ?? 9999;
+      if (rankA !== rankB) return rankA - rankB;
+
+      return campaignFreshnessValue(b) - campaignFreshnessValue(a);
+    });
+  }, [publicCampaigns, researchCampaigns]);
+
+  const limitedSlotTotals = useMemo(() => {
+    return researchCampaigns.reduce(
+      (acc, campaign) => {
+        const capacity = campaign.slotCapacity ?? 0;
+        const filled = slotCounts[campaign.id] ?? 0;
+        acc.capacity += capacity;
+        acc.filled += filled;
+        return acc;
+      },
+      { capacity: 0, filled: 0 }
+    );
+  }, [researchCampaigns, slotCounts]);
+
+  const nextEndingCampaign = useMemo(() => {
+    return campaignBoard
+      .filter((campaign) => campaign.endAt)
+      .sort((a, b) => {
+        const aTime = a.endAt ? new Date(a.endAt).getTime() : Number.MAX_SAFE_INTEGER;
+        const bTime = b.endAt ? new Date(b.endAt).getTime() : Number.MAX_SAFE_INTEGER;
+        return aTime - bTime;
+      })[0] ?? null;
+  }, [campaignBoard]);
+
+  const premiumToolCards = [
+    {
+      title: "Priority campaign stack",
+      value: isPro ? `${researchCampaigns.length} private assignments` : "Subscriber only",
+      body: isPro
+        ? "See subscriber-only research assignments without mixing them into the public layer."
+        : "Adds the limited-entry research layer on top of the public campaign stack.",
+      locked: !isPro,
+    },
+    {
+      title: "Slot pressure monitor",
+      value: isPro
+        ? limitedSlotTotals.capacity > 0
+          ? `${limitedSlotTotals.filled}/${limitedSlotTotals.capacity} filled`
+          : "No slot-limited runs"
+        : "Subscriber only",
+      body: isPro
+        ? "Fast-read fill state across all private campaigns so you know when to claim a slot."
+        : "Monitor limited-entry availability across private research assignments.",
+      locked: !isPro,
+    },
+    {
+      title: "Target package",
+      value: isPro
+        ? researchCampaigns[0]
+          ? getCampaignTargetLabel(researchCampaigns[0])
+          : "Awaiting assignment"
+        : "Subscriber only",
+      body: isPro
+        ? "Coordinate, target, equipment, and difficulty cues stay visible from the board."
+        : "Adds richer target context for private timing, imaging, and follow-up work.",
+      locked: !isPro,
+    },
+    {
+      title: "Team deployment",
+      value: isPro ? `${teams.length} teams available` : "Subscriber only",
+      body: isPro
+        ? "Create, edit, and attach teams to campaigns from the same page."
+        : "Unlock team creation, ownership, and campaign assignment controls.",
+      locked: !isPro,
+    },
+  ];
+
   const toolCards = [
     {
       title: "Observing Window",
       value: weather ? `${rating.label} · ${rating.score}/100` : "Awaiting conditions",
       body: "Local conditions scored for session quality, wind, cloud cover, visibility, and moonlight.",
       locked: false,
+      accent: "live",
     },
     {
       title: "Site Conditions",
@@ -1214,6 +1295,7 @@ export default function Collective() {
           : "No active weather snapshot",
       body: "Fast-read environment data for setup, teardown, and imaging decisions.",
       locked: false,
+      accent: "live",
     },
     {
       title: "Darkness Timing",
@@ -1223,43 +1305,35 @@ export default function Collective() {
           : "Location needed",
       body: "Sunset and sunrise timing for planning observation windows.",
       locked: false,
+      accent: "live",
     },
     {
       title: "Moonlight Impact",
       value: `${moonPhaseLabel} · ${moonIllumination}% illuminated`,
       body: "Useful for deep-sky planning, contrast expectations, and target selection.",
       locked: false,
+      accent: "live",
     },
     {
-      title: "Public Campaign Layer",
-      value: `${publicCampaigns.length}/3 active`,
-      body: "Exactly one daily, one weekly, and one global campaign are surfaced here.",
+      title: "Campaign mix",
+      value: `${publicCampaigns.length} public · ${researchCampaigns.length} private`,
+      body: "One daily, one weekly, and one global campaign remain visible even without a subscription.",
       locked: false,
+      accent: "live",
     },
     {
-      title: "Research Assignments",
-      value: isPro ? `${researchCampaigns.length} limited-entry` : "Locked",
-      body: isPro
-        ? "Research Collective subscribers unlock the premium private campaign layer."
-        : "Upgrade to access subscriber-only research campaigns.",
-      locked: !isPro,
-    },
-    {
-      title: "Team Ownership",
-      value: isPro ? `${ownedTeams.length} owned` : "Locked",
-      body: isPro
-        ? "Create, update, and delete teams directly from the Collective page."
-        : "Upgrade to create and manage Research Collective teams.",
-      locked: !isPro,
-    },
-    {
-      title: "Live Campaign Layer",
-      value: isPro ? `${activeCampaignCount} visible` : `${publicCampaigns.length} public`,
-      body: isPro
-        ? "Duplicate public entries are suppressed here even if old rows still exist in the database."
-        : "Public campaign layer only.",
+      title: "Next closing window",
+      value: nextEndingCampaign ? formatEndsIn(nextEndingCampaign.endAt) : "Open schedule",
+      body: nextEndingCampaign
+        ? `${nextEndingCampaign.title} is the next campaign to expire.`
+        : "No campaign end window is currently scheduled.",
       locked: false,
+      accent: "live",
     },
+    ...premiumToolCards.map((card) => ({
+      ...card,
+      accent: card.locked ? "locked" : "premium",
+    })),
   ];
 
   if (loading) {
@@ -1364,16 +1438,19 @@ export default function Collective() {
         <div className="campaignSectionHeader">
           <div>
             <div className="sectionKicker">COLLECTIVE TOOLS</div>
-            <h2 className="sectionTitle">Operational layer</h2>
-
+            <h2 className="sectionTitle">Subscriber toolbox</h2>
+            <p className="sectionHint">
+              The Collective now sells a clearer premium workflow: private assignments, slot awareness, team deployment,
+              and richer target context alongside the public observing layer.
+            </p>
           </div>
         </div>
 
-        <div className="collectiveToolsGrid">
+        <div className="collectiveToolsGrid premiumToolGrid">
           {toolCards.map((card) => (
-            <div key={card.title} className="collectiveToolCard">
+            <div key={card.title} className={`collectiveToolCard ${card.accent === "premium" ? "premium" : ""}`}>
               <div className="metricLabel">{card.title}</div>
-              <div className={`collectiveToolValue ${card.locked ? "locked" : "live"}`}>{card.value}</div>
+              <div className={`collectiveToolValue ${card.accent}`}>{card.value}</div>
               <div className="collectiveToolBody">{card.body}</div>
             </div>
           ))}
@@ -1512,129 +1589,28 @@ export default function Collective() {
       <section className="panel">
         <div className="campaignSectionHeader">
           <div>
-            <div className="sectionKicker">PUBLIC ARRAY LAYER</div>
-            <h2 className="sectionTitle">Daily, weekly, and global campaigns</h2>
+            <div className="sectionKicker">CAMPAIGN BOARD</div>
+            <h2 className="sectionTitle">Daily, weekly, global, and collective campaigns at a glance</h2>
             <p className="sectionHint">
-              This layer always shows one shared daily objective, one shared weekly objective, and one shared global objective.
+              The board below keeps every live campaign in a denser card layout so all seven campaigns can be scanned
+              quickly without losing join, leave, team assignment, slot, or upgrade actions.
             </p>
           </div>
-          <span className="statusBadge">{campaignLoading ? "Syncing…" : `${publicCampaigns.length} visible`}</span>
+          <span className="statusBadge">{campaignLoading ? "Syncing…" : `${campaignBoard.length} visible`}</span>
         </div>
 
-        <div className="campaignGrid">
-          {publicCampaigns.length === 0 ? (
-            <div className="campaignCard">
-              <div className="campaignTitle">No public campaigns available</div>
-              <div className="campaignDesc">No active daily, weekly, or global campaigns were returned from the database.</div>
+        <div className="campaignBoardGrid">
+          {campaignBoard.length === 0 ? (
+            <div className="campaignCard campaignBoardCard emptyCampaignCard">
+              <div className="campaignTitle">No campaigns available</div>
+              <div className="campaignDesc">No active daily, weekly, global, or research campaigns were returned from the database.</div>
             </div>
           ) : (
-            publicCampaigns.map((campaign) => {
+            campaignBoard.map((campaign) => {
               const membership = myCampaignMemberships[campaign.id] ?? null;
               const joined = Boolean(membership);
               const tone = cadenceTone(campaign.cadence);
-
-              return (
-                <div key={campaign.id} className="campaignCard">
-                  <div className="campaignTop">
-                    <div>
-                      <div className="campaignTitle">{campaign.title}</div>
-                      <div className="campaignDesc">{campaign.description}</div>
-                    </div>
-
-                    <div className="campaignMetaRow">
-                      <span className={`campaignMetaChip ${tone === "cyan" ? "toneCyan" : tone === "violet" ? "toneViolet" : "toneAmber"}`}>
-                        {campaign.cadence}
-                      </span>
-                      <span className="campaignMetaChip">PUBLIC</span>
-                      <span className="campaignMetaChip">{formatEndsIn(campaign.endAt)}</span>
-                    </div>
-                  </div>
-
-                  <div className="campaignStatRow">
-                    <div className="campaignStat"><div className="campaignStatLabel">Window</div><div className="campaignStatValue">{formatDateRange(campaign.startAt, campaign.endAt)}</div></div>
-                    <div className="campaignStat"><div className="campaignStatLabel">Target</div><div className="campaignStatValue">{campaign.targetName ?? "Open target"}</div></div>
-                    <div className="campaignStat"><div className="campaignStatLabel">Target type</div><div className="campaignStatValue">{campaign.targetType ?? "General"}</div></div>
-                    <div className="campaignStat"><div className="campaignStatLabel">Cadence</div><div className="campaignStatValue">{campaign.cadence}</div></div>
-                    <div className="campaignStat"><div className="campaignStatLabel">Availability</div><div className="campaignStatValue">{campaign.cadence === "GLOBAL" ? "Community objective" : "Open access"}</div></div>
-                  </div>
-
-                  {campaign.tags.length > 0 ? (
-                    <div className="campaignMetaRow">
-                      {campaign.tags.map((tag) => (
-                        <span key={`${campaign.id}-${tag}`} className="campaignMetaChip">{tag}</span>
-                      ))}
-                    </div>
-                  ) : null}
-
-                  <div className="campaignActionRow">
-                    {joined ? (
-                      <button
-                        className="ghostBtn"
-                        type="button"
-                        onClick={() => handleLeaveCampaign(campaign)}
-                        disabled={campaignActionBusy === `leave-${campaign.id}` || !campaignMembershipsEnabled}
-                      >
-                        {campaignActionBusy === `leave-${campaign.id}` ? "Leaving…" : "Leave campaign"}
-                      </button>
-                    ) : (
-                      <button
-                        className="primaryBtn"
-                        type="button"
-                        onClick={() => handleJoinCampaign(campaign)}
-                        disabled={campaignActionBusy === `join-${campaign.id}` || !campaignMembershipsEnabled}
-                      >
-                        {campaignActionBusy === `join-${campaign.id}` ? "Joining…" : "Join campaign"}
-                      </button>
-                    )}
-
-                    {teamsEnabled && teams.length > 0 ? (
-                      <select
-                        className="campaignAssignSelect"
-                        defaultValue=""
-                        onChange={(e) => {
-                          const teamId = e.target.value;
-                          if (teamId) {
-                            handleJoinCampaign(campaign, teamId);
-                            e.currentTarget.value = "";
-                          }
-                        }}
-                      >
-                        <option value="">Assign team…</option>
-                        {teams.map((team) => (
-                          <option key={`${campaign.id}-${team.id}`} value={team.id}>{team.name}</option>
-                        ))}
-                      </select>
-                    ) : null}
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
-      </section>
-
-      <section className="panel">
-        <div className="campaignSectionHeader">
-          <div>
-            <div className="sectionKicker">RESEARCH COLLECTIVE</div>
-            <h2 className="sectionTitle">Limited-entry research assignments</h2>
-            <p className="sectionHint">
-              This premium layer is reserved for Research Collective subscribers. An individual or a team can enter, and each entry uses one slot.
-            </p>
-          </div>
-          <span className="statusBadge">{campaignLoading ? "Syncing…" : `${researchCampaigns.length} limited-entry`}</span>
-        </div>
-
-        <div className="campaignGrid">
-          {researchCampaigns.length === 0 ? (
-            <div className="campaignCard premium">
-              <div className="campaignTitle">No research assignments available</div>
-              <div className="campaignDesc">No active subscriber-only research campaigns were returned from the database.</div>
-            </div>
-          ) : (
-            researchCampaigns.map((campaign) => {
-              const membership = myCampaignMemberships[campaign.id] ?? null;
-              const joined = Boolean(membership);
+              const isResearch = campaign.campaignClass === "research_collective" || campaign.accessTier === "research_collective";
               const filledSlots = slotCounts[campaign.id] ?? 0;
               const slotCapacity = campaign.slotCapacity ?? 0;
               const slotsRemaining = Math.max(0, slotCapacity - filledSlots);
@@ -1643,69 +1619,98 @@ export default function Collective() {
                 campaign.slotCapacity != null &&
                 filledSlots >= campaign.slotCapacity &&
                 !joined;
-              const locked = !isPro;
+              const locked = isResearch && !isPro;
+              const targetLabel = isResearch ? getCampaignTargetLabel(campaign) : campaign.targetName ?? "Open target";
 
               return (
-                <div key={campaign.id} className={`campaignCard premium ${locked ? "locked" : ""}`}>
-                  <div className="campaignTop">
-                    <div>
-                      <div className="campaignTitle">{campaign.title}</div>
-                      <div className="campaignDesc">{campaign.description}</div>
+                <div
+                  key={campaign.id}
+                  className={`campaignCard campaignBoardCard ${isResearch ? "premium" : ""} ${locked ? "locked" : ""}`}
+                >
+                  <div className="campaignBoardTop">
+                    <div className="campaignBoardHeaderText">
+                      <div className="campaignTitle compact">{campaign.title}</div>
+                      <div className="campaignDesc compact">{campaign.description}</div>
                     </div>
 
-                    <div className="campaignMetaRow">
-                      <span className="campaignMetaChip gold">RESEARCH COLLECTIVE</span>
-                      <span className="campaignMetaChip gold">LIMITED ENTRY</span>
-                      {locked ? (
-                        <span className="campaignMetaChip locked">SUBSCRIBER ONLY</span>
-                      ) : isFull ? (
-                        <span className="campaignMetaChip full">FULL</span>
+                    <div className="campaignMetaRow compact">
+                      <span className={`campaignMetaChip ${tone === "cyan" ? "toneCyan" : tone === "violet" ? "toneViolet" : "toneAmber"}`}>
+                        {campaign.cadence}
+                      </span>
+                      <span className={`campaignMetaChip ${isResearch ? "gold" : ""}`}>
+                        {isResearch ? "RESEARCH" : "PUBLIC"}
+                      </span>
+                      {isResearch ? (
+                        locked ? (
+                          <span className="campaignMetaChip locked">SUBSCRIBER ONLY</span>
+                        ) : isFull ? (
+                          <span className="campaignMetaChip full">FULL</span>
+                        ) : (
+                          <span className="campaignMetaChip gold">{slotCapacity > 0 ? `${slotsRemaining} OPEN` : "LIMITED ENTRY"}</span>
+                        )
                       ) : (
-                        <span className="campaignMetaChip gold">{filledSlots} / {slotCapacity} FILLED</span>
+                        <span className="campaignMetaChip">{formatEndsIn(campaign.endAt)}</span>
                       )}
                     </div>
                   </div>
 
-                  <div className="campaignStatRow">
-                    <div className="campaignStat"><div className="campaignStatLabel">Window</div><div className="campaignStatValue">{formatDateRange(campaign.startAt, campaign.endAt)}</div></div>
-                    <div className="campaignStat"><div className="campaignStatLabel">Target</div><div className="campaignStatValue">{getCampaignTargetLabel(campaign)}</div></div>
-                    <div className="campaignStat"><div className="campaignStatLabel">Filled slots</div><div className="campaignStatValue">{filledSlots}</div></div>
-                    <div className="campaignStat"><div className="campaignStatLabel">Remaining</div><div className="campaignStatValue">{campaign.slotCapacity != null ? slotsRemaining : "—"}</div></div>
+                  <div className="campaignBoardStats">
+                    <div className="campaignMiniStat">
+                      <div className="campaignStatLabel">Target</div>
+                      <div className="campaignStatValue">{targetLabel}</div>
+                    </div>
+                    <div className="campaignMiniStat">
+                      <div className="campaignStatLabel">{isResearch ? "Window" : "Availability"}</div>
+                      <div className="campaignStatValue">
+                        {isResearch ? formatDateRange(campaign.startAt, campaign.endAt) : campaign.cadence === "GLOBAL" ? "Community objective" : "Open access"}
+                      </div>
+                    </div>
+                    <div className="campaignMiniStat">
+                      <div className="campaignStatLabel">{isResearch ? "Slots" : "Window"}</div>
+                      <div className="campaignStatValue">
+                        {isResearch ? (campaign.slotCapacity != null ? `${filledSlots}/${campaign.slotCapacity} filled` : "Flexible") : formatDateRange(campaign.startAt, campaign.endAt)}
+                      </div>
+                    </div>
+                    <div className="campaignMiniStat">
+                      <div className="campaignStatLabel">{isResearch ? "Equipment" : "Cadence"}</div>
+                      <div className="campaignStatValue">
+                        {isResearch ? campaign.recommendedEquipment ?? "Open instrumentation" : campaign.cadence}
+                      </div>
+                    </div>
                   </div>
 
-                  {campaign.targetName ? (
-                    <div className="campaignMetaRow">
-                      {getCampaignTargetMeta(campaign) ? (
-                        <span className="campaignMetaChip gold">{getCampaignTargetMeta(campaign)}</span>
+                  {isResearch ? (
+                    <>
+                      {campaign.targetName ? (
+                        <div className="campaignMetaRow compact">
+                          {getCampaignTargetMeta(campaign) ? (
+                            <span className="campaignMetaChip gold">{getCampaignTargetMeta(campaign)}</span>
+                          ) : null}
+                          {campaign.targetRa && campaign.targetDec ? (
+                            <span className="campaignMetaChip gold">{campaign.targetRa} · {campaign.targetDec}</span>
+                          ) : null}
+                          {campaign.targetDifficulty ? (
+                            <span className="campaignMetaChip gold">{campaign.targetDifficulty.toUpperCase()}</span>
+                          ) : null}
+                        </div>
                       ) : null}
-                      {campaign.targetRa && campaign.targetDec ? (
-                        <span className="campaignMetaChip gold">{campaign.targetRa} · {campaign.targetDec}</span>
-                      ) : null}
-                      {campaign.targetDifficulty ? (
-                        <span className="campaignMetaChip gold">{campaign.targetDifficulty.toUpperCase()}</span>
-                      ) : null}
-                      {campaign.recommendedEquipment ? (
-                        <span className="campaignMetaChip gold">{campaign.recommendedEquipment.toUpperCase()}</span>
-                      ) : null}
-                    </div>
-                  ) : null}
 
-                  {campaign.targetNotes ? (
-                    <div className="campaignDesc">{campaign.targetNotes}</div>
+                      {campaign.targetNotes ? <div className="campaignDesc compact secondary">{campaign.targetNotes}</div> : null}
+                    </>
                   ) : null}
 
                   {campaign.tags.length > 0 ? (
-                    <div className="campaignMetaRow">
-                      {campaign.tags.map((tag) => (
-                        <span key={`${campaign.id}-${tag}`} className="campaignMetaChip gold">{tag}</span>
+                    <div className="campaignMetaRow compact">
+                      {campaign.tags.slice(0, 5).map((tag) => (
+                        <span key={`${campaign.id}-${tag}`} className={`campaignMetaChip ${isResearch ? "gold" : ""}`}>{tag}</span>
                       ))}
                     </div>
                   ) : null}
 
-                  <div className="campaignActionRow">
-                    {!isPro ? (
+                  <div className="campaignActionRow compact">
+                    {locked ? (
                       <button className="primaryBtn" type="button" onClick={handleUpgrade} disabled={busyCheckout}>
-                        {busyCheckout ? "Opening Stripe…" : "Upgrade to unlock"}
+                        {busyCheckout ? "Opening Stripe…" : "Upgrade"}
                       </button>
                     ) : joined ? (
                       <button
@@ -1714,7 +1719,7 @@ export default function Collective() {
                         onClick={() => handleLeaveCampaign(campaign)}
                         disabled={campaignActionBusy === `leave-${campaign.id}` || !campaignMembershipsEnabled}
                       >
-                        {campaignActionBusy === `leave-${campaign.id}` ? "Leaving…" : "Leave assignment"}
+                        {campaignActionBusy === `leave-${campaign.id}` ? "Leaving…" : isResearch ? "Leave assignment" : "Leave campaign"}
                       </button>
                     ) : (
                       <button
@@ -1723,11 +1728,11 @@ export default function Collective() {
                         onClick={() => handleJoinCampaign(campaign)}
                         disabled={campaignActionBusy === `join-${campaign.id}` || !campaignMembershipsEnabled || isFull}
                       >
-                        {campaignActionBusy === `join-${campaign.id}` ? "Joining…" : isFull ? "Campaign Full" : "Join Research"}
+                        {campaignActionBusy === `join-${campaign.id}` ? "Joining…" : isResearch ? (isFull ? "Campaign Full" : "Join Research") : "Join campaign"}
                       </button>
                     )}
 
-                    {isPro && teamsEnabled && teams.length > 0 ? (
+                    {(!locked && teamsEnabled && teams.length > 0 && (!isResearch || isPro)) ? (
                       <select
                         className="campaignAssignSelect"
                         defaultValue=""
@@ -1738,7 +1743,7 @@ export default function Collective() {
                             e.currentTarget.value = "";
                           }
                         }}
-                        disabled={isFull && !joined}
+                        disabled={isResearch ? isFull && !joined : false}
                       >
                         <option value="">Assign team…</option>
                         {teams.map((team) => (
@@ -1816,22 +1821,36 @@ const styles = `
 .metricLabel{ color:rgba(255,255,255,.60); font-size:12px; letter-spacing:.12em; text-transform:uppercase; }
 .collectiveMetricValue{ margin-top:8px; font-size:28px; font-weight:800; }
 .collectiveToolsGrid{ display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:14px; margin-top:18px; }
+.premiumToolGrid{ grid-template-columns:repeat(3, minmax(0,1fr)); }
 .collectiveToolCard{ padding:18px; border-radius:18px; background:rgba(255,255,255,.035); border:1px solid rgba(255,255,255,.07); display:grid; gap:8px; }
+.collectiveToolCard.premium{ border-color:rgba(242,191,87,.18); background:
+  radial-gradient(circle at top right, rgba(242,191,87,.08), transparent 38%),
+  linear-gradient(180deg, rgba(18,22,38,.94), rgba(9,14,29,.90)); }
 .collectiveToolValue{ font-size:18px; font-weight:800; }
 .collectiveToolValue.live{ color:#94f5c7; }
 .collectiveToolValue.locked{ color:#ffcf78; }
+.collectiveToolValue.premium{ color:#ffe4a5; }
 .collectiveToolBody{ color:rgba(255,255,255,.66); line-height:1.6; }
 .campaignSectionHeader{ display:flex; align-items:flex-start; justify-content:space-between; gap:14px; flex-wrap:wrap; }
-.campaignGrid,.teamList{ display:grid; gap:14px; margin-top:18px; }
+.campaignGrid,.teamList,.campaignBoardGrid{ display:grid; gap:14px; margin-top:18px; }
+.campaignBoardGrid{ grid-template-columns:repeat(3, minmax(0,1fr)); align-items:start; }
 .campaignCard,.teamCard,.teamCreateCard{ padding:18px; border-radius:18px; background:rgba(8,14,30,.72); border:1px solid rgba(255,255,255,.06); display:grid; gap:14px; }
+.campaignBoardCard{ padding:16px; gap:12px; height:100%; align-content:start; }
+.emptyCampaignCard{ grid-column:1 / -1; }
+.campaignBoardTop{ display:grid; gap:10px; }
+.campaignBoardHeaderText{ min-width:0; }
 .campaignCard.premium{ border:1px solid rgba(242,191,87,.22); background:
   radial-gradient(circle at top right, rgba(242,191,87,.08), transparent 32%),
   linear-gradient(180deg, rgba(18,22,38,.95), rgba(9,14,29,.92)); }
 .campaignCard.locked{ opacity:.92; }
 .campaignTop{ display:flex; align-items:flex-start; justify-content:space-between; gap:14px; flex-wrap:wrap; }
 .campaignTitle{ font-size:22px; font-weight:800; }
+.campaignTitle.compact{ font-size:16px; line-height:1.25; }
 .campaignDesc{ color:rgba(255,255,255,.68); line-height:1.65; margin-top:6px; max-width:840px; }
+.campaignDesc.compact{ margin-top:0; font-size:13px; line-height:1.5; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.campaignDesc.compact.secondary{ -webkit-line-clamp:3; }
 .campaignMetaRow{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.campaignMetaRow.compact{ gap:6px; }
 .campaignMetaChip{ display:inline-flex; align-items:center; border-radius:999px; padding:8px 10px; font-size:11px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.08); }
 .campaignMetaChip.gold{ color:#ffe4a5; border-color:rgba(242,191,87,.22); background:rgba(242,191,87,.10); }
 .campaignMetaChip.locked{ color:#ffd494; }
@@ -1840,10 +1859,13 @@ const styles = `
 .toneViolet{ color:#ccb8ff; border-color:rgba(157,124,255,.22); background:rgba(157,124,255,.10); }
 .toneAmber{ color:#ffe0a2; border-color:rgba(242,191,87,.22); background:rgba(242,191,87,.10); }
 .campaignStatRow{ display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:12px; }
+.campaignBoardStats{ display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:10px; }
+.campaignMiniStat{ padding:12px; border-radius:14px; border:1px solid rgba(255,255,255,.06); background:rgba(255,255,255,.03); min-width:0; }
 .campaignStat{ padding:14px; border-radius:14px; border:1px solid rgba(255,255,255,.06); background:rgba(255,255,255,.03); }
 .campaignStatLabel{ font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:rgba(255,255,255,.55); }
 .campaignStatValue{ margin-top:6px; font-weight:700; }
 .campaignActionRow,.buttonRow{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+.campaignActionRow.compact{ margin-top:auto; }
 .primaryBtn,.ghostBtn,.dangerBtn,.campaignAssignSelect,input,textarea{ border-radius:14px; font:inherit; }
 .primaryBtn,.ghostBtn,.dangerBtn{ border:1px solid transparent; padding:12px 16px; font-weight:800; cursor:pointer; }
 .primaryBtn{ background:linear-gradient(180deg, rgba(242,191,87,.95), rgba(214,155,45,.95)); color:#111522; }
@@ -1862,9 +1884,10 @@ textarea{ resize:vertical; min-height:96px; }
 .emptyState{ padding:18px; border-radius:16px; background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.06); color:rgba(255,255,255,.70); }
 @media (max-width: 1180px){
   .collectiveHeroGrid{ grid-template-columns:1fr; }
+  .premiumToolGrid,.campaignBoardGrid{ grid-template-columns:repeat(2, minmax(0,1fr)); }
 }
 @media (max-width: 980px){
-  .collectiveHeroGrid,.collectiveMetricGrid,.campaignStatRow,.teamGrid,.ownerEditGrid,.collectiveToolsGrid{ grid-template-columns:1fr; }
+  .collectiveHeroGrid,.collectiveMetricGrid,.campaignStatRow,.teamGrid,.ownerEditGrid,.collectiveToolsGrid,.campaignBoardGrid,.campaignBoardStats{ grid-template-columns:1fr; }
   .collectiveMiniRow{ grid-template-columns:1fr; }
   .collectiveMiniRow strong{ text-align:left; }
   select.campaignAssignSelect{ max-width:none; }
