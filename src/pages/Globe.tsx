@@ -171,20 +171,6 @@ function buildLocationLabel(city: string | null | undefined, country: string | n
   return parts.length ? parts.join(", ") : "Location unavailable";
 }
 
-function formatLastSeen(value: string | null | undefined) {
-  if (!value) return "No heartbeat recorded";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "No heartbeat recorded";
-
-  return date.toLocaleString([], {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
 async function geocodePlace(query: string): Promise<Coordinates | null> {
   const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(
     query
@@ -210,7 +196,6 @@ export default function Globe() {
   const [loadingNodes, setLoadingNodes] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sessionUserId, setSessionUserId] = useState<string | null>(null);
-  const [currentUserHeartbeat, setCurrentUserHeartbeat] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -285,9 +270,6 @@ export default function Globe() {
         const currentNode =
           safeNodes.find((node) => node.isCurrentUser) ??
           (safeNodes.length > 0 ? safeNodes[0] : null);
-
-        const rawCurrentRow = rows.find((row) => row.id === currentUserId) ?? null;
-        setCurrentUserHeartbeat(rawCurrentRow?.last_seen_at ?? null);
         setNodes(safeNodes);
         setFocusNode(currentNode ? { lat: currentNode.lat, lon: currentNode.lon } : null);
       } catch (loadError: any) {
@@ -696,54 +678,6 @@ export default function Globe() {
     };
   }, [nodes, focusNode]);
 
-  const currentNode = useMemo(
-    () => nodes.find((node) => node.isCurrentUser) ?? null,
-    [nodes]
-  );
-
-  const cards = useMemo(() => {
-    const totalNodes = nodes.length;
-    const liveSessions = nodes.filter((node) => node.active).length;
-    const representedRegions = new Set(nodes.map((node) => node.country || node.label)).size;
-
-    return [
-      {
-        label: "Total nodes",
-        value: loadingNodes ? "…" : totalNodes.toLocaleString(),
-        note: "Profiles with a stored or geocoded location currently rendered on the globe.",
-      },
-      {
-        label: "Live sessions",
-        value: loadingNodes ? "…" : liveSessions.toLocaleString(),
-        note: "Purple nodes are active in the app right now. Your current session counts as live.",
-      },
-      {
-        label: "Current node",
-        value: loadingNodes ? "…" : currentNode?.label ?? "Unavailable",
-        note: currentNode
-          ? `Rendered from ${currentNode.source === "stored" ? "stored coordinates" : "city/country geocoding"}.`
-          : "Add city/country or lat/lon to your profile to render your node.",
-      },
-      {
-        label: "Last heartbeat",
-        value: loadingNodes ? "…" : formatLastSeen(currentUserHeartbeat),
-        note: "Presence is read directly from your profile record.",
-      },
-      {
-        label: "Regions represented",
-        value: loadingNodes ? "…" : representedRegions.toLocaleString(),
-        note: "Unique countries represented by the nodes currently shown.",
-      },
-      {
-        label: "Node focus",
-        value: loadingNodes ? "…" : currentNode ? "Centered" : "Missing",
-        note: currentNode
-          ? "The globe still opens centered on your node, but nodes now use only cyan or purple state coloring."
-          : "No renderable location found for your account yet.",
-      },
-    ];
-  }, [nodes, loadingNodes, currentNode, currentUserHeartbeat]);
-
   return (
     <div className="pageStack">
       <style>{`
@@ -877,43 +811,7 @@ export default function Globe() {
           margin-bottom:10px;
         }
 
-        .gridStats{
-          display:grid;
-          grid-template-columns:repeat(3, minmax(0,1fr));
-          gap:18px;
-          margin-top:18px;
-        }
-
-        .smallPanel{
-          min-height:146px;
-        }
-
-        .sectionKicker{
-          font-size:12px;
-          letter-spacing:.28em;
-          text-transform:uppercase;
-          color:rgba(83, 221, 255, .9);
-          margin-bottom:12px;
-        }
-
-        .bigStat{
-          font-size:clamp(24px, 2.6vw, 34px);
-          font-weight:800;
-          line-height:1.08;
-          margin-bottom:12px;
-          word-break:break-word;
-        }
-
-        .sectionText{
-          color:rgba(255,255,255,.68);
-          line-height:1.45;
-          font-size:14px;
-        }
-
         @media (max-width: 1000px){
-          .gridStats{
-            grid-template-columns:repeat(2, minmax(0,1fr));
-          }
         }
 
         @media (max-width: 720px){
@@ -933,16 +831,9 @@ export default function Globe() {
         }
 
         @media (max-width: 640px){
-          .gridStats{
-            grid-template-columns:1fr;
-          }
 
           .arrayGlobeShell{
             min-height:390px;
-          }
-
-          .bigStat{
-            font-size:28px;
           }
         }
       `}</style>
@@ -982,18 +873,6 @@ export default function Globe() {
           </div>
         </div>
       </section>
-
-      <div className="gridStats">
-        {cards.map((card) => (
-          <section key={card.label} className="panel smallPanel">
-            <div className="panelInner">
-              <div className="sectionKicker">{card.label}</div>
-              <div className="bigStat">{card.value}</div>
-              <div className="sectionText">{card.note}</div>
-            </div>
-          </section>
-        ))}
-      </div>
     </div>
   );
 }
