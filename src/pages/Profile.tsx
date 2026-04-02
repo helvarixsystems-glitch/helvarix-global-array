@@ -1,3 +1,4 @@
+
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { openCustomerPortal } from "../lib/stripe";
 import { supabase } from "../lib/supabaseClient";
@@ -10,6 +11,10 @@ type ProfileRow = {
   bio?: string | null;
   city?: string | null;
   country?: string | null;
+  lat?: number | null;
+  lon?: number | null;
+  is_online?: boolean | null;
+  last_seen_at?: string | null;
   avatar_url?: string | null;
   banner_url?: string | null;
   observatory_name?: string | null;
@@ -53,6 +58,12 @@ type ProfileStats = {
   verified: number;
   mediaPosts: number;
   latestAt: string | null;
+};
+
+type GeoResult = {
+  lat: number | null;
+  lon: number | null;
+  label: string | null;
 };
 
 const PROFILE_MEDIA_BUCKET = "profile-media";
@@ -256,6 +267,44 @@ async function uploadProfileImage(userId: string, folder: "avatar" | "banner", f
   return data.publicUrl;
 }
 
+async function geocodeProfileLocation(city: string, country?: string | null): Promise<GeoResult> {
+  const trimmedCity = city.trim();
+  const trimmedCountry = String(country ?? "").trim();
+  const query = [trimmedCity, trimmedCountry].filter(Boolean).join(", ");
+
+  if (!trimmedCity) {
+    return { lat: null, lon: null, label: null };
+  }
+
+  const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(
+    query
+  )}&count=1&language=en&format=json`;
+
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error("Unable to geocode profile location.");
+  }
+
+  const json = await res.json();
+  const result = json?.results?.[0];
+
+  if (!result) {
+    return { lat: null, lon: null, label: query || trimmedCity };
+  }
+
+  const parts = [
+    String(result.name ?? "").trim(),
+    String(result.admin1 ?? "").trim(),
+    String(result.country ?? "").trim(),
+  ].filter(Boolean);
+
+  return {
+    lat: typeof result.latitude === "number" ? result.latitude : null,
+    lon: typeof result.longitude === "number" ? result.longitude : null,
+    label: parts.join(", ") || query || trimmedCity,
+  };
+}
+
 async function saveProfileWithFallback(payload: Record<string, unknown>) {
   const optionalKeys = [
     "display_name",
@@ -263,6 +312,10 @@ async function saveProfileWithFallback(payload: Record<string, unknown>) {
     "bio",
     "city",
     "country",
+    "lat",
+    "lon",
+    "is_online",
+    "last_seen_at",
     "avatar_url",
     "banner_url",
     "observatory_name",
@@ -378,6 +431,8 @@ export default function Profile() {
   const [bannerUploading, setBannerUploading] = useState(false);
 
   const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [geoStatus, setGeoStatus] = useState<"idle" | "resolving" | "resolved" | "missing" | "error">("idle");
+  const [geoLabel, setGeoLabel] = useState<string | null>(null);
 
   const hasHydratedRef = useRef(false);
   const lastSavedSnapshotRef = useRef<string>("");
@@ -412,6 +467,10 @@ export default function Profile() {
                 bio,
                 city,
                 country,
+                lat,
+                lon,
+                is_online,
+                last_seen_at,
                 avatar_url,
                 banner_url,
                 observatory_name,
@@ -476,6 +535,18 @@ export default function Profile() {
         setStoredCI(ci);
         setIsPro(Boolean(profile?.guild_access ?? profile?.is_pro));
 
+        if (profile?.lat != null && profile?.lon != null) {
+          const rawLabel = [profile.city, profile.country].filter(Boolean).join(", ");
+          setGeoStatus("resolved");
+          setGeoLabel(rawLabel || `${Number(profile.lat).toFixed(2)}°, ${Number(profile.lon).toFixed(2)}°`);
+        } else if (profile?.city?.trim()) {
+          setGeoStatus("missing");
+          setGeoLabel([profile.city, profile.country].filter(Boolean).join(", "));
+        } else {
+          setGeoStatus("idle");
+          setGeoLabel(null);
+        }
+
         const verified = observationRows.filter((obs) => {
           const raw = String(obs.verification_status ?? obs.status ?? "").toLowerCase();
           return ["verified", "approved", "confirmed"].includes(raw);
@@ -501,8 +572,6 @@ export default function Profile() {
           bio: profile?.bio ?? null,
           city: profile?.city ?? null,
           country: profile?.country ?? null,
-          avatar_url: profile?.avatar_url ?? null,
-          banner_url: profile?.banner_url ?? null,
           observatory_name: profile?.observatory_name ?? null,
           primary_mode: profile?.primary_mode ?? "visual",
           equipment_summary: profile?.equipment_summary ?? null,
@@ -514,6 +583,8 @@ export default function Profile() {
           discord_handle: profile?.discord_handle ?? null,
           visibility: profile?.visibility ?? "public",
           accent_pref: profile?.accent_pref ?? "violet",
+          avatar_url: profile?.avatar_url ?? null,
+          banner_url: profile?.banner_url ?? null,
         };
 
         lastSavedSnapshotRef.current = JSON.stringify(initialPayload);
@@ -534,6 +605,58 @@ export default function Profile() {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!sessionUserId) return;
+
+    let cancelled = false;
+
+    async function markPresence(isOnline: boolean) {
+      try {
+        await saveProfileWithFallback({
+          id: sessionUserId,
+          is_online: isOnline,
+          last_seen_at: new Date().toISOString(),
+        });
+      } catch {
+        // Presence should never block profile UX.
+      }
+    }
+
+    void markPresence(true);
+
+    const intervalId = window.setInterval(() => {
+      if (!cancelled) {
+        void markPresence(true);
+      }
+    }, 60000);
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        void markPresence(true);
+      }
+    };
+
+    const handleBeforeUnload = () => {
+      navigator.sendBeacon?.("");
+      void saveProfileWithFallback({
+        id: sessionUserId,
+        is_online: false,
+        last_seen_at: new Date().toISOString(),
+      }).catch(() => undefined);
+    };
+
+    document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      void markPresence(false);
+    };
+  }, [sessionUserId]);
 
   function updateField<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -600,6 +723,26 @@ export default function Profile() {
       if (!user) throw new Error("Not signed in.");
 
       const computedRole = getOperatorLevel(storedOI, storedCI).role;
+      const trimmedCity = form.city.trim();
+      const trimmedCountry = form.country.trim();
+
+      let geo: GeoResult = { lat: null, lon: null, label: null };
+
+      if (trimmedCity) {
+        setGeoStatus("resolving");
+        geo = await geocodeProfileLocation(trimmedCity, trimmedCountry || null);
+
+        if (geo.lat == null || geo.lon == null) {
+          setGeoStatus("missing");
+          setGeoLabel(geo.label || [trimmedCity, trimmedCountry].filter(Boolean).join(", "));
+        } else {
+          setGeoStatus("resolved");
+          setGeoLabel(geo.label || [trimmedCity, trimmedCountry].filter(Boolean).join(", "));
+        }
+      } else {
+        setGeoStatus("idle");
+        setGeoLabel(null);
+      }
 
       const payload: Record<string, unknown> = {
         id: user.id,
@@ -607,8 +750,12 @@ export default function Profile() {
         display_name: form.displayName.trim() || generateAlias(user.id),
         role: computedRole,
         bio: form.bio.trim() || null,
-        city: form.city.trim() || null,
-        country: form.country.trim() || null,
+        city: trimmedCity || null,
+        country: trimmedCountry || null,
+        lat: trimmedCity ? geo.lat : null,
+        lon: trimmedCity ? geo.lon : null,
+        is_online: true,
+        last_seen_at: new Date().toISOString(),
         avatar_url: avatarUrl || null,
         banner_url: bannerUrl || null,
         observatory_name: form.observatoryName.trim() || null,
@@ -626,15 +773,22 @@ export default function Profile() {
 
       await saveProfileWithFallback(payload);
 
-      lastSavedSnapshotRef.current = JSON.stringify(payload);
+      lastSavedSnapshotRef.current = autoSaveSnapshot;
       setAutoSaveStatus("saved");
 
       if (!silent) {
-        setMessage("Profile updated.");
+        setMessage(
+          trimmedCity
+            ? geo.lat != null && geo.lon != null
+              ? "Profile updated. Array node location refreshed."
+              : "Profile updated. Location saved, but the map node could not be resolved from that city yet."
+            : "Profile updated."
+        );
       }
     } catch (err) {
       console.error(err);
       setError(getReadableError(err));
+      setGeoStatus("error");
       setAutoSaveStatus("error");
     } finally {
       if (!silent) {
@@ -656,8 +810,6 @@ export default function Profile() {
       bio: form.bio.trim() || null,
       city: form.city.trim() || null,
       country: form.country.trim() || null,
-      avatar_url: avatarUrl || null,
-      banner_url: bannerUrl || null,
       observatory_name: form.observatoryName.trim() || null,
       primary_mode: form.primaryMode.trim() || null,
       equipment_summary: form.equipmentSummary.trim() || null,
@@ -669,6 +821,8 @@ export default function Profile() {
       discord_handle: form.discordHandle.trim() || null,
       visibility: form.visibility.trim() || null,
       accent_pref: form.accentPref.trim() || null,
+      avatar_url: avatarUrl || null,
+      banner_url: bannerUrl || null,
     });
   }, [
     sessionUserId,
@@ -730,6 +884,15 @@ export default function Profile() {
     if (form.accentPref === "amber") return "accentAmber";
     return "accentViolet";
   }, [form.accentPref]);
+
+  const geoStatusText = useMemo(() => {
+    if (!form.city.trim()) return "Your node will be placed automatically after you add a city and save.";
+    if (geoStatus === "resolving") return "Resolving your city into a globe node location…";
+    if (geoStatus === "resolved") return geoLabel ? `Node location ready: ${geoLabel}` : "Node location ready.";
+    if (geoStatus === "missing") return geoLabel ? `Location saved, but the map could not fully resolve ${geoLabel}.` : "Location saved, but the map could not resolve the city yet.";
+    if (geoStatus === "error") return "Location lookup failed. Your city will stay saved, but the node may not update until lookup succeeds.";
+    return "Your node location will update from the city and country saved here.";
+  }, [form.city, geoStatus, geoLabel]);
 
   return (
     <div className={`pageStack profilePage ${accentClass} ${isPro ? "profilePro" : ""}`}>
@@ -884,6 +1047,13 @@ export default function Profile() {
                 onChange={(e) => updateField("country", e.target.value)}
                 placeholder="United States"
               />
+            </div>
+
+            <div className="fieldGroup spanTwo">
+              <div className={`locationStatusCard ${geoStatus}`}>
+                <div className="locationStatusTitle">Array node location</div>
+                <div className="locationStatusText">{geoStatusText}</div>
+              </div>
             </div>
 
             <div className="fieldGroup">
@@ -1176,7 +1346,8 @@ export default function Profile() {
             <div className="sectionKicker">BILLING + SAVE</div>
             <h3 className="profileActionTitle">Manage your operator account</h3>
             <p className="profileActionText">
-              Save your customization changes to Supabase and manage subscription details from the billing portal.
+              Save your customization changes to Supabase, keep your node location synced from your profile city,
+              and manage subscription details from the billing portal.
             </p>
             <div className="autoSaveStatusText">
               {autoSaveStatus === "saving" && "Saving changes automatically…"}
@@ -1378,6 +1549,43 @@ export default function Profile() {
 
         .uploadMiniCard span{
           font-weight: 700;
+        }
+
+        .locationStatusCard{
+          min-height: 68px;
+          border-radius: 16px;
+          border: 1px solid rgba(255,255,255,0.08);
+          background: rgba(255,255,255,0.03);
+          padding: 14px 16px;
+          display: grid;
+          gap: 6px;
+        }
+
+        .locationStatusCard.resolved{
+          border-color: rgba(55,211,156,0.22);
+          background: rgba(55,211,156,0.06);
+        }
+
+        .locationStatusCard.resolving{
+          border-color: rgba(92,214,255,0.20);
+          background: rgba(92,214,255,0.06);
+        }
+
+        .locationStatusCard.missing,
+        .locationStatusCard.error{
+          border-color: rgba(242,191,87,0.22);
+          background: rgba(242,191,87,0.06);
+        }
+
+        .locationStatusTitle{
+          font-size: 12px;
+          letter-spacing: 0.16em;
+          text-transform: uppercase;
+          color: var(--muted);
+        }
+
+        .locationStatusText{
+          line-height: 1.55;
         }
 
         .srOnlyInput{
