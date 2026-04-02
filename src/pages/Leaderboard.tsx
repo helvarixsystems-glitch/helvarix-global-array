@@ -275,7 +275,7 @@ function getObservationCI(row: ObservationRow, campaignsById: Map<string, Campai
   if (status === "flagged") score = Math.round(score * 0.7);
 
   if (cadence === "RESEARCH" || cadence === "COLLECTIVE") {
-    score += 18;
+    score = Math.round(score * 2.0);
   }
 
   return Math.max(0, score);
@@ -474,7 +474,6 @@ export default function Leaderboard() {
   const ciRanked = useMemo(() => rankUsers(rows, "ci"), [rows]);
 
   const activeRows = tab === "ci" ? ciRanked : oiRanked;
-  const topSix = activeRows.slice(0, 6);
 
   const totals = useMemo(() => {
     return {
@@ -498,8 +497,8 @@ export default function Leaderboard() {
             <h1 className="pageTitle">Operator standings with real scoring.</h1>
             <p className="pageText leaderboardIntro">
               Observation Index rewards complete, evidence-backed submissions. Campaign Impact only
-              counts global and research collective work. Daily and weekly campaigns boost OI with
-              multipliers.
+              counts global and research collective work. Daily and weekly campaigns boost OI, while
+              Research Collective campaign submissions apply a 2.0× CI multiplier.
             </p>
           </div>
 
@@ -606,7 +605,7 @@ export default function Leaderboard() {
               </div>
               <div className="ruleCard">
                 <strong>Research work is weighted higher</strong>
-                <span>Collective and research campaign observations receive an additional CI bonus.</span>
+                <span>Collective and research campaign observations apply a 2.0× CI multiplier.</span>
               </div>
               <div className="ruleCard">
                 <strong>Evidence increases impact</strong>
@@ -649,77 +648,6 @@ export default function Leaderboard() {
         </div>
       ) : (
         <>
-          <section className="panel">
-            <div className="sectionHeader">
-              <div>
-                <div className="sectionKicker">
-                  {tab === "oi" ? "OBSERVATION INDEX" : "CAMPAIGN IMPACT"}
-                </div>
-                <h2 className="sectionTitle">
-                  {tab === "oi" ? "Top six operators" : "Top six campaign operators"}
-                </h2>
-              </div>
-            </div>
-
-            <div className="topSixGrid">
-              {topSix.map((row) => {
-                const isSelf = row.userId === sessionUserId;
-                const score = tab === "oi" ? row.oi : row.ci;
-
-                return (
-                  <article
-                    key={`${tab}-${row.userId}`}
-                    className={`topRankCard rank-${row.rank} ${isSelf ? "isSelf" : ""} ${row.isPro ? "isPro" : ""}`}
-                  >
-                    <div className="topRankTop">
-                      <div className="topRankNumber">{row.rank}</div>
-                      <span className="statusBadge topRankBadge">
-                        {tab === "oi" ? "OI" : "CI"} {score.toLocaleString()}
-                      </span>
-                    </div>
-
-                    <div className="topRankIdentity">
-                      {row.avatarUrl ? (
-                        <img className={`topRankAvatar ${row.isPro ? "goldAvatarRing" : ""}`} src={row.avatarUrl} alt={row.callsign} />
-                      ) : (
-                        <div className={`topRankAvatar fallback ${row.isPro ? "goldAvatarRing goldFallbackAvatar" : ""}`}>
-                          {row.callsign.slice(0, 1).toUpperCase()}
-                        </div>
-                      )}
-
-                      <div>
-                        <div className="rankNameRow">
-                          <div className={`topRankName ${isSelf ? "selfName" : ""} ${row.isPro ? "solarGoldText" : ""}`}>
-                            {row.callsign}
-                          </div>
-                          {row.isPro ? <span className="solarGoldChip">PRO</span> : null}
-                        </div>
-                        <div className="topRankSub">
-                          {[row.role, row.location].filter(Boolean).join(" • ") || "Network Operator"}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="topRankStats">
-                      <div className="miniStat">
-                        <span>Observations</span>
-                        <strong>{row.observations}</strong>
-                      </div>
-                      <div className="miniStat">
-                        <span>Verified</span>
-                        <strong>{row.verifiedCount}</strong>
-                      </div>
-                      <div className="miniStat">
-                        <span>Campaigns</span>
-                        <strong>{row.campaignCount}</strong>
-                      </div>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          </section>
-
           <section className="panel">
             <div className="sectionHeader">
               <div>
