@@ -1328,6 +1328,14 @@ export default function Collective() {
         throw new Error("This campaign requires Research Collective membership.");
       }
 
+      const isResearchCampaign =
+        campaign.campaignClass.toLowerCase() === "research_collective" ||
+        campaign.accessTier.toLowerCase() === "research_collective";
+
+      if (teamId && !isResearchCampaign) {
+        throw new Error("Teams can only be assigned to Research Collective campaigns.");
+      }
+
       const filledSlots = slotCounts[campaign.id] ?? 0;
       const isFull =
         campaign.isLimitedEntry &&
@@ -2365,7 +2373,7 @@ export default function Collective() {
                       </button>
                     )}
 
-                    {(!locked && teamsEnabled && teams.length > 0 && (!isResearch || isPro)) ? (
+                    {(!locked && teamsEnabled && teams.length > 0 && isResearch && isPro) ? (
                       <select
                         className="campaignAssignSelect"
                         defaultValue=""
@@ -2376,7 +2384,7 @@ export default function Collective() {
                             e.currentTarget.value = "";
                           }
                         }}
-                        disabled={isResearch ? isFull && !joined : false}
+                        disabled={isFull && !joined}
                       >
                         <option value="">Assign team…</option>
                         {teams.map((team) => (
