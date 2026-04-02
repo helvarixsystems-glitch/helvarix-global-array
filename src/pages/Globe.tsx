@@ -9,6 +9,8 @@ declare global {
 
 type RawProfile = {
   id: string;
+  city?: string | null;
+  country?: string | null;
   lat: number | null;
   lon: number | null;
   is_online?: boolean | null;
@@ -21,12 +23,21 @@ type SafeNode = {
   lon: number;
   active: boolean;
   isCurrentUser: boolean;
+  city: string | null;
+  country: string | null;
+  label: string;
+  source: "stored" | "geocoded";
 };
 
 type FocusNode = {
   lat: number;
   lon: number;
 } | null;
+
+type Coordinates = {
+  latitude: number;
+  longitude: number;
+};
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
@@ -60,7 +71,8 @@ function obfuscateNodeLocation(lat: number, lon: number, seed: string) {
   return { lat: safeLat, lon: safeLon };
 }
 
-function isActiveNow(row: RawProfile) {
+function isActiveNow(row: RawProfile, currentUserId: string | null) {
+  if (row.id === currentUserId) return true;
   if (row.is_online === true) return true;
   if (!row.last_seen_at) return false;
 
@@ -153,18 +165,58 @@ function addLatLonGrid(THREE: any, parent: any, radius: number) {
   }
 }
 
+function buildLocationLabel(city: string | null | undefined, country: string | null | undefined) {
+  const parts = [String(city ?? "").trim(), String(country ?? "").trim()].filter(Boolean);
+  return parts.length ? parts.join(", ") : "Location unavailable";
+}
+
+function formatLastSeen(value: string | null | undefined) {
+  if (!value) return "No heartbeat recorded";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "No heartbeat recorded";
+
+  return date.toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+async function geocodePlace(query: string): Promise<Coordinates | null> {
+  const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(
+    query
+  )}&count=1&language=en&format=json`;
+
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("Unable to geocode profile location.");
+  const json = await res.json();
+  const result = json?.results?.[0];
+  if (!result) return null;
+
+  return {
+    latitude: Number(result.latitude),
+    longitude: Number(result.longitude),
+  };
+}
+
 export default function Globe() {
   const mountRef = useRef<HTMLDivElement | null>(null);
 
   const [nodes, setNodes] = useState<SafeNode[]>([]);
   const [focusNode, setFocusNode] = useState<FocusNode>(null);
   const [loadingNodes, setLoadingNodes] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [sessionUserId, setSessionUserId] = useState<string | null>(null);
+  const [currentUserHeartbeat, setCurrentUserHeartbeat] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
 
     async function loadNodes() {
       setLoadingNodes(true);
+      setError(null);
 
       try {
         const {
@@ -172,42 +224,77 @@ export default function Globe() {
         } = await supabase.auth.getSession();
 
         const currentUserId = session?.user?.id ?? null;
+        if (alive) setSessionUserId(currentUserId);
 
         const { data, error } = await supabase
           .from("profiles")
-          .select("id,lat,lon,is_online,last_seen_at")
-          .not("lat", "is", null)
-          .not("lon", "is", null)
+          .select("id,city,country,lat,lon,is_online,last_seen_at")
           .limit(2500);
 
         if (error) throw error;
 
-        const rows = (data as RawProfile[]) ?? [];
+        const rows = ((data as RawProfile[] | null) ?? []).filter((row) => row?.id);
 
-        const safeNodes = rows.map((row) => {
-          const safe = obfuscateNodeLocation(row.lat as number, row.lon as number, row.id);
+        const resolved = await Promise.all(
+          rows.map(async (row): Promise<SafeNode | null> => {
+            let lat = typeof row.lat === "number" ? row.lat : null;
+            let lon = typeof row.lon === "number" ? row.lon : null;
+            let source: "stored" | "geocoded" = "stored";
 
-          return {
-            id: row.id,
-            lat: safe.lat,
-            lon: safe.lon,
-            active: isActiveNow(row),
-            isCurrentUser: row.id === currentUserId,
-          };
-        });
+            if (lat == null || lon == null) {
+              const query = [String(row.city ?? "").trim(), String(row.country ?? "").trim()]
+                .filter(Boolean)
+                .join(", ");
+
+              if (query) {
+                try {
+                  const geocoded = await geocodePlace(query);
+                  if (geocoded) {
+                    lat = geocoded.latitude;
+                    lon = geocoded.longitude;
+                    source = "geocoded";
+                  }
+                } catch {
+                  // Skip geocoding failures. The node just will not render.
+                }
+              }
+            }
+
+            if (lat == null || lon == null) return null;
+
+            const safe = obfuscateNodeLocation(lat, lon, row.id);
+
+            return {
+              id: row.id,
+              lat: safe.lat,
+              lon: safe.lon,
+              active: isActiveNow(row, currentUserId),
+              isCurrentUser: row.id === currentUserId,
+              city: row.city ?? null,
+              country: row.country ?? null,
+              label: buildLocationLabel(row.city ?? null, row.country ?? null),
+              source,
+            };
+          })
+        );
 
         if (!alive) return;
 
+        const safeNodes = resolved.filter(Boolean) as SafeNode[];
         const currentNode =
           safeNodes.find((node) => node.isCurrentUser) ??
           (safeNodes.length > 0 ? safeNodes[0] : null);
 
+        const rawCurrentRow = rows.find((row) => row.id === currentUserId) ?? null;
+        setCurrentUserHeartbeat(rawCurrentRow?.last_seen_at ?? null);
         setNodes(safeNodes);
         setFocusNode(currentNode ? { lat: currentNode.lat, lon: currentNode.lon } : null);
-      } catch (error) {
-        console.error("Failed to load globe nodes:", error);
+      } catch (loadError: any) {
+        console.error("Failed to load globe nodes:", loadError);
+        if (!alive) return;
         setNodes([]);
         setFocusNode(null);
+        setError(loadError?.message ?? "Unable to load globe nodes.");
       } finally {
         if (alive) setLoadingNodes(false);
       }
@@ -548,8 +635,8 @@ export default function Globe() {
         };
 
         window.addEventListener("resize", resizeHandler);
-      } catch (error) {
-        console.error("Failed to initialize globe renderer:", error);
+      } catch (buildError) {
+        console.error("Failed to initialize globe renderer:", buildError);
       }
     }
 
@@ -620,33 +707,53 @@ export default function Globe() {
     };
   }, [nodes, focusNode]);
 
+  const currentNode = useMemo(
+    () => nodes.find((node) => node.isCurrentUser) ?? null,
+    [nodes]
+  );
+
   const cards = useMemo(() => {
-    const activeNodes = nodes.length;
+    const totalNodes = nodes.length;
     const liveSessions = nodes.filter((node) => node.active).length;
+    const representedRegions = new Set(nodes.map((node) => node.country || node.label)).size;
 
     return [
       {
-        label: "Active nodes",
-        value: loadingNodes ? "…" : activeNodes.toLocaleString(),
-        note: "Approximate observer locations rendered on the globe",
+        label: "Total nodes",
+        value: loadingNodes ? "…" : totalNodes.toLocaleString(),
+        note: "Profiles with a stored or geocoded location currently rendered on the globe.",
       },
       {
         label: "Live sessions",
         value: loadingNodes ? "…" : liveSessions.toLocaleString(),
-        note: "Purple nodes indicate members active in the app",
+        note: "Purple nodes are active in the app right now. Your current session counts as live.",
       },
       {
-        label: "Best window",
-        value: "21:00–02:00",
-        note: "Peak local collection band",
+        label: "Current node",
+        value: loadingNodes ? "…" : currentNode?.label ?? "Unavailable",
+        note: currentNode
+          ? `Rendered from ${currentNode.source === "stored" ? "stored coordinates" : "city/country geocoding"}.`
+          : "Add city/country or lat/lon to your profile to render your node.",
       },
       {
-        label: "Verification queue",
-        value: "126",
-        note: "Items awaiting review",
+        label: "Last heartbeat",
+        value: loadingNodes ? "…" : formatLastSeen(currentUserHeartbeat),
+        note: "Presence is read directly from your profile record.",
+      },
+      {
+        label: "Regions represented",
+        value: loadingNodes ? "…" : representedRegions.toLocaleString(),
+        note: "Unique countries represented by the nodes currently shown.",
+      },
+      {
+        label: "Current user node",
+        value: loadingNodes ? "…" : currentNode ? "Visible" : "Missing",
+        note: currentNode
+          ? "Your node is ringed in white and the globe opens centered on it."
+          : "No renderable location found for your account yet.",
       },
     ];
-  }, [nodes, loadingNodes]);
+  }, [nodes, loadingNodes, currentNode, currentUserHeartbeat]);
 
   return (
     <div className="pageStack">
@@ -738,6 +845,11 @@ export default function Globe() {
           background:#8f6cff;
         }
 
+        .arrayLegendDot.white{
+          color:#ffffff;
+          background:#ffffff;
+        }
+
         .arrayGlobeFooter{
           position:absolute;
           right:20px;
@@ -750,7 +862,7 @@ export default function Globe() {
           color:rgba(255,255,255,.76);
           font-size:12px;
           line-height:1.5;
-          max-width:430px;
+          max-width:440px;
           backdrop-filter: blur(12px);
           pointer-events:none;
           box-shadow: inset 0 0 26px rgba(255,255,255,.02);
@@ -776,9 +888,9 @@ export default function Globe() {
           margin-bottom:10px;
         }
 
-        .gridFour{
+        .gridStats{
           display:grid;
-          grid-template-columns:repeat(4, minmax(0,1fr));
+          grid-template-columns:repeat(3, minmax(0,1fr));
           gap:18px;
           margin-top:18px;
         }
@@ -796,10 +908,11 @@ export default function Globe() {
         }
 
         .bigStat{
-          font-size:34px;
+          font-size:clamp(24px, 2.6vw, 34px);
           font-weight:800;
-          line-height:1;
+          line-height:1.08;
           margin-bottom:12px;
+          word-break:break-word;
         }
 
         .sectionText{
@@ -809,7 +922,7 @@ export default function Globe() {
         }
 
         @media (max-width: 1000px){
-          .gridFour{
+          .gridStats{
             grid-template-columns:repeat(2, minmax(0,1fr));
           }
         }
@@ -831,7 +944,7 @@ export default function Globe() {
         }
 
         @media (max-width: 640px){
-          .gridFour{
+          .gridStats{
             grid-template-columns:1fr;
           }
 
@@ -840,18 +953,22 @@ export default function Globe() {
           }
 
           .bigStat{
-            font-size:30px;
+            font-size:28px;
           }
         }
       `}</style>
 
       <section className="heroPanel">
         <div className="eyebrow">Network View</div>
-        <h1 className="pageTitle">Make the global array legible.</h1>
+        <h1 className="pageTitle">Live nodes from actual profile data.</h1>
         <p className="pageText">
-          Observer density and live collection activity rendered on a real Earth texture.
+          The globe now renders only real operator records from your Supabase profiles table. No
+          placeholder counts, no fictitious queue values, and no synthetic node list beyond the
+          privacy-safe location offset applied to each marker.
         </p>
       </section>
+
+      {error ? <div className="alert error">{error}</div> : null}
 
       <section className="panel">
         <div className="arrayGlobeShell">
@@ -865,20 +982,24 @@ export default function Globe() {
                 <span className="arrayLegendDot purple" />
                 Active in app
               </div>
+              <div className="arrayGlobeLegend">
+                <span className="arrayLegendDot white" />
+                Current user
+              </div>
             </div>
 
             <div ref={mountRef} className="arrayGlobeCanvas" />
 
             <div className="arrayGlobeFooter">
-              Drag to rotate. Scroll to zoom. The globe opens centered on your current node when
-              location data is available. Locations are rounded and slightly offset so users cannot
-              derive exact home addresses from the display.
+              Drag to rotate. Scroll to zoom. The globe opens centered on your current node when a
+              renderable location exists. Locations are still rounded and slightly offset so exact
+              addresses cannot be inferred from the map.
             </div>
           </div>
         </div>
       </section>
 
-      <div className="gridFour">
+      <div className="gridStats">
         {cards.map((card) => (
           <section key={card.label} className="panel smallPanel">
             <div className="panelInner">
