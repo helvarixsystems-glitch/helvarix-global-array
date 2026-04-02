@@ -1,3 +1,4 @@
+
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
@@ -24,10 +25,14 @@ type CampaignProgressRow = {
   title: string | null;
   cadence: CampaignCadence | null;
   description: string | null;
+  start_at?: string | null;
   end_at: string | null;
   progress: number | null;
   participant_count?: number | null;
   completion_pct?: number | null;
+  target_type?: string | null;
+  tags?: string[] | null;
+  access_tier?: string | null;
 };
 
 type ProfileRow = {
@@ -64,20 +69,27 @@ type HomeCampaignCard = {
   participantCount: number;
   targetType: string | null;
   tags: string[];
+  accessTier: string;
 };
 
 type SectorState = "DAYLIGHT" | "CIVIL" | "NAUTICAL" | "ASTRONOMICAL" | "NIGHT" | "UNKNOWN";
 
-type SectorTelemetry = {
-  lat: number | null;
-  lon: number | null;
+type WeatherSnapshot = {
   localTime: string;
   skyState: SectorState;
-  sunAltitude: number;
-  photonFluxStabilityPct: number;
-  kpLabel: "LOW" | "MODERATE" | "HIGH" | "SEVERE" | "UNKNOWN";
-  kp: number | null;
-  optimalCollectionStartLocal: string | null;
+  sunAltitude: number | null;
+  temperatureC: number | null;
+  weatherSummary: string;
+  weatherCode: number | null;
+  cloudCover: number | null;
+  humidityPct: number | null;
+  windKph: number | null;
+  visibilityKm: number | null;
+  precipitationProbability: number | null;
+  sunriseLocal: string | null;
+  sunsetLocal: string | null;
+  moonPhase: string;
+  moonIlluminationPct: number;
   nightRemaining: string | null;
 };
 
@@ -106,9 +118,7 @@ function solarAltitudeDeg(date: Date, latDeg: number, lonDeg: number) {
 
   const L = wrap360(280.46 + 0.9856474 * n);
   const g = wrap360(357.528 + 0.9856003 * n);
-  const lambda = wrap360(
-    L + 1.915 * Math.sin(toRad(g)) + 0.02 * Math.sin(toRad(2 * g))
-  );
+  const lambda = wrap360(L + 1.915 * Math.sin(toRad(g)) + 0.02 * Math.sin(toRad(2 * g)));
   const eps = 23.439 - 0.0000004 * n;
 
   const sinDecl = Math.sin(toRad(eps)) * Math.sin(toRad(lambda));
@@ -192,73 +202,127 @@ function cadenceSortValue(cadence: CampaignCadence | null | undefined) {
   return 9;
 }
 
-function computeSectorTelemetry(lat: number | null, lon: number | null): SectorTelemetry {
-  const now = new Date();
+function weatherCodeLabel(code: number | null) {
+  if (code == null) return "Unavailable";
+  if (code === 0) return "Clear";
+  if ([1, 2].includes(code)) return "Mostly Clear";
+  if (code === 3) return "Overcast";
+  if ([45, 48].includes(code)) return "Fog";
+  if ([51, 53, 55, 56, 57].includes(code)) return "Drizzle";
+  if ([61, 63, 65, 66, 67, 80, 81, 82].includes(code)) return "Rain";
+  if ([71, 73, 75, 77, 85, 86].includes(code)) return "Snow";
+  if ([95, 96, 99].includes(code)) return "Thunderstorm";
+  return "Variable";
+}
 
+function moonPhaseFraction(date = new Date()) {
+  const synodicMonth = 29.53058867;
+  const knownNewMoon = Date.UTC(2000, 0, 6, 18, 14, 0);
+  const daysSince = (date.getTime() - knownNewMoon) / 86400000;
+  const phase = ((daysSince % synodicMonth) + synodicMonth) % synodicMonth;
+  return phase / synodicMonth;
+}
+
+function moonPhaseLabel(fraction: number) {
+  if (fraction < 0.03 || fraction > 0.97) return "New Moon";
+  if (fraction < 0.22) return "Waxing Crescent";
+  if (fraction < 0.28) return "First Quarter";
+  if (fraction < 0.47) return "Waxing Gibbous";
+  if (fraction < 0.53) return "Full Moon";
+  if (fraction < 0.72) return "Waning Gibbous";
+  if (fraction < 0.78) return "Last Quarter";
+  return "Waning Crescent";
+}
+
+function moonIlluminationPercent(fraction: number) {
+  return Math.round(((1 - Math.cos(2 * Math.PI * fraction)) / 2) * 100);
+}
+
+function formatClock(value: string | null) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
+function formatNightRemaining(sunriseIso: string | null, skyState: SectorState) {
+  if (!sunriseIso || !["NIGHT", "ASTRONOMICAL", "NAUTICAL", "CIVIL"].includes(skyState)) {
+    return null;
+  }
+  const diff = new Date(sunriseIso).getTime() - Date.now();
+  if (Number.isNaN(diff) || diff <= 0) return null;
+  const minutes = Math.floor(diff / 60000);
+  const hours = Math.floor(minutes / 60);
+  const remMinutes = minutes % 60;
+  return hours > 0 ? `${hours}H ${remMinutes}M` : `${remMinutes}M`;
+}
+
+async function fetchSectorTelemetry(lat: number | null, lon: number | null): Promise<WeatherSnapshot> {
+  const now = new Date();
   if (lat == null || lon == null) {
     return {
-      lat,
-      lon,
       localTime: now.toLocaleString(),
       skyState: "UNKNOWN",
-      sunAltitude: 0,
-      photonFluxStabilityPct: 50,
-      kpLabel: "UNKNOWN",
-      kp: null,
-      optimalCollectionStartLocal: null,
+      sunAltitude: null,
+      temperatureC: null,
+      weatherSummary: "Location not set",
+      weatherCode: null,
+      cloudCover: null,
+      humidityPct: null,
+      windKph: null,
+      visibilityKm: null,
+      precipitationProbability: null,
+      sunriseLocal: null,
+      sunsetLocal: null,
+      moonPhase: moonPhaseLabel(moonPhaseFraction(now)),
+      moonIlluminationPct: moonIlluminationPercent(moonPhaseFraction(now)),
       nightRemaining: null,
     };
   }
 
+  const forecastUrl =
+    `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
+    `&current=temperature_2m,relative_humidity_2m,weather_code,cloud_cover,wind_speed_10m` +
+    `&hourly=visibility,precipitation_probability&forecast_days=1&timezone=auto`;
+
+  const sunUrl = `https://api.sunrise-sunset.org/json?lat=${lat}&lng=${lon}&formatted=0&date=today`;
+
+  const [forecastRes, sunRes] = await Promise.all([fetch(forecastUrl), fetch(sunUrl)]);
+  if (!forecastRes.ok) throw new Error("Unable to load localized weather conditions.");
+  if (!sunRes.ok) throw new Error("Unable to load sunrise and sunset.");
+
+  const forecast = await forecastRes.json();
+  const solar = await sunRes.json();
+
+  const current = forecast?.current ?? {};
+  const hourly = forecast?.hourly ?? {};
+  const currentTime = String(current.time ?? "");
+  const hourTimes: string[] = Array.isArray(hourly?.time) ? hourly.time : [];
+  const hourIndex = Math.max(0, hourTimes.indexOf(currentTime));
   const sunAltitude = Number(solarAltitudeDeg(now, lat, lon).toFixed(1));
   const skyState = skyStateFromAlt(sunAltitude);
-
-  let photonFluxStabilityPct = 92;
-  if (skyState === "DAYLIGHT") photonFluxStabilityPct = 24;
-  if (skyState === "CIVIL") photonFluxStabilityPct = 48;
-  if (skyState === "NAUTICAL") photonFluxStabilityPct = 71;
-  if (skyState === "ASTRONOMICAL") photonFluxStabilityPct = 88;
-  if (skyState === "NIGHT") photonFluxStabilityPct = 96;
-
-  const kp =
-    skyState === "NIGHT"
-      ? 2
-      : skyState === "ASTRONOMICAL"
-      ? 3
-      : skyState === "NAUTICAL"
-      ? 4
-      : 5;
-
-  let kpLabel: SectorTelemetry["kpLabel"] = "LOW";
-  if (kp >= 7) kpLabel = "SEVERE";
-  else if (kp >= 5) kpLabel = "HIGH";
-  else if (kp >= 3) kpLabel = "MODERATE";
-
-  let optimalCollectionStartLocal: string | null = null;
-  let nightRemaining: string | null = null;
-
-  if (skyState === "NIGHT" || skyState === "ASTRONOMICAL") {
-    optimalCollectionStartLocal = "ACTIVE NOW";
-    nightRemaining = "4H+";
-  } else if (skyState === "NAUTICAL") {
-    optimalCollectionStartLocal = "WITHIN 1H";
-    nightRemaining = "3H+";
-  } else if (skyState === "CIVIL") {
-    optimalCollectionStartLocal = "AFTER DUSK";
-    nightRemaining = "PENDING";
-  }
+  const moonFraction = moonPhaseFraction(now);
 
   return {
-    lat,
-    lon,
     localTime: now.toLocaleString(),
     skyState,
     sunAltitude,
-    photonFluxStabilityPct,
-    kpLabel,
-    kp,
-    optimalCollectionStartLocal,
-    nightRemaining,
+    temperatureC: typeof current.temperature_2m === "number" ? current.temperature_2m : null,
+    weatherSummary: weatherCodeLabel(typeof current.weather_code === "number" ? current.weather_code : null),
+    weatherCode: typeof current.weather_code === "number" ? current.weather_code : null,
+    cloudCover: typeof current.cloud_cover === "number" ? current.cloud_cover : null,
+    humidityPct: typeof current.relative_humidity_2m === "number" ? current.relative_humidity_2m : null,
+    windKph: typeof current.wind_speed_10m === "number" ? current.wind_speed_10m : null,
+    visibilityKm: typeof hourly?.visibility?.[hourIndex] === "number" ? hourly.visibility[hourIndex] / 1000 : null,
+    precipitationProbability:
+      typeof hourly?.precipitation_probability?.[hourIndex] === "number"
+        ? hourly.precipitation_probability[hourIndex]
+        : null,
+    sunriseLocal: solar?.results?.sunrise ?? null,
+    sunsetLocal: solar?.results?.sunset ?? null,
+    moonPhase: moonPhaseLabel(moonFraction),
+    moonIlluminationPct: moonIlluminationPercent(moonFraction),
+    nightRemaining: formatNightRemaining(solar?.results?.sunrise ?? null, skyState),
   };
 }
 
@@ -323,6 +387,7 @@ export default function Home() {
   const navigate = useNavigate();
 
   const [loading, setLoading] = useState(true);
+  const [telemetryLoading, setTelemetryLoading] = useState(false);
   const [sessionUserId, setSessionUserId] = useState<string | null>(null);
 
   const [profile, setProfile] = useState<ProfileRow | null>(null);
@@ -332,7 +397,8 @@ export default function Home() {
   const [campaignCards, setCampaignCards] = useState<HomeCampaignCard[]>([]);
   const [campaignError, setCampaignError] = useState<string | null>(null);
 
-  const [telemetry, setTelemetry] = useState<SectorTelemetry | null>(null);
+  const [telemetry, setTelemetry] = useState<WeatherSnapshot | null>(null);
+  const [telemetryError, setTelemetryError] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -363,9 +429,7 @@ export default function Home() {
 
         if (!mounted) return;
 
-        const lat = loadedProfile?.lat ?? null;
-        const lon = loadedProfile?.lon ?? null;
-        setTelemetry(computeSectorTelemetry(lat, lon));
+        setTelemetryLoading(true)
       } catch (error) {
         console.error("Home page failed to load:", error);
       } finally {
@@ -380,24 +444,42 @@ export default function Home() {
     };
   }, []);
 
+  useEffect(() => {
+    let active = true;
+
+    async function loadTelemetry() {
+      setTelemetryError(null);
+      setTelemetryLoading(true);
+      try {
+        const next = await fetchSectorTelemetry(profile?.lat ?? null, profile?.lon ?? null);
+        if (!active) return;
+        setTelemetry(next);
+      } catch (error: any) {
+        if (!active) return;
+        setTelemetry(null);
+        setTelemetryError(error?.message ?? "Unable to load localized sky conditions.");
+      } finally {
+        if (active) setTelemetryLoading(false);
+      }
+    }
+
+    void loadTelemetry();
+    return () => {
+      active = false;
+    };
+  }, [profile?.lat, profile?.lon]);
+
   async function loadProfile(userId: string): Promise<ProfileRow | null> {
     try {
       const { data, error } = await supabase
         .from("profiles")
-        .select(
-          "id,callsign,role,observation_index,campaign_impact,streak_days,lat,lon,city,country"
-        )
+        .select("id,callsign,role,observation_index,campaign_impact,streak_days,lat,lon,city,country")
         .eq("id", userId)
         .maybeSingle();
 
-      if (error) {
-        console.warn("Profile query failed:", error.message);
-        return null;
-      }
-
+      if (error) return null;
       return (data as ProfileRow | null) ?? null;
-    } catch (error) {
-      console.warn("Profile query threw:", error);
+    } catch {
       return null;
     }
   }
@@ -411,14 +493,11 @@ export default function Home() {
         .limit(6);
 
       if (error) {
-        console.warn("Recent observations query failed:", error.message);
         setRecentObservations([]);
         return;
       }
-
       setRecentObservations((data as ObservationRow[]) ?? []);
-    } catch (error) {
-      console.warn("Recent observations query threw:", error);
+    } catch {
       setRecentObservations([]);
     }
   }
@@ -436,14 +515,12 @@ export default function Home() {
         .eq("user_id", userId);
 
       if (error) {
-        console.warn("Observation count query failed:", error.message);
         setObservationCount(0);
         return;
       }
 
       setObservationCount(count ?? 0);
-    } catch (error) {
-      console.warn("Observation count query threw:", error);
+    } catch {
       setObservationCount(0);
     }
   }
@@ -457,45 +534,47 @@ export default function Home() {
           user_id: userId,
         });
 
-        if (!error && Array.isArray(data) && data.length > 0) {
+        if (!error && Array.isArray(data)) {
           const mapped = (data as CampaignProgressRow[])
             .map((row) => ({
               id: row.id,
               cadence: (row.cadence ?? "GLOBAL") as CampaignCadence,
               title: row.title ?? "Untitled Campaign",
-              description: row.description ?? "Array-wide observation objective.",
-              startAt: null,
+              description: row.description ?? "Campaign objective",
+              startAt: row.start_at ?? null,
               endAt: row.end_at ?? null,
               progress:
                 row.completion_pct != null
                   ? clamp(Number(row.completion_pct) / 100)
                   : clamp(Number(row.progress ?? 0)),
               participantCount: Number(row.participant_count ?? 0),
-              targetType: null,
-              tags: [],
+              targetType: row.target_type ?? null,
+              tags: row.tags ?? [],
+              accessTier: String(row.access_tier ?? "public"),
             }))
-            .sort((a, b) => cadenceSortValue(a.cadence) - cadenceSortValue(b.cadence));
+            .sort((a, b) => {
+              const cadenceDelta = cadenceSortValue(a.cadence) - cadenceSortValue(b.cadence);
+              if (cadenceDelta !== 0) return cadenceDelta;
+              return new Date(b.startAt ?? b.endAt ?? 0).getTime() - new Date(a.startAt ?? a.endAt ?? 0).getTime();
+            });
 
-          setCampaignCards(mapped);
-          return;
+          if (mapped.length > 0) {
+            setCampaignCards(mapped);
+            return;
+          }
         }
-      } catch (error) {
-        console.warn("Campaign RPC threw:", error);
-      }
+      } catch {}
     }
 
     try {
       const { data, error } = await supabase
         .from("campaigns")
-        .select(
-          "id,cadence,title,description,start_at,end_at,goal_user,goal_global,tags,is_active,target_type,access_tier"
-        )
+        .select("id,cadence,title,description,start_at,end_at,goal_user,goal_global,tags,is_active,target_type,access_tier")
         .eq("is_active", true)
-        .order("start_at", { ascending: false })
-        .limit(6);
+        .order("cadence", { ascending: true })
+        .order("start_at", { ascending: false });
 
       if (error) {
-        console.warn("Campaign table query failed:", error.message);
         setCampaignCards([]);
         setCampaignError("Campaign data is not available yet.");
         return;
@@ -506,19 +585,19 @@ export default function Home() {
           id: row.id,
           cadence: (row.cadence ?? "GLOBAL") as CampaignCadence,
           title: row.title ?? "Untitled Campaign",
-          description: row.description ?? "Array-wide observation objective.",
+          description: row.description ?? "Campaign objective",
           startAt: row.start_at ?? null,
           endAt: row.end_at ?? null,
           progress: 0,
           participantCount: 0,
           targetType: row.target_type ?? null,
           tags: row.tags ?? [],
+          accessTier: String(row.access_tier ?? "public"),
         }))
         .sort((a, b) => cadenceSortValue(a.cadence) - cadenceSortValue(b.cadence));
 
       setCampaignCards(rows);
-    } catch (error) {
-      console.warn("Campaign table query threw:", error);
+    } catch {
       setCampaignCards([]);
       setCampaignError("Campaign data is not available yet.");
     }
@@ -534,7 +613,6 @@ export default function Home() {
     if (city && country) return `${city}, ${country}`;
     if (city) return city;
     if (country) return country;
-
     return "Location not set";
   }, [profile]);
 
@@ -543,8 +621,20 @@ export default function Home() {
     [profile]
   );
 
-  const topCampaign = campaignCards[0] ?? null;
-  const secondaryCampaigns = campaignCards.slice(1, 5);
+  const publicCampaigns = useMemo(
+    () => campaignCards.filter((campaign) => campaign.cadence !== "RESEARCH"),
+    [campaignCards]
+  );
+
+  const researchCampaigns = useMemo(
+    () =>
+      campaignCards.filter(
+        (campaign) =>
+          campaign.cadence === "RESEARCH" ||
+          campaign.accessTier.toLowerCase() === "research_collective"
+      ),
+    [campaignCards]
+  );
 
   return (
     <div className="homePage">
@@ -562,7 +652,6 @@ export default function Home() {
           --home-amber:#ffcd57;
           --home-red:#ff6b7d;
         }
-
         .homePage{
           min-height:100vh;
           color:var(--home-text);
@@ -573,641 +662,82 @@ export default function Home() {
           padding: 26px 18px 110px;
           box-sizing: border-box;
         }
-
-        .homeContainer{
-          max-width: 1180px;
-          margin: 0 auto;
-          width: 100%;
-        }
-
-        .eyebrow{
-          font-size: 11px;
-          letter-spacing: .18em;
-          text-transform: uppercase;
-          color: var(--home-dim);
-        }
-
-        .hero{
-          display:grid;
-          grid-template-columns: minmax(0, 1.4fr) minmax(0, .9fr);
-          gap: 16px;
-          margin-bottom: 18px;
-        }
-
-        @media (max-width: 980px){
-          .hero{
-            grid-template-columns: 1fr;
-          }
-        }
-
-        .panel{
-          min-width: 0;
-          overflow: hidden;
-          border: 1px solid var(--home-stroke);
-          background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
-          border-radius: 24px;
-          box-shadow: 0 18px 50px rgba(0,0,0,.26);
-          backdrop-filter: blur(16px);
-        }
-
-        .heroMain{
-          padding: 24px;
-          position: relative;
-          overflow: hidden;
-        }
-
-        .heroMain:before{
-          content:"";
-          position:absolute;
-          inset:auto -120px -120px auto;
-          width: 280px;
-          height: 280px;
-          border-radius: 50%;
-          background: radial-gradient(circle, rgba(56,242,255,.12), transparent 68%);
-          pointer-events:none;
-        }
-
-        .heroTop{
-          display:flex;
-          justify-content:space-between;
-          gap:16px;
-          align-items:flex-start;
-          flex-wrap:wrap;
-          min-width: 0;
-        }
-
-        .brandWrap{
-          display:flex;
-          gap:14px;
-          align-items:flex-start;
-          min-width: 0;
-        }
-
-        .brandMark{
-          width: 48px;
-          height: 48px;
-          border-radius: 16px;
-          border: 1px solid rgba(255,255,255,.08);
-          background:
-            radial-gradient(circle at 28% 28%, rgba(56,242,255,.4), transparent 46%),
-            radial-gradient(circle at 72% 74%, rgba(157,124,255,.34), transparent 50%),
-            rgba(255,255,255,.03);
-          flex-shrink:0;
-        }
-
-        .heroTitle{
-          font-size: clamp(28px, 4vw, 42px);
-          line-height: 1.02;
-          font-weight: 900;
-          margin: 8px 0 8px;
-          letter-spacing: -.03em;
-          overflow-wrap: anywhere;
-        }
-
-        .heroText{
-          max-width: 640px;
-          color: var(--home-muted);
-          line-height: 1.55;
-          font-size: 14px;
-          overflow-wrap: anywhere;
-        }
-
-        .actionRow{
-          display:flex;
-          flex-wrap:wrap;
-          gap:10px;
-          margin-top: 18px;
-        }
-
-        .btn{
-          border: 1px solid var(--home-stroke);
-          color: var(--home-text);
-          background: rgba(255,255,255,.04);
-          border-radius: 14px;
-          padding: 12px 15px;
-          font-weight: 800;
-          cursor: pointer;
-          transition: transform .12s ease, border-color .12s ease, background .12s ease;
-          flex-shrink: 0;
-        }
-
-        .btn:hover{
-          transform: translateY(-1px);
-          border-color: rgba(255,255,255,.16);
-          background: rgba(255,255,255,.07);
-        }
-
-        .btn.primary{
-          background: linear-gradient(90deg, rgba(56,242,255,.16), rgba(157,124,255,.16));
-          border-color: rgba(56,242,255,.28);
-        }
-
-        .heroAside{
-          padding: 20px;
-          display:flex;
-          flex-direction:column;
-          gap: 14px;
-          min-width: 0;
-        }
-
-        .statusCard{
-          padding: 16px;
-          border-radius: 18px;
-          background: var(--home-panel-2);
-          border: 1px solid rgba(255,255,255,.06);
-          min-width: 0;
-        }
-
-        .statusValue{
-          margin-top: 8px;
-          font-size: 24px;
-          font-weight: 900;
-          overflow-wrap: anywhere;
-        }
-
-        .statusSub{
-          margin-top: 6px;
-          color: var(--home-muted);
-          font-size: 13px;
-          overflow-wrap: anywhere;
-        }
-
-        .chip{
-          display:inline-flex;
-          align-items:center;
-          justify-content:center;
-          min-height: 28px;
-          padding: 6px 10px;
-          border-radius: 999px;
-          font-size: 11px;
-          letter-spacing: .12em;
-          text-transform: uppercase;
-          border: 1px solid rgba(255,255,255,.08);
-          background: rgba(255,255,255,.04);
-          color: var(--home-text);
-          flex-shrink: 0;
-        }
-
-        .chip.cyan{
-          border-color: rgba(56,242,255,.28);
-          color: var(--home-cyan);
-        }
-
-        .chip.violet{
-          border-color: rgba(157,124,255,.26);
-          color: #c3b0ff;
-        }
-
-        .chip.amber{
-          border-color: rgba(255,205,87,.26);
-          color: var(--home-amber);
-        }
-
-        .chip.neutral{
-          color: var(--home-muted);
-        }
-
-        .statsGrid{
-          display:grid;
-          grid-template-columns: repeat(4, minmax(0, 1fr));
-          gap: 14px;
-          margin-bottom: 18px;
-        }
-
-        @media (max-width: 980px){
-          .statsGrid{
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-          }
-        }
-
-        @media (max-width: 600px){
-          .statsGrid{
-            grid-template-columns: 1fr;
-          }
-        }
-
-        .statCard{
-          padding: 18px;
-          border-radius: 22px;
-          border: 1px solid var(--home-stroke);
-          background: var(--home-panel);
-          min-width: 0;
-        }
-
-        .statValue{
-          margin-top: 10px;
-          font-size: 28px;
-          font-weight: 900;
-          letter-spacing: -.02em;
-          overflow-wrap: anywhere;
-        }
-
-        .statHint{
-          margin-top: 8px;
-          color: var(--home-muted);
-          font-size: 13px;
-          overflow-wrap: anywhere;
-        }
-
-        .mainGrid{
-          display:grid;
-          grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
-          gap: 16px;
-          margin-bottom: 16px;
-          align-items:start;
-        }
-
-        .mainGrid > *{
-          min-width: 0;
-        }
-
-        @media (max-width: 980px){
-          .mainGrid{
-            grid-template-columns: 1fr;
-          }
-        }
-
-        .section{
-          padding: 20px;
-          min-width: 0;
-        }
-
-        .sectionHeader{
-          display:flex;
-          align-items:flex-start;
-          justify-content:space-between;
-          gap: 12px;
-          margin-bottom: 16px;
-          min-width: 0;
-        }
-
-        @media (max-width: 640px){
-          .sectionHeader{
-            flex-direction: column;
-            align-items: stretch;
-          }
-
-          .sectionHeader .btn{
-            width: 100%;
-          }
-        }
-
-        .sectionTitle{
-          margin-top: 6px;
-          font-size: 24px;
-          line-height: 1.08;
-          font-weight: 900;
-          letter-spacing: -.02em;
-          overflow-wrap: anywhere;
-        }
-
-        .sectionText{
-          margin-top: 6px;
-          color: var(--home-muted);
-          line-height: 1.5;
-          font-size: 14px;
-          max-width: 620px;
-          overflow-wrap: anywhere;
-        }
-
-        .campaignSectionBody{
-          display:grid;
-          gap: 14px;
-          min-width: 0;
-        }
-
-        .campaignHero{
-          border-radius: 22px;
-          border: 1px solid rgba(56,242,255,.14);
-          background:
-            radial-gradient(circle at top right, rgba(56,242,255,.08), transparent 38%),
-            linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
-          padding: 18px;
-          min-width: 0;
-        }
-
-        .campaignHeroTop{
-          display:flex;
-          justify-content:space-between;
-          gap:12px;
-          align-items:flex-start;
-          flex-wrap:wrap;
-          min-width: 0;
-        }
-
-        .campaignName{
-          margin-top: 8px;
-          font-size: 26px;
-          font-weight: 900;
-          line-height: 1.05;
-          overflow-wrap: anywhere;
-        }
-
-        .campaignDesc{
-          margin-top: 10px;
-          color: var(--home-muted);
-          line-height: 1.55;
-          font-size: 14px;
-          max-width: 720px;
-          overflow-wrap: anywhere;
-        }
-
-        .metaGrid{
-          display:grid;
-          grid-template-columns: repeat(4, minmax(0, 1fr));
-          gap: 10px;
-          margin-top: 16px;
-        }
-
-        @media (max-width: 900px){
-          .metaGrid{
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-          }
-        }
-
-        @media (max-width: 560px){
-          .metaGrid{
-            grid-template-columns: 1fr;
-          }
-        }
-
-        .metaCard{
-          padding: 12px;
-          border-radius: 16px;
-          background: rgba(255,255,255,.03);
-          border: 1px solid rgba(255,255,255,.06);
-          min-width: 0;
-        }
-
-        .metaValue{
-          margin-top: 8px;
-          font-size: 16px;
-          font-weight: 800;
-          overflow-wrap: anywhere;
-        }
-
-        .progressBlock{
-          margin-top: 16px;
-          min-width: 0;
-        }
-
-        .progressTrack{
-          height: 12px;
-          border-radius: 999px;
-          overflow: hidden;
-          background: rgba(255,255,255,.06);
-          border: 1px solid rgba(255,255,255,.05);
-          width: 100%;
-          box-sizing: border-box;
-        }
-
-        .progressFill{
-          height: 100%;
-          border-radius: 999px;
-        }
-
-        .progressFill.cyan{
-          background: linear-gradient(90deg, var(--home-cyan), rgba(157,124,255,.95));
-        }
-
-        .progressFill.violet{
-          background: linear-gradient(90deg, rgba(157,124,255,.95), rgba(56,242,255,.85));
-        }
-
-        .progressFill.amber{
-          background: linear-gradient(90deg, rgba(255,205,87,.95), rgba(255,140,92,.85));
-        }
-
-        .progressMeta{
-          margin-top: 8px;
-          display:flex;
-          justify-content:space-between;
-          gap: 12px;
-          color: var(--home-muted);
-          font-size: 13px;
-          flex-wrap: wrap;
-          min-width: 0;
-        }
-
-        .campaignListCompact{
-          display:grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 12px;
-          max-height: 420px;
-          overflow:auto;
-          padding-right: 4px;
-          min-width: 0;
-        }
-
-        @media (max-width: 900px){
-          .campaignListCompact{
-            grid-template-columns: 1fr;
-            max-height:none;
-            overflow:visible;
-          }
-        }
-
-        .campaignCompact{
-          padding: 14px;
-          border-radius: 18px;
-          border: 1px solid rgba(255,255,255,.06);
-          background: rgba(255,255,255,.03);
-          display:grid;
-          gap: 10px;
-          min-width: 0;
-        }
-
-        .campaignCompactTop{
-          display:flex;
-          justify-content:space-between;
-          align-items:flex-start;
-          gap: 10px;
-          min-width: 0;
-        }
-
-        .campaignCompactTitle{
-          font-size: 16px;
-          font-weight: 800;
-          line-height: 1.2;
-          overflow-wrap: anywhere;
-        }
-
-        .campaignCompactDesc{
-          color: var(--home-muted);
-          font-size: 13px;
-          line-height: 1.45;
-          display: -webkit-box;
-          -webkit-line-clamp: 3;
-          -webkit-box-orient: vertical;
-          overflow: hidden;
-        }
-
-        .campaignCompactMeta{
-          display:flex;
-          justify-content:space-between;
-          gap: 10px;
-          color: var(--home-muted);
-          font-size: 12px;
-          flex-wrap: wrap;
-          min-width: 0;
-        }
-
-        .emptyState{
-          padding: 18px;
-          border-radius: 18px;
-          border: 1px dashed rgba(255,255,255,.12);
-          background: rgba(255,255,255,.02);
-          min-width: 0;
-        }
-
-        .emptyStateTitle{
-          font-size: 18px;
-          font-weight: 800;
-          overflow-wrap: anywhere;
-          word-break: break-word;
-        }
-
-        .emptyStateText{
-          margin-top: 8px;
-          color: var(--home-muted);
-          line-height: 1.5;
-          font-size: 14px;
-          overflow-wrap: anywhere;
-          word-break: break-word;
-        }
-
-        .sideStack{
-          display:grid;
-          gap: 16px;
-          min-width: 0;
-          width: 100%;
-        }
-
-        .obsList{
-          display:grid;
-          gap: 12px;
-          min-width: 0;
-        }
-
-        .obsCard{
-          padding: 14px;
-          border-radius: 16px;
-          border: 1px solid rgba(255,255,255,.06);
-          background: rgba(255,255,255,.03);
-          min-width: 0;
-        }
-
-        .obsTop{
-          display:flex;
-          justify-content:space-between;
-          gap: 10px;
-          align-items:flex-start;
-          flex-wrap: wrap;
-          min-width: 0;
-        }
-
-        .obsTitle{
-          margin-top: 8px;
-          font-size: 16px;
-          font-weight: 800;
-          overflow-wrap: anywhere;
-          word-break: break-word;
-        }
-
-        .obsMeta{
-          margin-top: 8px;
-          color: var(--home-muted);
-          font-size: 13px;
-          overflow-wrap: anywhere;
-          word-break: break-word;
-        }
-
-        .tagRow{
-          display:flex;
-          flex-wrap: wrap;
-          gap: 8px;
-          margin-top: 10px;
-        }
-
-        .telemetryGrid{
-          display:grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 12px;
-          min-width: 0;
-        }
-
-        @media (max-width: 560px){
-          .telemetryGrid{
-            grid-template-columns: 1fr;
-          }
-        }
-
-        .telemetryCard{
-          padding: 16px;
-          border-radius: 18px;
-          border: 1px solid var(--home-stroke);
-          background: var(--home-panel);
-          min-width: 0;
-          min-height: 148px;
-          display:flex;
-          flex-direction:column;
-          justify-content:flex-start;
-        }
-
-        .telemetryCard.compact{
-          min-height: 132px;
-        }
-
-        .telemetryValue{
-          margin-top: 10px;
-          font-size: clamp(18px, 2.2vw, 22px);
-          line-height: 1.08;
-          font-weight: 900;
-          overflow-wrap: anywhere;
-          word-break: break-word;
-        }
-
-        .telemetrySub{
-          margin-top: 8px;
-          font-size: 13px;
-          line-height: 1.4;
-          color: var(--home-muted);
-          overflow-wrap: anywhere;
-          word-break: break-word;
-        }
-
-        @media (max-width: 820px){
-          .telemetryCard{
-            min-height: 132px;
-            padding: 14px;
-          }
-
-          .telemetryValue{
-            font-size: clamp(16px, 4.6vw, 20px);
-          }
-
-          .telemetrySub{
-            font-size: 12px;
-          }
-        }
-
-        .footerAction{
-          margin-top: 16px;
-          display:flex;
-          gap:10px;
-          flex-wrap:wrap;
-        }
-
-        .loadingText{
-          color: var(--home-muted);
-          font-size: 14px;
-        }
-
-        .warning{
-          margin-top: 10px;
-          color: var(--home-red);
-          font-size: 13px;
-        }
+        .homeContainer{max-width: 1180px; margin: 0 auto; width: 100%;}
+        .eyebrow{font-size: 11px; letter-spacing: .18em; text-transform: uppercase; color: var(--home-dim);}
+        .hero{display:grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, .9fr); gap: 16px; margin-bottom: 18px;}
+        @media (max-width: 980px){ .hero{grid-template-columns: 1fr;} }
+        .panel{min-width: 0; overflow: hidden; border: 1px solid var(--home-stroke); background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02)); border-radius: 24px; box-shadow: 0 18px 50px rgba(0,0,0,.26); backdrop-filter: blur(16px);}
+        .heroMain{padding: 24px; position: relative; overflow: hidden;}
+        .heroMain:before{content:""; position:absolute; inset:auto -120px -120px auto; width: 280px; height: 280px; border-radius: 50%; background: radial-gradient(circle, rgba(56,242,255,.12), transparent 68%); pointer-events:none;}
+        .heroTop{display:flex; justify-content:space-between; gap:16px; align-items:flex-start; flex-wrap:wrap; min-width: 0;}
+        .brandWrap{display:flex; gap:14px; align-items:flex-start; min-width: 0;}
+        .brandMark{width: 48px; height: 48px; border-radius: 16px; border: 1px solid rgba(255,255,255,.08); background: radial-gradient(circle at 28% 28%, rgba(56,242,255,.4), transparent 46%), radial-gradient(circle at 72% 74%, rgba(157,124,255,.34), transparent 50%), rgba(255,255,255,.03); flex-shrink:0;}
+        .heroTitle{font-size: clamp(28px, 4vw, 42px); line-height: 1.02; font-weight: 900; margin: 8px 0 8px; letter-spacing: -.03em; overflow-wrap: anywhere;}
+        .heroText{max-width: 680px; color: var(--home-muted); line-height: 1.55; font-size: 14px; overflow-wrap: anywhere;}
+        .actionRow{display:flex; flex-wrap:wrap; gap:10px; margin-top: 18px;}
+        .btn{border: 1px solid var(--home-stroke); color: var(--home-text); background: rgba(255,255,255,.04); border-radius: 14px; padding: 12px 15px; font-weight: 800; cursor: pointer; transition: transform .12s ease, border-color .12s ease, background .12s ease; flex-shrink: 0;}
+        .btn:hover{transform: translateY(-1px); border-color: rgba(255,255,255,.16); background: rgba(255,255,255,.07);}
+        .btn.primary{background: linear-gradient(90deg, rgba(56,242,255,.16), rgba(157,124,255,.16)); border-color: rgba(56,242,255,.28);}
+        .heroAside{padding: 20px; display:flex; flex-direction:column; gap: 14px; min-width: 0;}
+        .statusCard{padding: 16px; border-radius: 18px; background: var(--home-panel-2); border: 1px solid rgba(255,255,255,.06); min-width: 0;}
+        .statusValue{margin-top: 8px; font-size: 24px; font-weight: 900; overflow-wrap: anywhere;}
+        .statusSub{margin-top: 6px; color: var(--home-muted); font-size: 13px; overflow-wrap: anywhere;}
+        .chip{display:inline-flex; align-items:center; justify-content:center; min-height: 28px; padding: 6px 10px; border-radius: 999px; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; border: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.04); color: var(--home-text); flex-shrink: 0;}
+        .chip.cyan{border-color: rgba(56,242,255,.28); color: var(--home-cyan);}
+        .chip.violet{border-color: rgba(157,124,255,.26); color: #c3b0ff;}
+        .chip.amber{border-color: rgba(255,205,87,.26); color: var(--home-amber);}
+        .chip.neutral{color: var(--home-muted);}
+        .statsGrid{display:grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 18px;}
+        @media (max-width: 980px){ .statsGrid{grid-template-columns: repeat(2, minmax(0, 1fr));} }
+        @media (max-width: 600px){ .statsGrid{grid-template-columns: 1fr;} }
+        .statCard{padding: 18px; border-radius: 22px; border: 1px solid var(--home-stroke); background: var(--home-panel); min-width: 0;}
+        .statValue{margin-top: 10px; font-size: 28px; font-weight: 900; letter-spacing: -.02em; overflow-wrap: anywhere;}
+        .statHint{margin-top: 8px; color: var(--home-muted); font-size: 13px; overflow-wrap: anywhere;}
+        .mainGrid{display:grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr); gap: 16px; margin-bottom: 16px; align-items:start;}
+        .mainGrid > *{min-width: 0;}
+        @media (max-width: 980px){ .mainGrid{grid-template-columns: 1fr;} }
+        .section{padding: 20px; min-width: 0;}
+        .sectionHeader{display:flex; align-items:flex-start; justify-content:space-between; gap: 12px; margin-bottom: 16px; min-width: 0;}
+        @media (max-width: 640px){ .sectionHeader{flex-direction: column; align-items: stretch;} .sectionHeader .btn{width: 100%;} }
+        .sectionTitle{margin-top: 6px; font-size: 24px; line-height: 1.08; font-weight: 900; letter-spacing: -.02em; overflow-wrap: anywhere;}
+        .sectionText{margin-top: 6px; color: var(--home-muted); line-height: 1.5; font-size: 14px; max-width: 720px; overflow-wrap: anywhere;}
+        .campaignSectionBody{display:grid; gap: 18px; min-width: 0;}
+        .campaignGroup{display:grid; gap:12px;}
+        .campaignListCompact{display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; min-width: 0;}
+        @media (max-width: 900px){ .campaignListCompact{grid-template-columns: 1fr;} }
+        .campaignCompact{padding: 16px; border-radius: 18px; border: 1px solid rgba(255,255,255,.06); background: rgba(255,255,255,.03); display:grid; gap: 10px; min-width: 0;}
+        .campaignCompactTop{display:flex; justify-content:space-between; align-items:flex-start; gap: 10px; min-width: 0;}
+        .campaignCompactTitle{font-size: 16px; font-weight: 800; line-height: 1.2; overflow-wrap: anywhere;}
+        .campaignCompactDesc{color: var(--home-muted); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere;}
+        .campaignCompactMeta{display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:10px; color: var(--home-muted); font-size: 12px;}
+        .metaLine{display:grid; gap:4px;}
+        .progressBlock{display:grid; gap:8px;}
+        .progressTrack{height: 12px; border-radius: 999px; overflow: hidden; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.05); width: 100%; box-sizing: border-box;}
+        .progressFill{height: 100%; border-radius: 999px;}
+        .progressFill.cyan{background: linear-gradient(90deg, var(--home-cyan), rgba(157,124,255,.95));}
+        .progressFill.violet{background: linear-gradient(90deg, rgba(157,124,255,.95), rgba(56,242,255,.85));}
+        .progressFill.amber{background: linear-gradient(90deg, rgba(255,205,87,.95), rgba(255,140,92,.85));}
+        .progressMeta{display:flex; justify-content:space-between; gap: 12px; color: var(--home-muted); font-size: 13px; flex-wrap: wrap; min-width: 0;}
+        .emptyState{padding: 18px; border-radius: 18px; border: 1px dashed rgba(255,255,255,.12); background: rgba(255,255,255,.02); min-width: 0;}
+        .emptyStateTitle{font-size: 18px; font-weight: 800; overflow-wrap: anywhere; word-break: break-word;}
+        .emptyStateText{margin-top: 8px; color: var(--home-muted); line-height: 1.5; font-size: 14px; overflow-wrap: anywhere; word-break: break-word;}
+        .sideStack{display:grid; gap: 16px; min-width: 0; width: 100%;}
+        .obsList{display:grid; gap: 12px; min-width: 0;}
+        .obsCard{padding: 14px; border-radius: 16px; border: 1px solid rgba(255,255,255,.06); background: rgba(255,255,255,.03); min-width: 0;}
+        .obsTop{display:flex; justify-content:space-between; gap: 10px; align-items:flex-start; flex-wrap: wrap; min-width: 0;}
+        .obsTitle{margin-top: 8px; font-size: 16px; font-weight: 800; overflow-wrap: anywhere; word-break: break-word;}
+        .obsMeta{margin-top: 8px; color: var(--home-muted); font-size: 13px; overflow-wrap: anywhere; word-break: break-word;}
+        .tagRow{display:flex; flex-wrap: wrap; gap: 8px; margin-top: 10px;}
+        .telemetryGrid{display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; min-width: 0;}
+        @media (max-width: 560px){ .telemetryGrid{grid-template-columns: 1fr;} }
+        .telemetryCard{padding: 16px; border-radius: 18px; border: 1px solid var(--home-stroke); background: var(--home-panel); min-width: 0; min-height: 148px; display:flex; flex-direction:column; justify-content:flex-start;}
+        .telemetryCard.compact{min-height: 132px;}
+        .telemetryValue{margin-top: 10px; font-size: clamp(18px, 2.2vw, 22px); line-height: 1.08; font-weight: 900; overflow-wrap: anywhere; word-break: break-word;}
+        .telemetrySub{margin-top: 8px; font-size: 13px; line-height: 1.4; color: var(--home-muted); overflow-wrap: anywhere; word-break: break-word;}
+        @media (max-width: 820px){ .telemetryCard{min-height: 132px; padding: 14px;} .telemetryValue{font-size: clamp(16px, 4.6vw, 20px);} .telemetrySub{font-size: 12px;} }
+        .footerAction{margin-top: 16px; display:flex; gap:10px; flex-wrap:wrap;}
+        .loadingText{color: var(--home-muted); font-size: 14px;}
+        .warning{margin-top: 10px; color: var(--home-red); font-size: 13px;}
       `}</style>
 
       <div className="homeContainer">
@@ -1218,11 +748,9 @@ export default function Home() {
                 <div className="brandMark" />
                 <div>
                   <div className="eyebrow">Helvarix Global Array</div>
-                  <div className="heroTitle">Personalized observation operations for every user.</div>
+                  <div className="heroTitle">Operational overview for the current observing cycle.</div>
                   <div className="heroText">
-                    Coordinate amateur astronomy efforts through active campaigns, recent submissions,
-                    and localized sector readiness. The campaign block stays visible here because it
-                    is part of the core workflow, not an optional feature.
+                    Review active campaigns, recent network submissions, and localized observing conditions from one page.
                   </div>
                 </div>
               </div>
@@ -1231,15 +759,9 @@ export default function Home() {
             </div>
 
             <div className="actionRow">
-              <button className="btn primary" onClick={() => navigate("/submit")}>
-                Submit Observation
-              </button>
-              <button className="btn" onClick={() => navigate("/collective")}>
-                Campaign Hub
-              </button>
-              <button className="btn" onClick={() => navigate("/array")}>
-                Open Array
-              </button>
+              <button className="btn primary" onClick={() => navigate("/submit")}>Submit Observation</button>
+              <button className="btn" onClick={() => navigate("/collective")}>Open Collective</button>
+              <button className="btn" onClick={() => navigate("/array")}>Open Array</button>
             </div>
           </div>
 
@@ -1251,42 +773,24 @@ export default function Home() {
             </div>
 
             <div className="statusCard">
-              <div className="eyebrow">Sector</div>
+              <div className="eyebrow">Location</div>
               <div className="statusValue">{profileLocation}</div>
               <div className="statusSub">{sectorCoords}</div>
             </div>
 
             <div className="statusCard">
-              <div className="eyebrow">Network Status</div>
-              <div className="statusValue">{loading ? "Syncing…" : "Operational"}</div>
-              <div className="statusSub">
-                Campaigns, submissions, and telemetry surface here first.
-              </div>
+              <div className="eyebrow">Network status</div>
+              <div className="statusValue">{loading ? "Syncing" : "Operational"}</div>
+              <div className="statusSub">Campaigns, feed activity, and observing conditions are loaded from live data.</div>
             </div>
           </div>
         </section>
 
         <section className="statsGrid">
-          <StatCard
-            label="Observation Index"
-            value={String(profile?.observation_index ?? observationCount ?? 0)}
-            hint="Your current personal submission count."
-          />
-          <StatCard
-            label="Campaign Impact"
-            value={String(profile?.campaign_impact ?? 0)}
-            hint="Campaign-weighted contribution across the array."
-          />
-          <StatCard
-            label="Active Streak"
-            value={`${profile?.streak_days ?? 0}d`}
-            hint="Consecutive days with submitted activity."
-          />
-          <StatCard
-            label="Network Feed"
-            value={`${recentObservations.length}`}
-            hint="Most recent observations surfaced on this page."
-          />
+          <StatCard label="Observation Index" value={String(profile?.observation_index ?? observationCount ?? 0)} hint="Current score from recorded observation work." />
+          <StatCard label="Campaign Impact" value={String(profile?.campaign_impact ?? 0)} hint="Campaign-weighted contribution across active objectives." />
+          <StatCard label="Active Streak" value={`${profile?.streak_days ?? 0}d`} hint="Consecutive days with recorded submission activity." />
+          <StatCard label="Recent Feed Items" value={`${recentObservations.length}`} hint="Latest observations surfaced from the network feed." />
         </section>
 
         <section className="mainGrid">
@@ -1294,107 +798,108 @@ export default function Home() {
             <div className="sectionHeader">
               <div>
                 <div className="eyebrow">Campaigns</div>
-                <div className="sectionTitle">Active array objective stays visible.</div>
+                <div className="sectionTitle">All active campaigns</div>
                 <div className="sectionText">
-                  This section is intentionally prominent on the home page. It shows the lead
-                  campaign first, then any additional active campaigns below it.
+                  Public objectives and Research Collective assignments are listed below without reducing the page to a single featured card.
                 </div>
               </div>
-              <button className="btn" onClick={() => navigate("/collective")}>
-                Open Collective
-              </button>
+              <button className="btn" onClick={() => navigate("/collective")}>Open Collective</button>
             </div>
 
             <div className="campaignSectionBody">
-              {topCampaign ? (
-                <div className="campaignHero">
-                  <div className="campaignHeroTop">
-                    <div>
-                      <Chip tone={cadenceTone(topCampaign.cadence)}>{topCampaign.cadence}</Chip>
-                      <div className="campaignName">{topCampaign.title}</div>
-                      <div className="campaignDesc">{topCampaign.description}</div>
-                    </div>
-
-                    <Chip tone={cadenceTone(topCampaign.cadence)}>{formatEndsIn(topCampaign.endAt)}</Chip>
-                  </div>
-
-                  <div className="metaGrid">
-                    <div className="metaCard">
-                      <div className="eyebrow">Window</div>
-                      <div className="metaValue">{formatDateRange(topCampaign.startAt, topCampaign.endAt)}</div>
-                    </div>
-                    <div className="metaCard">
-                      <div className="eyebrow">Target</div>
-                      <div className="metaValue">{topCampaign.targetType ?? "General observation"}</div>
-                    </div>
-                    <div className="metaCard">
-                      <div className="eyebrow">Participants</div>
-                      <div className="metaValue">{topCampaign.participantCount}</div>
-                    </div>
-                    <div className="metaCard">
-                      <div className="eyebrow">Progress</div>
-                      <div className="metaValue">{Math.round(topCampaign.progress * 100)}%</div>
-                    </div>
-                  </div>
-
-                  <div className="progressBlock">
-                    <Progress value={topCampaign.progress} tone={cadenceTone(topCampaign.cadence)} />
-                    <div className="progressMeta">
-                      <span>
-                        {topCampaign.tags.length > 0
-                          ? topCampaign.tags.join(" • ")
-                          : "Array-wide mission objective"}
-                      </span>
-                      <span>{Math.round(topCampaign.progress * 100)}% complete</span>
-                    </div>
-                  </div>
-
-                  <div className="footerAction">
-                    <button className="btn primary" onClick={() => navigate("/submit")}>
-                      Submit to Campaign
-                    </button>
-                    <button className="btn" onClick={() => navigate("/collective")}>
-                      Campaign Details
-                    </button>
-                  </div>
-                </div>
-              ) : (
+              {campaignCards.length === 0 ? (
                 <div className="emptyState">
-                  <div className="emptyStateTitle">No active campaign right now</div>
-                  <div className="emptyStateText">
-                    The campaign block remains here even when there is no current objective. That
-                    keeps the home page stable and avoids the section disappearing.
-                  </div>
-                  <div className="footerAction">
-                    <button className="btn" onClick={() => navigate("/collective")}>
-                      Open Campaign Hub
-                    </button>
-                  </div>
+                  <div className="emptyStateTitle">No active campaigns</div>
+                  <div className="emptyStateText">Active campaigns will appear here as soon as they are available.</div>
                   {campaignError ? <div className="warning">{campaignError}</div> : null}
                 </div>
+              ) : (
+                <>
+                  <div className="campaignGroup">
+                    <div className="eyebrow">Public Layer</div>
+                    {publicCampaigns.length > 0 ? (
+                      <div className="campaignListCompact">
+                        {publicCampaigns.map((campaign) => (
+                          <div className="campaignCompact" key={campaign.id}>
+                            <div className="campaignCompactTop">
+                              <div className="campaignCompactTitle">{campaign.title}</div>
+                              <Chip tone={cadenceTone(campaign.cadence)}>{campaign.cadence}</Chip>
+                            </div>
+                            <div className="campaignCompactDesc">{campaign.description}</div>
+                            <div className="campaignCompactMeta">
+                              <div className="metaLine">
+                                <span>Window</span>
+                                <strong>{formatDateRange(campaign.startAt, campaign.endAt)}</strong>
+                              </div>
+                              <div className="metaLine">
+                                <span>Ends</span>
+                                <strong>{formatEndsIn(campaign.endAt)}</strong>
+                              </div>
+                              <div className="metaLine">
+                                <span>Target</span>
+                                <strong>{campaign.targetType ?? "General"}</strong>
+                              </div>
+                              <div className="metaLine">
+                                <span>Participants</span>
+                                <strong>{campaign.participantCount}</strong>
+                              </div>
+                            </div>
+                            <div className="progressBlock">
+                              <Progress value={campaign.progress} tone={cadenceTone(campaign.cadence)} />
+                              <div className="progressMeta">
+                                <span>{campaign.tags.length > 0 ? campaign.tags.join(" • ") : "Active public objective"}</span>
+                                <span>{Math.round(campaign.progress * 100)}%</span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : <div className="emptyStateText">No active public campaigns.</div>}
+                  </div>
+
+                  <div className="campaignGroup">
+                    <div className="eyebrow">Research Collective</div>
+                    {researchCampaigns.length > 0 ? (
+                      <div className="campaignListCompact">
+                        {researchCampaigns.map((campaign) => (
+                          <div className="campaignCompact" key={campaign.id}>
+                            <div className="campaignCompactTop">
+                              <div className="campaignCompactTitle">{campaign.title}</div>
+                              <Chip tone="amber">RESEARCH</Chip>
+                            </div>
+                            <div className="campaignCompactDesc">{campaign.description}</div>
+                            <div className="campaignCompactMeta">
+                              <div className="metaLine">
+                                <span>Window</span>
+                                <strong>{formatDateRange(campaign.startAt, campaign.endAt)}</strong>
+                              </div>
+                              <div className="metaLine">
+                                <span>Ends</span>
+                                <strong>{formatEndsIn(campaign.endAt)}</strong>
+                              </div>
+                              <div className="metaLine">
+                                <span>Target</span>
+                                <strong>{campaign.targetType ?? "Research"}</strong>
+                              </div>
+                              <div className="metaLine">
+                                <span>Participants</span>
+                                <strong>{campaign.participantCount}</strong>
+                              </div>
+                            </div>
+                            <div className="progressBlock">
+                              <Progress value={campaign.progress} tone="amber" />
+                              <div className="progressMeta">
+                                <span>{campaign.tags.length > 0 ? campaign.tags.join(" • ") : "Research assignment"}</span>
+                                <span>{Math.round(campaign.progress * 100)}%</span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : <div className="emptyStateText">No active Research Collective campaigns.</div>}
+                  </div>
+                </>
               )}
-
-              {secondaryCampaigns.length > 0 ? (
-                <div className="campaignListCompact">
-                  {secondaryCampaigns.map((campaign) => (
-                    <div className="campaignCompact" key={campaign.id}>
-                      <div className="campaignCompactTop">
-                        <div className="campaignCompactTitle">{campaign.title}</div>
-                        <Chip tone={cadenceTone(campaign.cadence)}>{campaign.cadence}</Chip>
-                      </div>
-
-                      <div className="campaignCompactDesc">{campaign.description}</div>
-
-                      <Progress value={campaign.progress} tone={cadenceTone(campaign.cadence)} />
-
-                      <div className="campaignCompactMeta">
-                        <span>{formatDateRange(campaign.startAt, campaign.endAt)}</span>
-                        <span>{Math.round(campaign.progress * 100)}%</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
             </div>
           </div>
 
@@ -1405,9 +910,7 @@ export default function Home() {
                   <div className="eyebrow">Recent Observations</div>
                   <div className="sectionTitle">Latest network activity</div>
                 </div>
-                <button className="btn" onClick={() => navigate("/submit")}>
-                  Add New
-                </button>
+                <button className="btn" onClick={() => navigate("/telemetry")}>Open Feed</button>
               </div>
 
               {loading ? (
@@ -1418,9 +921,7 @@ export default function Home() {
                     <div className="obsCard" key={observation.id}>
                       <div className="obsTop">
                         <Chip tone="cyan">{(observation.mode ?? "Unknown").toUpperCase()}</Chip>
-                        <div className="eyebrow">
-                          {new Date(observation.created_at).toLocaleString()}
-                        </div>
+                        <div className="eyebrow">{new Date(observation.created_at).toLocaleString()}</div>
                       </div>
                       <div className="obsTitle">{observation.target ?? "Unspecified Target"}</div>
                       <div className="obsMeta">
@@ -1428,9 +929,7 @@ export default function Home() {
                       </div>
                       {(observation.tags ?? []).length > 0 ? (
                         <div className="tagRow">
-                          {(observation.tags ?? []).slice(0, 4).map((tag) => (
-                            <Chip key={tag}>{tag}</Chip>
-                          ))}
+                          {(observation.tags ?? []).slice(0, 4).map((tag) => <Chip key={tag}>{tag}</Chip>)}
                         </div>
                       ) : null}
                     </div>
@@ -1439,9 +938,7 @@ export default function Home() {
               ) : (
                 <div className="emptyState">
                   <div className="emptyStateTitle">No recent observations</div>
-                  <div className="emptyStateText">
-                    Once observations are submitted, they will appear here for quick visibility.
-                  </div>
+                  <div className="emptyStateText">Once observations are submitted, they will appear here.</div>
                 </div>
               )}
             </div>
@@ -1449,64 +946,26 @@ export default function Home() {
             <div className="panel section">
               <div className="sectionHeader">
                 <div>
-                  <div className="eyebrow">Sector Readiness</div>
-                  <div className="sectionTitle">Localized sky conditions</div>
+                  <div className="eyebrow">Localized Conditions</div>
+                  <div className="sectionTitle">Current sky conditions</div>
+                  <div className="sectionText">Weather and astronomy data are calculated from your saved profile location.</div>
                 </div>
-                <button className="btn" onClick={() => navigate("/telemetry")}>
-                  Open Telemetry
-                </button>
+                <button className="btn" onClick={() => navigate("/profile")}>Update Profile</button>
               </div>
 
+              {telemetryError ? <div className="warning">{telemetryError}</div> : null}
+
               <div className="telemetryGrid">
-                <TelemetryCard
-                  label="Sky State"
-                  value={telemetry?.skyState ?? "UNKNOWN"}
-                  hint="Based on profile latitude and longitude"
-                />
-
-                <TelemetryCard
-                  label="Sun Altitude"
-                  value={telemetry ? `${telemetry.sunAltitude.toFixed(1)}°` : "—"}
-                  hint="Lower values favor night collection"
-                />
-
-                <TelemetryCard
-                  label="Photon Flux Stability"
-                  value={telemetry ? `${telemetry.photonFluxStabilityPct}%` : "—"}
-                  hint="Estimated readiness window"
-                />
-
-                <TelemetryCard
-                  label="Geomagnetic Index"
-                  value={telemetry?.kpLabel ?? "UNKNOWN"}
-                  hint={telemetry?.kp != null ? `Kp ${telemetry.kp}` : "No index available"}
-                />
-
-                <TelemetryCard
-                  label="Collection Start"
-                  value={telemetry?.optimalCollectionStartLocal ?? "Pending"}
-                  hint="Suggested start for useful observation"
-                  compact
-                />
-
-                <TelemetryCard
-                  label="Night Remaining"
-                  value={telemetry?.nightRemaining ?? "Unavailable"}
-                  hint="Simple planning estimate"
-                  compact
-                />
-
-                <TelemetryCard
-                  label="Local Time"
-                  value={telemetry?.localTime ?? "—"}
-                  hint="Computed on page load"
-                />
-
-                <TelemetryCard
-                  label="Sector Coordinates"
-                  value={sectorCoords}
-                  hint="Update in profile to localize this section"
-                />
+                <TelemetryCard label="Sky State" value={telemetryLoading ? "Loading…" : telemetry?.skyState ?? "UNKNOWN"} hint="Computed from current solar altitude." />
+                <TelemetryCard label="Weather" value={telemetryLoading ? "Loading…" : telemetry?.weatherSummary ?? "Unavailable"} hint={telemetry?.temperatureC != null ? `${telemetry.temperatureC.toFixed(1)}°C` : "Temperature unavailable"} />
+                <TelemetryCard label="Cloud Cover" value={telemetryLoading ? "Loading…" : telemetry?.cloudCover != null ? `${Math.round(telemetry.cloudCover)}%` : "—"} hint="Current cloud cover from forecast data." />
+                <TelemetryCard label="Visibility" value={telemetryLoading ? "Loading…" : telemetry?.visibilityKm != null ? `${telemetry.visibilityKm.toFixed(1)} km` : "—"} hint="Hourly visibility estimate for your location." />
+                <TelemetryCard label="Wind" value={telemetryLoading ? "Loading…" : telemetry?.windKph != null ? `${telemetry.windKph.toFixed(1)} kph` : "—"} hint={telemetry?.humidityPct != null ? `Humidity ${Math.round(telemetry.humidityPct)}%` : "Humidity unavailable"} compact />
+                <TelemetryCard label="Precipitation" value={telemetryLoading ? "Loading…" : telemetry?.precipitationProbability != null ? `${Math.round(telemetry.precipitationProbability)}%` : "—"} hint="Hourly precipitation probability." compact />
+                <TelemetryCard label="Sun Window" value={telemetryLoading ? "Loading…" : `${formatClock(telemetry?.sunsetLocal ?? null)} / ${formatClock(telemetry?.sunriseLocal ?? null)}`} hint="Sunset / sunrise at your saved location." />
+                <TelemetryCard label="Moon" value={telemetryLoading ? "Loading…" : telemetry ? `${telemetry.moonPhase} · ${telemetry.moonIlluminationPct}%` : "—"} hint={telemetry?.nightRemaining ? `Night remaining ${telemetry.nightRemaining}` : "Night remaining unavailable"} />
+                <TelemetryCard label="Local Time" value={telemetryLoading ? "Loading…" : telemetry?.localTime ?? "—"} hint="Current local timestamp on page load." />
+                <TelemetryCard label="Sector Coordinates" value={sectorCoords} hint="Update city/country in your profile to localize this section." />
               </div>
             </div>
           </div>
