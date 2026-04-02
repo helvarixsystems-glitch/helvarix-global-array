@@ -301,7 +301,17 @@ function isBadCampaignTitle(title: string | null | undefined) {
 }
 
 function normalizeCampaign(row: CampaignRow): CollectiveCampaign {
-  const cadence = (row.cadence ?? "GLOBAL") as CampaignCadence;
+  const cadenceRaw = String(row.cadence ?? "GLOBAL").trim().toUpperCase();
+
+  const cadence: CampaignCadence =
+    cadenceRaw === "DAILY"
+      ? "DAILY"
+      : cadenceRaw === "WEEKLY"
+      ? "WEEKLY"
+      : cadenceRaw === "GLOBAL"
+      ? "GLOBAL"
+      : "GLOBAL";
+
   const fallbackTitle =
     cadence === "DAILY"
       ? "Daily Campaign"
@@ -366,18 +376,14 @@ function scoreCampaign(campaign: CollectiveCampaign) {
 }
 
 function pickBestCampaignPerCadence(campaigns: CollectiveCampaign[]) {
-  const best = new Map<string, CollectiveCampaign>();
+  const cadences: CampaignCadence[] = ["DAILY", "WEEKLY", "GLOBAL"];
 
-  for (const campaign of campaigns) {
-    const key = campaign.cadence;
-    const current = best.get(key);
-    if (!current || scoreCampaign(campaign) > scoreCampaign(current)) {
-      best.set(key, campaign);
-    }
-  }
-
-  return ["DAILY", "WEEKLY", "GLOBAL"]
-    .map((cadence) => best.get(cadence))
+  return cadences
+    .map((cadence) =>
+      campaigns
+        .filter((campaign) => campaign.cadence === cadence)
+        .sort((a, b) => scoreCampaign(b) - scoreCampaign(a))[0]
+    )
     .filter(Boolean) as CollectiveCampaign[];
 }
 function getCampaignTargetLabel(campaign: CollectiveCampaign) {
@@ -1162,9 +1168,9 @@ export default function Collective() {
 
   const publicCampaigns = useMemo(() => {
     const publicPool = campaigns.filter((campaign) => {
-      const className = campaign.campaignClass.toLowerCase();
-      const tier = campaign.accessTier.toLowerCase();
-      return className !== "research_collective" && tier !== "research_collective";
+      const className = String(campaign.campaignClass ?? "").trim().toLowerCase();
+      const tier = String(campaign.accessTier ?? "").trim().toLowerCase();
+      return className !== "research_collective" && tier !== "research_collective" && campaign.isActive;
     });
 
     return pickBestCampaignPerCadence(publicPool);
@@ -1509,8 +1515,7 @@ export default function Collective() {
             <div className="sectionKicker">PUBLIC ARRAY LAYER</div>
             <h2 className="sectionTitle">Daily, weekly, and global campaigns</h2>
             <p className="sectionHint">
-              Only one campaign of each public cadence is shown here. If extra rows still exist in the database,
-              this page promotes the strongest live entry and suppresses the rest.
+              This layer always shows one shared daily objective, one shared weekly objective, and one shared global objective.
             </p>
           </div>
           <span className="statusBadge">{campaignLoading ? "Syncing…" : `${publicCampaigns.length} visible`}</span>
@@ -1547,9 +1552,10 @@ export default function Collective() {
 
                   <div className="campaignStatRow">
                     <div className="campaignStat"><div className="campaignStatLabel">Window</div><div className="campaignStatValue">{formatDateRange(campaign.startAt, campaign.endAt)}</div></div>
+                    <div className="campaignStat"><div className="campaignStatLabel">Target</div><div className="campaignStatValue">{campaign.targetName ?? "Open target"}</div></div>
                     <div className="campaignStat"><div className="campaignStatLabel">Target type</div><div className="campaignStatValue">{campaign.targetType ?? "General"}</div></div>
                     <div className="campaignStat"><div className="campaignStatLabel">Cadence</div><div className="campaignStatValue">{campaign.cadence}</div></div>
-                    <div className="campaignStat"><div className="campaignStatLabel">Availability</div><div className="campaignStatValue">Open access</div></div>
+                    <div className="campaignStat"><div className="campaignStatLabel">Availability</div><div className="campaignStatValue">{campaign.cadence === "GLOBAL" ? "Community objective" : "Open access"}</div></div>
                   </div>
 
                   {campaign.tags.length > 0 ? (
