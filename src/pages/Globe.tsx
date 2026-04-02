@@ -1,3 +1,4 @@
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 
@@ -128,7 +129,7 @@ function addLatLonGrid(THREE: any, parent: any, radius: number) {
   const gridMaterial = new THREE.LineBasicMaterial({
     color: 0x8fdcff,
     transparent: true,
-    opacity: 0.16,
+    opacity: 0.14,
     depthWrite: false,
   });
 
@@ -342,7 +343,7 @@ export default function Globe() {
         container.innerHTML = "";
 
         scene = new THREE.Scene();
-        scene.fog = new THREE.FogExp2(0x020814, 0.015);
+        scene.fog = new THREE.FogExp2(0x020814, 0.013);
 
         const width = container.clientWidth || 1000;
         const height = container.clientHeight || 520;
@@ -375,49 +376,78 @@ export default function Globe() {
         controls.maxDistance = 17;
         controls.target.set(0, 0, 0);
 
-        const ambient = new THREE.AmbientLight(0xbfe7ff, 0.5);
+        const ambient = new THREE.AmbientLight(0xbfe7ff, 0.54);
         scene.add(ambient);
 
-        const hemisphere = new THREE.HemisphereLight(0xa8e2ff, 0x04101c, 1.05);
+        const hemisphere = new THREE.HemisphereLight(0xa8e2ff, 0x04101c, 1.1);
         scene.add(hemisphere);
 
         const keyLight = new THREE.DirectionalLight(0xffffff, 1.35);
         keyLight.position.set(8, 4, 10);
         scene.add(keyLight);
 
-        const fillLight = new THREE.DirectionalLight(0x5ab8ff, 0.45);
+        const fillLight = new THREE.DirectionalLight(0x5ab8ff, 0.48);
         fillLight.position.set(-9, -2, -7);
         scene.add(fillLight);
 
-        const rimLight = new THREE.DirectionalLight(0x7cecff, 0.7);
+        const rimLight = new THREE.DirectionalLight(0x7cecff, 0.72);
         rimLight.position.set(-8, 1, 6);
         scene.add(rimLight);
 
         const starsGeometry = new THREE.BufferGeometry();
         const stars: number[] = [];
-
-        for (let i = 0; i < 420; i += 1) {
-          const range = 70;
+        for (let i = 0; i < 950; i += 1) {
+          const range = 78;
           stars.push(
             (Math.random() - 0.5) * range,
             (Math.random() - 0.5) * range,
             (Math.random() - 0.5) * range
           );
         }
-
         starsGeometry.setAttribute("position", new THREE.Float32BufferAttribute(stars, 3));
-
         const starField = new THREE.Points(
           starsGeometry,
           new THREE.PointsMaterial({
-            color: 0xaedfff,
-            size: 0.05,
+            color: 0xcfe8ff,
+            size: 0.048,
             transparent: true,
-            opacity: 0.78,
+            opacity: 0.82,
             depthWrite: false,
           })
         );
         scene.add(starField);
+
+        const milkyWayGeometry = new THREE.BufferGeometry();
+        const milkyWayPoints: number[] = [];
+        for (let i = 0; i < 2400; i += 1) {
+          const angle = (Math.random() - 0.5) * Math.PI * 1.45;
+          const radiusBand = 22 + (Math.random() - 0.5) * 10;
+          const thickness = (Math.random() - 0.5) * 3.2;
+          const spread = (Math.random() - 0.5) * 1.2;
+
+          const x = Math.cos(angle) * radiusBand;
+          const z = Math.sin(angle) * radiusBand;
+          const y = thickness;
+
+          milkyWayPoints.push(x, y + spread, z);
+        }
+        milkyWayGeometry.setAttribute(
+          "position",
+          new THREE.Float32BufferAttribute(milkyWayPoints, 3)
+        );
+        const milkyWayBand = new THREE.Points(
+          milkyWayGeometry,
+          new THREE.PointsMaterial({
+            color: 0xbfd8ff,
+            size: 0.065,
+            transparent: true,
+            opacity: 0.2,
+            depthWrite: false,
+          })
+        );
+        milkyWayBand.rotation.z = -0.42;
+        milkyWayBand.rotation.x = 0.26;
+        scene.add(milkyWayBand);
 
         const globeGroup = new THREE.Group();
         scene.add(globeGroup);
@@ -508,7 +538,7 @@ export default function Globe() {
         const idleNodeMaterial = new THREE.MeshBasicMaterial({
           color: 0x57d9ff,
           transparent: true,
-          opacity: 0.98,
+          opacity: 0.96,
           depthTest: false,
           depthWrite: false,
         });
@@ -516,15 +546,7 @@ export default function Globe() {
         const activeNodeMaterial = new THREE.MeshBasicMaterial({
           color: 0x8f6cff,
           transparent: true,
-          opacity: 1,
-          depthTest: false,
-          depthWrite: false,
-        });
-
-        const currentNodeMaterial = new THREE.MeshBasicMaterial({
-          color: 0xffffff,
-          transparent: true,
-          opacity: 1,
+          opacity: 0.98,
           depthTest: false,
           depthWrite: false,
         });
@@ -532,7 +554,7 @@ export default function Globe() {
         const idleGlowMaterial = new THREE.MeshBasicMaterial({
           color: 0x57d9ff,
           transparent: true,
-          opacity: 0.16,
+          opacity: 0.14,
           depthTest: false,
           depthWrite: false,
         });
@@ -540,67 +562,33 @@ export default function Globe() {
         const activeGlowMaterial = new THREE.MeshBasicMaterial({
           color: 0x8f6cff,
           transparent: true,
-          opacity: 0.28,
+          opacity: 0.22,
           depthTest: false,
           depthWrite: false,
         });
 
-        const currentGlowMaterial = new THREE.MeshBasicMaterial({
-          color: 0x9deeff,
-          transparent: true,
-          opacity: 0.28,
-          depthTest: false,
-          depthWrite: false,
-        });
-
-        const nodeGeometry = new THREE.SphereGeometry(0.042, 12, 12);
-        const nodeGlowGeometry = new THREE.SphereGeometry(0.1, 12, 12);
+        const nodeGeometry = new THREE.SphereGeometry(0.019, 10, 10);
+        const nodeGlowGeometry = new THREE.SphereGeometry(0.046, 10, 10);
 
         nodes.forEach((node) => {
           const pos = latLonToVector3(THREE, node.lat, node.lon, radius * 1.014);
 
           const glow = new THREE.Mesh(
             nodeGlowGeometry,
-            node.isCurrentUser
-              ? currentGlowMaterial
-              : node.active
-              ? activeGlowMaterial
-              : idleGlowMaterial
+            node.active ? activeGlowMaterial : idleGlowMaterial
           );
           glow.position.copy(pos);
           glow.renderOrder = 10;
 
           const marker = new THREE.Mesh(
             nodeGeometry,
-            node.isCurrentUser
-              ? currentNodeMaterial
-              : node.active
-              ? activeNodeMaterial
-              : idleNodeMaterial
+            node.active ? activeNodeMaterial : idleNodeMaterial
           );
           marker.position.copy(pos);
           marker.renderOrder = 11;
 
           nodeGroup.add(glow);
           nodeGroup.add(marker);
-
-          if (node.isCurrentUser) {
-            const ringGeo = new THREE.RingGeometry(0.082, 0.112, 40);
-            const ringMat = new THREE.MeshBasicMaterial({
-              color: 0x9deeff,
-              transparent: true,
-              opacity: 0.78,
-              side: THREE.DoubleSide,
-              depthTest: false,
-              depthWrite: false,
-            });
-
-            const ring = new THREE.Mesh(ringGeo, ringMat);
-            ring.position.copy(pos.clone().multiplyScalar(1.002));
-            ring.lookAt(pos.clone().multiplyScalar(2));
-            ring.renderOrder = 12;
-            nodeGroup.add(ring);
-          }
         });
 
         if (focusNode) {
@@ -620,6 +608,7 @@ export default function Globe() {
           controls.update();
           cloudMesh.rotation.y += 0.00018;
           starField.rotation.y += 0.00008;
+          milkyWayBand.rotation.y -= 0.00004;
           renderer.render(scene, camera);
         };
 
@@ -746,10 +735,10 @@ export default function Globe() {
         note: "Unique countries represented by the nodes currently shown.",
       },
       {
-        label: "Current user node",
-        value: loadingNodes ? "…" : currentNode ? "Visible" : "Missing",
+        label: "Node focus",
+        value: loadingNodes ? "…" : currentNode ? "Centered" : "Missing",
         note: currentNode
-          ? "Your node is ringed in white and the globe opens centered on it."
+          ? "The globe still opens centered on your node, but nodes now use only cyan or purple state coloring."
           : "No renderable location found for your account yet.",
       },
     ];
@@ -765,14 +754,16 @@ export default function Globe() {
           position:relative;
           overflow:hidden;
           background:
-            radial-gradient(circle at 50% 24%, rgba(45,137,255,.15), transparent 18%),
-            radial-gradient(circle at 50% 120%, rgba(118,64,255,.12), transparent 34%),
-            linear-gradient(180deg, rgba(2,10,24,.98), rgba(1,7,18,1));
+            radial-gradient(circle at 18% 14%, rgba(120, 88, 255, .16), transparent 18%),
+            radial-gradient(circle at 78% 18%, rgba(112, 178, 255, .18), transparent 20%),
+            radial-gradient(ellipse at 50% 44%, rgba(198, 222, 255, .10), transparent 18%),
+            radial-gradient(ellipse at 56% 52%, rgba(112, 92, 255, .10), transparent 24%),
+            linear-gradient(180deg, rgba(1,8,22,.98), rgba(1,6,18,1));
           border:1px solid rgba(95,177,255,.16);
           box-shadow:
             inset 0 0 0 1px rgba(255,255,255,.02),
-            inset 0 0 160px rgba(56,118,255,.06),
-            0 30px 80px rgba(0,0,0,.36);
+            inset 0 0 180px rgba(77,92,255,.05),
+            0 30px 80px rgba(0,0,0,.38);
         }
 
         .arrayGlobeInner{
@@ -781,7 +772,10 @@ export default function Globe() {
           border-radius:26px;
           overflow:hidden;
           background:
-            radial-gradient(circle at 50% 38%, rgba(40,100,255,.10), transparent 22%),
+            radial-gradient(ellipse at 38% 24%, rgba(255,255,255,.06), transparent 16%),
+            radial-gradient(ellipse at 50% 44%, rgba(145, 159, 255, .09), transparent 18%),
+            radial-gradient(ellipse at 60% 50%, rgba(179, 214, 255, .07), transparent 16%),
+            radial-gradient(circle at 22% 18%, rgba(92,214,255,.08), transparent 20%),
             linear-gradient(180deg, rgba(0,7,20,.98), rgba(0,5,16,1));
           border:1px solid rgba(95,177,255,.10);
         }
@@ -843,11 +837,6 @@ export default function Globe() {
         .arrayLegendDot.purple{
           color:#8f6cff;
           background:#8f6cff;
-        }
-
-        .arrayLegendDot.white{
-          color:#ffffff;
-          background:#ffffff;
         }
 
         .arrayGlobeFooter{
@@ -962,9 +951,8 @@ export default function Globe() {
         <div className="eyebrow">Network View</div>
         <h1 className="pageTitle">Live nodes from actual profile data.</h1>
         <p className="pageText">
-          The globe now renders only real operator records from your Supabase profiles table. No
-          placeholder counts, no fictitious queue values, and no synthetic node list beyond the
-          privacy-safe location offset applied to each marker.
+          The globe now renders only real operator records from your Supabase profiles table, with
+          a denser deep-space background and a softer Milky Way-style star field behind the Earth.
         </p>
       </section>
 
@@ -982,17 +970,13 @@ export default function Globe() {
                 <span className="arrayLegendDot purple" />
                 Active in app
               </div>
-              <div className="arrayGlobeLegend">
-                <span className="arrayLegendDot white" />
-                Current user
-              </div>
             </div>
 
             <div ref={mountRef} className="arrayGlobeCanvas" />
 
             <div className="arrayGlobeFooter">
-              Drag to rotate. Scroll to zoom. The globe opens centered on your current node when a
-              renderable location exists. Locations are still rounded and slightly offset so exact
+              Drag to rotate. Scroll to zoom. The globe still opens centered on your node when a
+              renderable location exists. Locations remain rounded and slightly offset so exact
               addresses cannot be inferred from the map.
             </div>
           </div>
