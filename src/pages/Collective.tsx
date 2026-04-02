@@ -35,6 +35,15 @@ type CampaignRow = {
   start_at: string | null;
   end_at: string | null;
   target_type?: string | null;
+  target_name?: string | null;
+  target_catalog?: string | null;
+  target_ra?: string | null;
+  target_dec?: string | null;
+  target_constellation?: string | null;
+  target_notes?: string | null;
+  target_magnitude?: number | null;
+  target_difficulty?: string | null;
+  recommended_equipment?: string | null;
   tags: string[] | null;
   is_active: boolean | null;
   access_tier?: string | null;
@@ -54,6 +63,15 @@ type CollectiveCampaign = {
   startAt: string | null;
   endAt: string | null;
   targetType: string | null;
+  targetName: string | null;
+  targetCatalog: string | null;
+  targetRa: string | null;
+  targetDec: string | null;
+  targetConstellation: string | null;
+  targetNotes: string | null;
+  targetMagnitude: number | null;
+  targetDifficulty: string | null;
+  recommendedEquipment: string | null;
   tags: string[];
   accessTier: string;
   campaignClass: string;
@@ -310,6 +328,15 @@ function normalizeCampaign(row: CampaignRow): CollectiveCampaign {
     startAt: row.start_at ?? null,
     endAt: row.end_at ?? null,
     targetType: row.target_type ?? null,
+    targetName: row.target_name ?? null,
+    targetCatalog: row.target_catalog ?? null,
+    targetRa: row.target_ra ?? null,
+    targetDec: row.target_dec ?? null,
+    targetConstellation: row.target_constellation ?? null,
+    targetNotes: row.target_notes ?? null,
+    targetMagnitude: row.target_magnitude ?? null,
+    targetDifficulty: row.target_difficulty ?? null,
+    recommendedEquipment: row.recommended_equipment ?? null,
     tags: row.tags ?? [],
     accessTier: String(row.access_tier ?? "free"),
     campaignClass: String(row.campaign_class ?? "public"),
@@ -353,6 +380,20 @@ function pickBestCampaignPerCadence(campaigns: CollectiveCampaign[]) {
     .map((cadence) => best.get(cadence))
     .filter(Boolean) as CollectiveCampaign[];
 }
+function getCampaignTargetLabel(campaign: CollectiveCampaign) {
+  if (campaign.campaignClass === "research_collective") {
+    return campaign.targetName ?? campaign.targetType ?? "Research";
+  }
+  return campaign.targetType ?? "General";
+}
+
+function getCampaignTargetMeta(campaign: CollectiveCampaign) {
+  if (campaign.campaignClass !== "research_collective") return null;
+
+  const parts = [campaign.targetCatalog, campaign.targetConstellation].filter(Boolean);
+  return parts.length ? parts.join(" · ") : null;
+}
+
 
 async function geocodePlace(query: string): Promise<Coordinates | null> {
   const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(
@@ -597,7 +638,7 @@ export default function Collective() {
       const { data, error } = await supabase
         .from("campaigns")
         .select(
-          "id,cadence,title,description,start_at,end_at,target_type,tags,is_active,access_tier,campaign_class,slot_capacity,is_limited_entry,priority_rank,template_key,created_at"
+          "id,cadence,title,description,start_at,end_at,target_type,target_name,target_catalog,target_ra,target_dec,target_constellation,target_notes,target_magnitude,target_difficulty,recommended_equipment,tags,is_active,access_tier,campaign_class,slot_capacity,is_limited_entry,priority_rank,template_key,created_at"
         )
         .eq("is_active", true)
         .order("campaign_class", { ascending: true })
@@ -1621,10 +1662,31 @@ export default function Collective() {
 
                   <div className="campaignStatRow">
                     <div className="campaignStat"><div className="campaignStatLabel">Window</div><div className="campaignStatValue">{formatDateRange(campaign.startAt, campaign.endAt)}</div></div>
-                    <div className="campaignStat"><div className="campaignStatLabel">Target type</div><div className="campaignStatValue">{campaign.targetType ?? "Research"}</div></div>
+                    <div className="campaignStat"><div className="campaignStatLabel">Target</div><div className="campaignStatValue">{getCampaignTargetLabel(campaign)}</div></div>
                     <div className="campaignStat"><div className="campaignStatLabel">Filled slots</div><div className="campaignStatValue">{filledSlots}</div></div>
                     <div className="campaignStat"><div className="campaignStatLabel">Remaining</div><div className="campaignStatValue">{campaign.slotCapacity != null ? slotsRemaining : "—"}</div></div>
                   </div>
+
+                  {campaign.targetName ? (
+                    <div className="campaignMetaRow">
+                      {getCampaignTargetMeta(campaign) ? (
+                        <span className="campaignMetaChip gold">{getCampaignTargetMeta(campaign)}</span>
+                      ) : null}
+                      {campaign.targetRa && campaign.targetDec ? (
+                        <span className="campaignMetaChip gold">{campaign.targetRa} · {campaign.targetDec}</span>
+                      ) : null}
+                      {campaign.targetDifficulty ? (
+                        <span className="campaignMetaChip gold">{campaign.targetDifficulty.toUpperCase()}</span>
+                      ) : null}
+                      {campaign.recommendedEquipment ? (
+                        <span className="campaignMetaChip gold">{campaign.recommendedEquipment.toUpperCase()}</span>
+                      ) : null}
+                    </div>
+                  ) : null}
+
+                  {campaign.targetNotes ? (
+                    <div className="campaignDesc">{campaign.targetNotes}</div>
+                  ) : null}
 
                   {campaign.tags.length > 0 ? (
                     <div className="campaignMetaRow">
