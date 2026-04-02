@@ -104,7 +104,34 @@ type TeamRecord = {
 type TeamMemberRow = {
   team_id: string;
   user_id: string;
+  role?: string | null;
   status: string | null;
+};
+
+type TeamInviteRecord = {
+  id: string;
+  team_id: string;
+  invited_email: string | null;
+  token: string;
+  status: string | null;
+  expires_at: string | null;
+  created_at: string | null;
+  created_by: string | null;
+  accepted_at?: string | null;
+  accepted_by?: string | null;
+};
+
+type TeamMessageRecord = {
+  id: string;
+  team_id: string;
+  user_id: string;
+  body: string;
+  created_at: string | null;
+};
+
+type TeamProfileRecord = {
+  id: string;
+  display_name: string | null;
 };
 
 const SOLAR_GOLD = "#f2bf57";
@@ -214,6 +241,32 @@ function generateAlias(seed: string) {
   const code = String((hash % 9000) + 1000);
 
   return `${prefix} ${suffix} ${code}`;
+}
+
+
+function makeInviteToken() {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID().replace(/-/g, "");
+  }
+  return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 14)}`;
+}
+
+function formatRelativeTime(value: string | null) {
+  if (!value) return "Just now";
+  const diff = Date.now() - new Date(value).getTime();
+  if (!Number.isFinite(diff)) return "Just now";
+  const minutes = Math.max(0, Math.floor(diff / 60000));
+  if (minutes < 1) return "Just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+function displayProfileName(profile: TeamProfileRecord | null | undefined, fallbackSeed: string) {
+  const saved = String(profile?.display_name ?? "").trim();
+  return saved || generateAlias(fallbackSeed);
 }
 
 function getMoonPhaseFraction(date = new Date()) {
@@ -491,6 +544,15 @@ export default function Collective() {
   const [myTeamMemberships, setMyTeamMemberships] = useState<Record<string, TeamMemberRow>>({});
   const [teamsLoading, setTeamsLoading] = useState(false);
   const [teamActionBusy, setTeamActionBusy] = useState<string | null>(null);
+  const [teamInvitesEnabled, setTeamInvitesEnabled] = useState(true);
+  const [teamMessagesEnabled, setTeamMessagesEnabled] = useState(true);
+  const [teamInvites, setTeamInvites] = useState<Record<string, TeamInviteRecord[]>>({});
+  const [teamMessages, setTeamMessages] = useState<Record<string, TeamMessageRecord[]>>({});
+  const [teamRosters, setTeamRosters] = useState<Record<string, TeamMemberRow[]>>({});
+  const [teamProfiles, setTeamProfiles] = useState<Record<string, TeamProfileRecord>>({});
+  const [inviteEmail, setInviteEmail] = useState<Record<string, string>>({});
+  const [inviteTokenInput, setInviteTokenInput] = useState("");
+  const [teamMessageDrafts, setTeamMessageDrafts] = useState<Record<string, string>>({});
 
   const [createName, setCreateName] = useState("");
   const [createDescription, setCreateDescription] = useState("");
@@ -556,6 +618,14 @@ export default function Collective() {
     return () => {
       active = false;
     };
+  }, []);
+
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("team_invite");
+    if (token) setInviteTokenInput(token);
   }, []);
 
   useEffect(() => {
@@ -746,6 +816,7 @@ export default function Collective() {
         membershipMap[row.team_id] = {
           team_id: row.team_id,
           user_id: row.user_id,
+          role: row.role ?? null,
           status: membershipStatus,
         };
 
@@ -767,6 +838,7 @@ export default function Collective() {
           membershipMap[team.id] = {
             team_id: team.id,
             user_id: userId,
+            role: "owner",
             status: "owner",
           };
         }
@@ -804,14 +876,391 @@ export default function Collective() {
       );
       setMyTeamMemberships(membershipMap);
       setTeamsEnabled(true);
+
+      const loadedTeamIds = teamData.map((team) => team.id);
+      await Promise.all([
+        loadTeamRosters(loadedTeamIds),
+        loadTeamInvites(loadedTeamIds),
+        loadTeamMessages(loadedTeamIds),
+      ]);
     } catch (err: any) {
       console.error("TEAM LOAD ERROR:", err);
       setTeamsEnabled(true);
       setTeams([]);
       setMyTeamMemberships({});
+      setTeamRosters({});
+      setTeamInvites({});
+      setTeamMessages({});
+      setTeamProfiles({});
       setError((current) => current ?? err?.message ?? "Unable to load teams right now.");
     } finally {
       setTeamsLoading(false);
+    }
+  }
+
+
+  async function hydrateProfiles(userIds: string[]) {
+    const uniqueIds = Array.from(new Set(userIds.filter(Boolean)));
+    if (!uniqueIds.length) return;
+
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id,display_name")
+        .in("id", uniqueIds);
+
+      if (error) throw error;
+
+      setTeamProfiles((current) => {
+        const next = { ...current };
+        for (const row of (data ?? []) as any[]) {
+          next[row.id] = {
+            id: row.id,
+            display_name: row.display_name ?? null,
+          };
+        }
+        return next;
+      });
+    } catch (err) {
+      // Ignore profile hydration failures; aliases are used as a fallback.
+    }
+  }
+
+  async function loadTeamRosters(teamIds: string[]) {
+    if (!teamIds.length) {
+      setTeamRosters({});
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from("team_members")
+        .select("team_id,user_id,role,status")
+        .in("team_id", teamIds)
+        .order("team_id", { ascending: true });
+
+      if (error) throw error;
+
+      const next: Record<string, TeamMemberRow[]> = {};
+      const profileIds: string[] = [];
+
+      for (const row of (data ?? []) as any[]) {
+        const membershipStatus = String(row.status ?? row.role ?? "active").toLowerCase();
+        if (!["active", "accepted", "owner", "member", "admin"].includes(membershipStatus)) continue;
+        if (!next[row.team_id]) next[row.team_id] = [];
+        next[row.team_id].push({
+          team_id: row.team_id,
+          user_id: row.user_id,
+          role: row.role ?? null,
+          status: row.status ?? null,
+        });
+        profileIds.push(row.user_id);
+      }
+
+      Object.values(next).forEach((rows) =>
+        rows.sort((a, b) => {
+          const roleOrder = (value?: string | null) => {
+            const role = String(value ?? "").toLowerCase();
+            if (role === "owner") return 0;
+            if (role === "admin") return 1;
+            return 2;
+          };
+          return roleOrder(a.role) - roleOrder(b.role);
+        })
+      );
+
+      setTeamRosters(next);
+      await hydrateProfiles(profileIds);
+    } catch (err: any) {
+      setError((current) => current ?? err?.message ?? "Unable to load team rosters.");
+    }
+  }
+
+  async function loadTeamInvites(teamIds: string[]) {
+    if (!teamIds.length) {
+      setTeamInvites({});
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from("team_invites")
+        .select("id,team_id,invited_email,token,status,expires_at,created_at,created_by,accepted_at,accepted_by")
+        .in("team_id", teamIds)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      const next: Record<string, TeamInviteRecord[]> = {};
+      for (const row of (data ?? []) as TeamInviteRecord[]) {
+        if (!next[row.team_id]) next[row.team_id] = [];
+        next[row.team_id].push(row);
+      }
+
+      setTeamInvites(next);
+      setTeamInvitesEnabled(true);
+    } catch (err: any) {
+      if (looksLikeMissingRelation(err)) {
+        setTeamInvitesEnabled(false);
+        setTeamInvites({});
+      } else {
+        setError((current) => current ?? err?.message ?? "Unable to load team invites.");
+      }
+    }
+  }
+
+  async function loadTeamMessages(teamIds: string[]) {
+    if (!teamIds.length) {
+      setTeamMessages({});
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from("team_messages")
+        .select("id,team_id,user_id,body,created_at")
+        .in("team_id", teamIds)
+        .order("created_at", { ascending: false })
+        .limit(120);
+
+      if (error) throw error;
+
+      const next: Record<string, TeamMessageRecord[]> = {};
+      const profileIds: string[] = [];
+      for (const row of (data ?? []) as TeamMessageRecord[]) {
+        if (!next[row.team_id]) next[row.team_id] = [];
+        next[row.team_id].push(row);
+        profileIds.push(row.user_id);
+      }
+
+      for (const teamId of Object.keys(next)) {
+        next[teamId] = next[teamId].sort((a, b) => {
+          const at = a.created_at ? new Date(a.created_at).getTime() : 0;
+          const bt = b.created_at ? new Date(b.created_at).getTime() : 0;
+          return bt - at;
+        });
+      }
+
+      setTeamMessages(next);
+      setTeamMessagesEnabled(true);
+      await hydrateProfiles(profileIds);
+    } catch (err: any) {
+      if (looksLikeMissingRelation(err)) {
+        setTeamMessagesEnabled(false);
+        setTeamMessages({});
+      } else {
+        setError((current) => current ?? err?.message ?? "Unable to load team messages.");
+      }
+    }
+  }
+
+  async function handleCreateInvite(team: TeamRecord) {
+    if (!sessionUser) return;
+    const rawEmail = String(inviteEmail[team.id] ?? "").trim().toLowerCase();
+
+    setTeamActionBusy(`invite-${team.id}`);
+    setError(null);
+    setNotice(null);
+
+    try {
+      if (!teamInvitesEnabled) {
+        throw new Error("The team_invites table is not available yet. Run the SQL first.");
+      }
+
+      const inviteToken = makeInviteToken();
+      const expiresAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+
+      const { error } = await supabase.from("team_invites").insert({
+        team_id: team.id,
+        invited_email: rawEmail || null,
+        token: inviteToken,
+        status: "pending",
+        created_by: sessionUser.id,
+        expires_at: expiresAt,
+      });
+
+      if (error) throw error;
+
+      setInviteEmail((current) => ({ ...current, [team.id]: "" }));
+      await loadTeamInvites([team.id]);
+      const inviteUrl = `${window.location.origin}${window.location.pathname}?team_invite=${inviteToken}`;
+      setNotice(
+        rawEmail
+          ? `Invite created for ${rawEmail}. Share this link: ${inviteUrl}`
+          : `Invite link created. Share this link: ${inviteUrl}`
+      );
+    } catch (err: any) {
+      setError(err?.message ?? "Unable to create invite.");
+    } finally {
+      setTeamActionBusy(null);
+    }
+  }
+
+  async function handleRevokeInvite(team: TeamRecord, inviteId: string) {
+    if (!sessionUser) return;
+    setTeamActionBusy(`revoke-${inviteId}`);
+    setError(null);
+    setNotice(null);
+
+    try {
+      if (!teamInvitesEnabled) {
+        throw new Error("The team_invites table is not available yet.");
+      }
+
+      const { error } = await supabase
+        .from("team_invites")
+        .update({ status: "revoked" })
+        .eq("id", inviteId)
+        .eq("team_id", team.id);
+
+      if (error) throw error;
+
+      await loadTeamInvites([team.id]);
+      setNotice("Invite revoked.");
+    } catch (err: any) {
+      setError(err?.message ?? "Unable to revoke invite.");
+    } finally {
+      setTeamActionBusy(null);
+    }
+  }
+
+  async function handleAcceptInvite() {
+    if (!sessionUser) return;
+    const token = inviteTokenInput.trim();
+    if (!token) {
+      setError("Paste an invite token or invite URL token first.");
+      return;
+    }
+
+    setTeamActionBusy("accept-invite");
+    setError(null);
+    setNotice(null);
+
+    try {
+      if (!teamInvitesEnabled) {
+        throw new Error("The team_invites table is not available yet. Run the SQL first.");
+      }
+
+      const { data: invite, error: inviteError } = await supabase
+        .from("team_invites")
+        .select("id,team_id,invited_email,token,status,expires_at,created_at,created_by,accepted_at,accepted_by")
+        .eq("token", token)
+        .maybeSingle();
+
+      if (inviteError) throw inviteError;
+      if (!invite) throw new Error("Invite not found.");
+      if (String(invite.status ?? "pending").toLowerCase() !== "pending") {
+        throw new Error("This invite is no longer active.");
+      }
+      if (invite.expires_at && new Date(invite.expires_at).getTime() < Date.now()) {
+        throw new Error("This invite has expired.");
+      }
+
+      const invitedEmail = String(invite.invited_email ?? "").trim().toLowerCase();
+      const myEmail = String(sessionUser.email ?? "").trim().toLowerCase();
+      if (invitedEmail && invitedEmail !== myEmail) {
+        throw new Error("This invite was issued for a different email address.");
+      }
+
+      const currentMembers = teamRosters[invite.team_id] ?? [];
+      const team = teams.find((item) => item.id === invite.team_id) ?? null;
+      if (team?.max_members && currentMembers.length >= team.max_members) {
+        throw new Error("This team is already at max capacity.");
+      }
+
+      const { error: memberError } = await supabase.from("team_members").upsert(
+        {
+          team_id: invite.team_id,
+          user_id: sessionUser.id,
+          role: "member",
+          status: "active",
+        },
+        { onConflict: "team_id,user_id" }
+      );
+      if (memberError) throw memberError;
+
+      const { error: updateError } = await supabase
+        .from("team_invites")
+        .update({
+          status: "accepted",
+          accepted_at: new Date().toISOString(),
+          accepted_by: sessionUser.id,
+        })
+        .eq("id", invite.id);
+
+      if (updateError) throw updateError;
+
+      setInviteTokenInput("");
+      await loadTeams(sessionUser.id);
+      setNotice("Invite accepted. You have joined the team.");
+    } catch (err: any) {
+      setError(err?.message ?? "Unable to accept invite.");
+    } finally {
+      setTeamActionBusy(null);
+    }
+  }
+
+  async function handleRemoveMember(team: TeamRecord, memberUserId: string) {
+    if (!sessionUser) return;
+    if (memberUserId === sessionUser.id) {
+      setError("Use leave team if you want to remove yourself.");
+      return;
+    }
+
+    setTeamActionBusy(`remove-member-${team.id}-${memberUserId}`);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const { error } = await supabase
+        .from("team_members")
+        .delete()
+        .eq("team_id", team.id)
+        .eq("user_id", memberUserId);
+
+      if (error) throw error;
+
+      await Promise.all([loadTeamRosters([team.id]), loadTeams(sessionUser.id)]);
+      setNotice("Member removed from team.");
+    } catch (err: any) {
+      setError(err?.message ?? "Unable to remove member.");
+    } finally {
+      setTeamActionBusy(null);
+    }
+  }
+
+  async function handleSendTeamMessage(team: TeamRecord) {
+    if (!sessionUser) return;
+    const body = String(teamMessageDrafts[team.id] ?? "").trim();
+    if (!body) {
+      setError("Type a message before sending.");
+      return;
+    }
+
+    setTeamActionBusy(`send-message-${team.id}`);
+    setError(null);
+    setNotice(null);
+
+    try {
+      if (!teamMessagesEnabled) {
+        throw new Error("The team_messages table is not available yet. Run the SQL first.");
+      }
+
+      const { error } = await supabase.from("team_messages").insert({
+        team_id: team.id,
+        user_id: sessionUser.id,
+        body,
+      });
+
+      if (error) throw error;
+
+      setTeamMessageDrafts((current) => ({ ...current, [team.id]: "" }));
+      await loadTeamMessages([team.id]);
+      setNotice("Team message posted.");
+    } catch (err: any) {
+      setError(err?.message ?? "Unable to send message.");
+    } finally {
+      setTeamActionBusy(null);
     }
   }
 
@@ -1199,6 +1648,14 @@ export default function Collective() {
 
   const activeCampaignCount = publicCampaigns.length + researchCampaigns.length;
 
+  const pendingInviteCount = useMemo(() => {
+    return Object.values(teamInvites).reduce(
+      (count, invites) => count + invites.filter((invite) => String(invite.status ?? "pending").toLowerCase() === "pending").length,
+      0
+    );
+  }, [teamInvites]);
+
+
   const campaignBoard = useMemo(() => {
     return [...publicCampaigns, ...researchCampaigns].sort((a, b) => {
       const order = { DAILY: 0, WEEKLY: 1, GLOBAL: 2, RESEARCH: 3 } as const;
@@ -1271,10 +1728,10 @@ export default function Collective() {
     },
     {
       title: "Team deployment",
-      value: isPro ? `${teams.length} teams available` : "Subscriber only",
+      value: isPro ? `${teams.length} teams · ${pendingInviteCount} pending invites` : "Subscriber only",
       body: isPro
-        ? "Create, edit, and attach teams to campaigns from the same page."
-        : "Unlock team creation, ownership, and campaign assignment controls.",
+        ? "Create teams, issue invite links, manage members, and attach teams to campaigns from the same page."
+        : "Unlock team creation, invites, roster management, and campaign assignment controls.",
       locked: !isPro,
     },
   ];
@@ -1457,17 +1914,18 @@ export default function Collective() {
         </div>
       </section>
 
+
       <section className="panel">
         <div className="campaignSectionHeader">
           <div>
             <div className="sectionKicker">TEAM CONTROL</div>
-            <h2 className="sectionTitle">Create and manage teams</h2>
+            <h2 className="sectionTitle">Create, invite, and coordinate teams</h2>
             <p className="sectionHint">
-              Create teams, manage team settings, and attach a team to a campaign. An individual or a team only uses one slot.
+              Teams can now act like real units: create the team, invite members, manage the roster, and keep a lightweight mission thread inside the Collective.
             </p>
           </div>
           <span className="statusBadge">
-            {!isPro ? "Subscriber only" : teamsLoading ? "Syncing…" : `${teams.length} available`}
+            {!isPro ? "Subscriber only" : teamsLoading ? "Syncing…" : `${teams.length} teams · ${pendingInviteCount} pending invites`}
           </span>
         </div>
 
@@ -1477,37 +1935,65 @@ export default function Collective() {
           </div>
         ) : (
           <>
-            <div className="teamCreateCard">
-              <div className="teamGrid">
+            <div className="teamOpsGrid">
+              <div className="teamCreateCard">
+                <div className="sectionKicker">NEW TEAM</div>
+                <div className="teamGrid">
+                  <label className="fieldBlock">
+                    <span>Team name</span>
+                    <input value={createName} onChange={(e) => setCreateName(e.target.value)} placeholder="Helvarix Deep Sky Unit" />
+                  </label>
+                  <label className="fieldBlock">
+                    <span>Max members</span>
+                    <input value={createMaxMembers} onChange={(e) => setCreateMaxMembers(e.target.value)} inputMode="numeric" />
+                  </label>
+                </div>
+
                 <label className="fieldBlock">
-                  <span>Team name</span>
-                  <input value={createName} onChange={(e) => setCreateName(e.target.value)} placeholder="Helvarix Deep Sky Unit" />
+                  <span>Description</span>
+                  <textarea
+                    value={createDescription}
+                    onChange={(e) => setCreateDescription(e.target.value)}
+                    rows={3}
+                    placeholder="Describe the purpose, target style, or instruments this team uses."
+                  />
                 </label>
-                <label className="fieldBlock">
-                  <span>Max members</span>
-                  <input value={createMaxMembers} onChange={(e) => setCreateMaxMembers(e.target.value)} inputMode="numeric" />
+
+                <label className="checkboxRow">
+                  <input type="checkbox" checked={createPrivate} onChange={(e) => setCreatePrivate(e.target.checked)} />
+                  <span>Private team</span>
                 </label>
+
+                <div className="buttonRow">
+                  <button className="primaryBtn" type="button" onClick={handleCreateTeam} disabled={teamActionBusy === "create-team"}>
+                    {teamActionBusy === "create-team" ? "Creating…" : "Create team"}
+                  </button>
+                </div>
               </div>
 
-              <label className="fieldBlock">
-                <span>Description</span>
-                <textarea
-                  value={createDescription}
-                  onChange={(e) => setCreateDescription(e.target.value)}
-                  rows={3}
-                  placeholder="Describe the purpose, target style, or instruments this team uses."
-                />
-              </label>
-
-              <label className="checkboxRow">
-                <input type="checkbox" checked={createPrivate} onChange={(e) => setCreatePrivate(e.target.checked)} />
-                <span>Private team</span>
-              </label>
-
-              <div className="buttonRow">
-                <button className="primaryBtn" type="button" onClick={handleCreateTeam} disabled={teamActionBusy === "create-team"}>
-                  {teamActionBusy === "create-team" ? "Creating…" : "Create team"}
-                </button>
+              <div className="teamCreateCard">
+                <div className="sectionKicker">JOIN WITH INVITE</div>
+                <div className="collectiveToolBody">
+                  Paste an invite token from a team owner. Links with <code>?team_invite=...</code> also auto-fill this field.
+                </div>
+                <label className="fieldBlock">
+                  <span>Invite token</span>
+                  <input
+                    value={inviteTokenInput}
+                    onChange={(e) => setInviteTokenInput(e.target.value.replace(/^.*team_invite=/, ""))}
+                    placeholder="Paste invite token"
+                  />
+                </label>
+                <div className="buttonRow">
+                  <button className="primaryBtn" type="button" onClick={handleAcceptInvite} disabled={teamActionBusy === "accept-invite"}>
+                    {teamActionBusy === "accept-invite" ? "Joining…" : "Accept invite"}
+                  </button>
+                </div>
+                {!teamInvitesEnabled ? (
+                  <div className="emptyState">
+                    Invite table not detected yet. Run the SQL below before testing invite links.
+                  </div>
+                ) : null}
               </div>
             </div>
 
@@ -1521,6 +2007,11 @@ export default function Collective() {
                   const isOwner = team.owner_id === sessionUser?.id;
                   const membership = myTeamMemberships[team.id];
                   const isEditing = editingTeamId === team.id;
+                  const roster = teamRosters[team.id] ?? [];
+                  const activeInvites = (teamInvites[team.id] ?? []).filter((invite) => String(invite.status ?? "pending").toLowerCase() === "pending");
+                  const messages = teamMessages[team.id] ?? [];
+                  const memberCount = roster.length;
+                  const membershipRole = String(membership?.role ?? membership?.status ?? "member").toUpperCase();
 
                   return (
                     <div key={team.id} className="teamCard">
@@ -1530,9 +2021,10 @@ export default function Collective() {
                           <div className="campaignDesc">{team.description || "No team description set yet."}</div>
                         </div>
                         <div className="campaignMetaRow">
-                          <span className="campaignMetaChip">{isOwner ? "OWNER" : String(membership?.status ?? "MEMBER").toUpperCase()}</span>
+                          <span className="campaignMetaChip">{isOwner ? "OWNER" : membershipRole}</span>
                           <span className="campaignMetaChip">{team.is_private ? "PRIVATE" : "PUBLIC"}</span>
-                          <span className="campaignMetaChip">MAX {team.max_members ?? "—"}</span>
+                          <span className="campaignMetaChip">{memberCount}/{team.max_members ?? "—"} MEMBERS</span>
+                          {activeInvites.length > 0 ? <span className="campaignMetaChip gold">{activeInvites.length} PENDING</span> : null}
                         </div>
                       </div>
 
@@ -1577,6 +2069,147 @@ export default function Collective() {
                           </button>
                         </div>
                       )}
+
+                      <div className="teamModuleGrid">
+                        <div className="teamSubpanel">
+                          <div className="sectionKicker">ROSTER</div>
+                          {roster.length === 0 ? (
+                            <div className="emptyState">No active members loaded yet.</div>
+                          ) : (
+                            <div className="teamRoster">
+                              {roster.map((member) => {
+                                const profileName = displayProfileName(teamProfiles[member.user_id], member.user_id);
+                                const roleLabel = String(member.role ?? member.status ?? "member").toUpperCase();
+                                const canRemove = isOwner && member.user_id !== sessionUser?.id;
+                                return (
+                                  <div key={`${team.id}-${member.user_id}`} className="teamRosterRow">
+                                    <div>
+                                      <strong>{profileName}</strong>
+                                      <div className="campaignDesc compact">{member.user_id === sessionUser?.id ? "You" : member.user_id}</div>
+                                    </div>
+                                    <div className="teamRosterActions">
+                                      <span className="campaignMetaChip">{roleLabel}</span>
+                                      {canRemove ? (
+                                        <button
+                                          className="ghostBtn compactBtn"
+                                          type="button"
+                                          onClick={() => handleRemoveMember(team, member.user_id)}
+                                          disabled={teamActionBusy === `remove-member-${team.id}-${member.user_id}`}
+                                        >
+                                          {teamActionBusy === `remove-member-${team.id}-${member.user_id}` ? "Removing…" : "Remove"}
+                                        </button>
+                                      ) : null}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="teamSubpanel">
+                          <div className="sectionKicker">INVITES</div>
+                          {!teamInvitesEnabled ? (
+                            <div className="emptyState">Run the SQL migration to enable invites.</div>
+                          ) : (
+                            <>
+                              {isOwner ? (
+                                <>
+                                  <div className="teamInviteComposer">
+                                    <input
+                                      value={inviteEmail[team.id] ?? ""}
+                                      onChange={(e) => setInviteEmail((current) => ({ ...current, [team.id]: e.target.value }))}
+                                      placeholder="Invite by email (optional)"
+                                    />
+                                    <button
+                                      className="primaryBtn compactBtn"
+                                      type="button"
+                                      onClick={() => handleCreateInvite(team)}
+                                      disabled={teamActionBusy === `invite-${team.id}`}
+                                    >
+                                      {teamActionBusy === `invite-${team.id}` ? "Creating…" : "Create invite"}
+                                    </button>
+                                  </div>
+                                  <div className="collectiveToolBody">
+                                    Leave the email blank to generate a generic invite link.
+                                  </div>
+                                </>
+                              ) : null}
+
+                              {activeInvites.length === 0 ? (
+                                <div className="emptyState">No pending invites.</div>
+                              ) : (
+                                <div className="inviteList">
+                                  {activeInvites.map((invite) => (
+                                    <div key={invite.id} className="teamRosterRow">
+                                      <div>
+                                        <strong>{invite.invited_email || "Generic invite link"}</strong>
+                                        <div className="campaignDesc compact">
+                                          Token: {invite.token.slice(0, 18)}… · expires {formatDate(invite.expires_at)}
+                                        </div>
+                                      </div>
+                                      {isOwner ? (
+                                        <button
+                                          className="ghostBtn compactBtn"
+                                          type="button"
+                                          onClick={() => handleRevokeInvite(team, invite.id)}
+                                          disabled={teamActionBusy === `revoke-${invite.id}`}
+                                        >
+                                          {teamActionBusy === `revoke-${invite.id}` ? "Revoking…" : "Revoke"}
+                                        </button>
+                                      ) : null}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="teamSubpanel">
+                        <div className="sectionKicker">TEAM CHANNEL</div>
+                        {!teamMessagesEnabled ? (
+                          <div className="emptyState">Run the SQL migration to enable team chat.</div>
+                        ) : (
+                          <>
+                            <div className="teamMessageComposer">
+                              <textarea
+                                value={teamMessageDrafts[team.id] ?? ""}
+                                onChange={(e) => setTeamMessageDrafts((current) => ({ ...current, [team.id]: e.target.value }))}
+                                rows={3}
+                                placeholder="Post planning notes, target updates, filter choices, or handoff instructions."
+                              />
+                              <div className="buttonRow">
+                                <button
+                                  className="primaryBtn compactBtn"
+                                  type="button"
+                                  onClick={() => handleSendTeamMessage(team)}
+                                  disabled={teamActionBusy === `send-message-${team.id}`}
+                                >
+                                  {teamActionBusy === `send-message-${team.id}` ? "Sending…" : "Post message"}
+                                </button>
+                              </div>
+                            </div>
+
+                            {messages.length === 0 ? (
+                              <div className="emptyState">No messages yet.</div>
+                            ) : (
+                              <div className="messageList">
+                                {messages.slice(0, 8).map((message) => (
+                                  <div key={message.id} className="messageCard">
+                                    <div className="messageCardTop">
+                                      <strong>{displayProfileName(teamProfiles[message.user_id], message.user_id)}</strong>
+                                      <span className="campaignMetaChip">{formatRelativeTime(message.created_at)}</span>
+                                    </div>
+                                    <div className="collectiveToolBody">{message.body}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
                     </div>
                   );
                 })
@@ -1835,6 +2468,16 @@ const styles = `
 .campaignGrid,.teamList,.campaignBoardGrid{ display:grid; gap:14px; margin-top:18px; }
 .campaignBoardGrid{ grid-template-columns:repeat(3, minmax(0,1fr)); align-items:start; }
 .campaignCard,.teamCard,.teamCreateCard{ padding:18px; border-radius:18px; background:rgba(8,14,30,.72); border:1px solid rgba(255,255,255,.06); display:grid; gap:14px; }
+.teamOpsGrid{ display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:14px; margin-top:18px; }
+.teamModuleGrid{ display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:14px; }
+.teamSubpanel{ padding:16px; border-radius:16px; background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.06); display:grid; gap:12px; }
+.teamRoster,.inviteList,.messageList{ display:grid; gap:10px; }
+.teamRosterRow,.messageCard{ padding:12px 14px; border-radius:14px; background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.06); }
+.teamRosterRow{ display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
+.teamRosterActions{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.teamInviteComposer,.teamMessageComposer{ display:grid; gap:10px; }
+.messageCardTop{ display:flex; justify-content:space-between; gap:10px; align-items:center; margin-bottom:8px; flex-wrap:wrap; }
+.compactBtn{ padding:10px 12px; }
 .campaignBoardCard{ padding:16px; gap:12px; height:100%; align-content:start; }
 .emptyCampaignCard{ grid-column:1 / -1; }
 .campaignBoardTop{ display:grid; gap:10px; }
@@ -1884,10 +2527,10 @@ textarea{ resize:vertical; min-height:96px; }
 .emptyState{ padding:18px; border-radius:16px; background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.06); color:rgba(255,255,255,.70); }
 @media (max-width: 1180px){
   .collectiveHeroGrid{ grid-template-columns:1fr; }
-  .premiumToolGrid,.campaignBoardGrid{ grid-template-columns:repeat(2, minmax(0,1fr)); }
+  .premiumToolGrid,.campaignBoardGrid,.teamOpsGrid,.teamModuleGrid{ grid-template-columns:repeat(2, minmax(0,1fr)); }
 }
 @media (max-width: 980px){
-  .collectiveHeroGrid,.collectiveMetricGrid,.campaignStatRow,.teamGrid,.ownerEditGrid,.collectiveToolsGrid,.campaignBoardGrid,.campaignBoardStats{ grid-template-columns:1fr; }
+  .collectiveHeroGrid,.collectiveMetricGrid,.campaignStatRow,.teamGrid,.ownerEditGrid,.collectiveToolsGrid,.campaignBoardGrid,.campaignBoardStats,.teamOpsGrid,.teamModuleGrid{ grid-template-columns:1fr; }
   .collectiveMiniRow{ grid-template-columns:1fr; }
   .collectiveMiniRow strong{ text-align:left; }
   select.campaignAssignSelect{ max-width:none; }
