@@ -1926,6 +1926,179 @@ export default function Collective() {
       <section className="panel">
         <div className="campaignSectionHeader">
           <div>
+            <div className="sectionKicker">CAMPAIGN BOARD</div>
+            <h2 className="sectionTitle">Daily, weekly, global, and collective campaigns at a glance</h2>
+            <p className="sectionHint">
+              The board below keeps every live campaign in a denser card layout so all seven campaigns can be scanned
+              quickly without losing join, leave, team assignment, slot, or upgrade actions.
+            </p>
+          </div>
+          <span className="statusBadge">{campaignLoading ? "Syncing…" : `${campaignBoard.length} visible`}</span>
+        </div>
+
+        <div className="campaignBoardGrid">
+          {campaignBoard.length === 0 ? (
+            <div className="campaignCard campaignBoardCard emptyCampaignCard">
+              <div className="campaignTitle">No campaigns available</div>
+              <div className="campaignDesc">No active daily, weekly, global, or research campaigns were returned from the database.</div>
+            </div>
+          ) : (
+            campaignBoard.map((campaign) => {
+              const membership = myCampaignMemberships[campaign.id] ?? null;
+              const joined = Boolean(membership);
+              const tone = cadenceTone(campaign.cadence);
+              const isResearch = campaign.campaignClass === "research_collective" || campaign.accessTier === "research_collective";
+              const filledSlots = slotCounts[campaign.id] ?? 0;
+              const slotCapacity = campaign.slotCapacity ?? 0;
+              const slotsRemaining = Math.max(0, slotCapacity - filledSlots);
+              const isFull =
+                campaign.isLimitedEntry &&
+                campaign.slotCapacity != null &&
+                filledSlots >= campaign.slotCapacity &&
+                !joined;
+              const locked = isResearch && !isPro;
+              const targetLabel = isResearch ? getCampaignTargetLabel(campaign) : campaign.targetName ?? "Open target";
+
+              return (
+                <div
+                  key={campaign.id}
+                  className={`campaignCard campaignBoardCard ${isResearch ? "premium" : ""} ${locked ? "locked" : ""}`}
+                >
+                  <div className="campaignBoardTop">
+                    <div className="campaignBoardHeaderText">
+                      <div className="campaignTitle compact">{campaign.title}</div>
+                      <div className="campaignDesc compact">{campaign.description}</div>
+                    </div>
+
+                    <div className="campaignMetaRow compact">
+                      <span className={`campaignMetaChip ${tone === "cyan" ? "toneCyan" : tone === "violet" ? "toneViolet" : "toneAmber"}`}>
+                        {campaign.cadence}
+                      </span>
+                      <span className={`campaignMetaChip ${isResearch ? "gold" : ""}`}>
+                        {isResearch ? "RESEARCH" : "PUBLIC"}
+                      </span>
+                      {isResearch ? (
+                        locked ? (
+                          <span className="campaignMetaChip locked">SUBSCRIBER ONLY</span>
+                        ) : isFull ? (
+                          <span className="campaignMetaChip full">FULL</span>
+                        ) : (
+                          <span className="campaignMetaChip gold">{slotCapacity > 0 ? `${slotsRemaining} OPEN` : "LIMITED ENTRY"}</span>
+                        )
+                      ) : (
+                        <span className="campaignMetaChip">{formatEndsIn(campaign.endAt)}</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="campaignBoardStats">
+                    <div className="campaignMiniStat">
+                      <div className="campaignStatLabel">Target</div>
+                      <div className="campaignStatValue">{targetLabel}</div>
+                    </div>
+                    <div className="campaignMiniStat">
+                      <div className="campaignStatLabel">{isResearch ? "Window" : "Availability"}</div>
+                      <div className="campaignStatValue">
+                        {isResearch ? formatDateRange(campaign.startAt, campaign.endAt) : campaign.cadence === "GLOBAL" ? "Community objective" : "Open access"}
+                      </div>
+                    </div>
+                    <div className="campaignMiniStat">
+                      <div className="campaignStatLabel">{isResearch ? "Slots" : "Window"}</div>
+                      <div className="campaignStatValue">
+                        {isResearch ? (campaign.slotCapacity != null ? `${filledSlots}/${campaign.slotCapacity} filled` : "Flexible") : formatDateRange(campaign.startAt, campaign.endAt)}
+                      </div>
+                    </div>
+                    <div className="campaignMiniStat">
+                      <div className="campaignStatLabel">{isResearch ? "Equipment" : "Cadence"}</div>
+                      <div className="campaignStatValue">
+                        {isResearch ? campaign.recommendedEquipment ?? "Open instrumentation" : campaign.cadence}
+                      </div>
+                    </div>
+                  </div>
+
+                  {isResearch ? (
+                    <>
+                      {campaign.targetName ? (
+                        <div className="campaignMetaRow compact">
+                          {getCampaignTargetMeta(campaign) ? (
+                            <span className="campaignMetaChip gold">{getCampaignTargetMeta(campaign)}</span>
+                          ) : null}
+                          {campaign.targetRa && campaign.targetDec ? (
+                            <span className="campaignMetaChip gold">{campaign.targetRa} · {campaign.targetDec}</span>
+                          ) : null}
+                          {campaign.targetDifficulty ? (
+                            <span className="campaignMetaChip gold">{campaign.targetDifficulty.toUpperCase()}</span>
+                          ) : null}
+                        </div>
+                      ) : null}
+
+                      {campaign.targetNotes ? <div className="campaignDesc compact secondary">{campaign.targetNotes}</div> : null}
+                    </>
+                  ) : null}
+
+                  {campaign.tags.length > 0 ? (
+                    <div className="campaignMetaRow compact">
+                      {campaign.tags.slice(0, 5).map((tag) => (
+                        <span key={`${campaign.id}-${tag}`} className={`campaignMetaChip ${isResearch ? "gold" : ""}`}>{tag}</span>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  <div className="campaignActionRow compact">
+                    {locked ? (
+                      <button className="primaryBtn" type="button" onClick={handleUpgrade} disabled={busyCheckout}>
+                        {busyCheckout ? "Opening Stripe…" : "Upgrade"}
+                      </button>
+                    ) : joined ? (
+                      <button
+                        className="ghostBtn"
+                        type="button"
+                        onClick={() => handleLeaveCampaign(campaign)}
+                        disabled={campaignActionBusy === `leave-${campaign.id}` || !campaignMembershipsEnabled}
+                      >
+                        {campaignActionBusy === `leave-${campaign.id}` ? "Leaving…" : isResearch ? "Leave assignment" : "Leave campaign"}
+                      </button>
+                    ) : (
+                      <button
+                        className="primaryBtn"
+                        type="button"
+                        onClick={() => handleJoinCampaign(campaign)}
+                        disabled={campaignActionBusy === `join-${campaign.id}` || !campaignMembershipsEnabled || isFull}
+                      >
+                        {campaignActionBusy === `join-${campaign.id}` ? "Joining…" : isResearch ? (isFull ? "Campaign Full" : "Join Research") : "Join campaign"}
+                      </button>
+                    )}
+
+                    {(!locked && teamsEnabled && teams.length > 0 && isResearch && isPro) ? (
+                      <select
+                        className="campaignAssignSelect"
+                        defaultValue=""
+                        onChange={(e) => {
+                          const teamId = e.target.value;
+                          if (teamId) {
+                            handleJoinCampaign(campaign, teamId);
+                            e.currentTarget.value = "";
+                          }
+                        }}
+                        disabled={isFull && !joined}
+                      >
+                        <option value="">Assign team…</option>
+                        {teams.map((team) => (
+                          <option key={`${campaign.id}-${team.id}`} value={team.id}>{team.name}</option>
+                        ))}
+                      </select>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="campaignSectionHeader">
+          <div>
             <div className="sectionKicker">TEAM CONTROL</div>
             <h2 className="sectionTitle">Create, invite, and coordinate teams</h2>
             <p className="sectionHint">
@@ -2225,179 +2398,6 @@ export default function Collective() {
             </div>
           </>
         )}
-      </section>
-
-      <section className="panel">
-        <div className="campaignSectionHeader">
-          <div>
-            <div className="sectionKicker">CAMPAIGN BOARD</div>
-            <h2 className="sectionTitle">Daily, weekly, global, and collective campaigns at a glance</h2>
-            <p className="sectionHint">
-              The board below keeps every live campaign in a denser card layout so all seven campaigns can be scanned
-              quickly without losing join, leave, team assignment, slot, or upgrade actions.
-            </p>
-          </div>
-          <span className="statusBadge">{campaignLoading ? "Syncing…" : `${campaignBoard.length} visible`}</span>
-        </div>
-
-        <div className="campaignBoardGrid">
-          {campaignBoard.length === 0 ? (
-            <div className="campaignCard campaignBoardCard emptyCampaignCard">
-              <div className="campaignTitle">No campaigns available</div>
-              <div className="campaignDesc">No active daily, weekly, global, or research campaigns were returned from the database.</div>
-            </div>
-          ) : (
-            campaignBoard.map((campaign) => {
-              const membership = myCampaignMemberships[campaign.id] ?? null;
-              const joined = Boolean(membership);
-              const tone = cadenceTone(campaign.cadence);
-              const isResearch = campaign.campaignClass === "research_collective" || campaign.accessTier === "research_collective";
-              const filledSlots = slotCounts[campaign.id] ?? 0;
-              const slotCapacity = campaign.slotCapacity ?? 0;
-              const slotsRemaining = Math.max(0, slotCapacity - filledSlots);
-              const isFull =
-                campaign.isLimitedEntry &&
-                campaign.slotCapacity != null &&
-                filledSlots >= campaign.slotCapacity &&
-                !joined;
-              const locked = isResearch && !isPro;
-              const targetLabel = isResearch ? getCampaignTargetLabel(campaign) : campaign.targetName ?? "Open target";
-
-              return (
-                <div
-                  key={campaign.id}
-                  className={`campaignCard campaignBoardCard ${isResearch ? "premium" : ""} ${locked ? "locked" : ""}`}
-                >
-                  <div className="campaignBoardTop">
-                    <div className="campaignBoardHeaderText">
-                      <div className="campaignTitle compact">{campaign.title}</div>
-                      <div className="campaignDesc compact">{campaign.description}</div>
-                    </div>
-
-                    <div className="campaignMetaRow compact">
-                      <span className={`campaignMetaChip ${tone === "cyan" ? "toneCyan" : tone === "violet" ? "toneViolet" : "toneAmber"}`}>
-                        {campaign.cadence}
-                      </span>
-                      <span className={`campaignMetaChip ${isResearch ? "gold" : ""}`}>
-                        {isResearch ? "RESEARCH" : "PUBLIC"}
-                      </span>
-                      {isResearch ? (
-                        locked ? (
-                          <span className="campaignMetaChip locked">SUBSCRIBER ONLY</span>
-                        ) : isFull ? (
-                          <span className="campaignMetaChip full">FULL</span>
-                        ) : (
-                          <span className="campaignMetaChip gold">{slotCapacity > 0 ? `${slotsRemaining} OPEN` : "LIMITED ENTRY"}</span>
-                        )
-                      ) : (
-                        <span className="campaignMetaChip">{formatEndsIn(campaign.endAt)}</span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="campaignBoardStats">
-                    <div className="campaignMiniStat">
-                      <div className="campaignStatLabel">Target</div>
-                      <div className="campaignStatValue">{targetLabel}</div>
-                    </div>
-                    <div className="campaignMiniStat">
-                      <div className="campaignStatLabel">{isResearch ? "Window" : "Availability"}</div>
-                      <div className="campaignStatValue">
-                        {isResearch ? formatDateRange(campaign.startAt, campaign.endAt) : campaign.cadence === "GLOBAL" ? "Community objective" : "Open access"}
-                      </div>
-                    </div>
-                    <div className="campaignMiniStat">
-                      <div className="campaignStatLabel">{isResearch ? "Slots" : "Window"}</div>
-                      <div className="campaignStatValue">
-                        {isResearch ? (campaign.slotCapacity != null ? `${filledSlots}/${campaign.slotCapacity} filled` : "Flexible") : formatDateRange(campaign.startAt, campaign.endAt)}
-                      </div>
-                    </div>
-                    <div className="campaignMiniStat">
-                      <div className="campaignStatLabel">{isResearch ? "Equipment" : "Cadence"}</div>
-                      <div className="campaignStatValue">
-                        {isResearch ? campaign.recommendedEquipment ?? "Open instrumentation" : campaign.cadence}
-                      </div>
-                    </div>
-                  </div>
-
-                  {isResearch ? (
-                    <>
-                      {campaign.targetName ? (
-                        <div className="campaignMetaRow compact">
-                          {getCampaignTargetMeta(campaign) ? (
-                            <span className="campaignMetaChip gold">{getCampaignTargetMeta(campaign)}</span>
-                          ) : null}
-                          {campaign.targetRa && campaign.targetDec ? (
-                            <span className="campaignMetaChip gold">{campaign.targetRa} · {campaign.targetDec}</span>
-                          ) : null}
-                          {campaign.targetDifficulty ? (
-                            <span className="campaignMetaChip gold">{campaign.targetDifficulty.toUpperCase()}</span>
-                          ) : null}
-                        </div>
-                      ) : null}
-
-                      {campaign.targetNotes ? <div className="campaignDesc compact secondary">{campaign.targetNotes}</div> : null}
-                    </>
-                  ) : null}
-
-                  {campaign.tags.length > 0 ? (
-                    <div className="campaignMetaRow compact">
-                      {campaign.tags.slice(0, 5).map((tag) => (
-                        <span key={`${campaign.id}-${tag}`} className={`campaignMetaChip ${isResearch ? "gold" : ""}`}>{tag}</span>
-                      ))}
-                    </div>
-                  ) : null}
-
-                  <div className="campaignActionRow compact">
-                    {locked ? (
-                      <button className="primaryBtn" type="button" onClick={handleUpgrade} disabled={busyCheckout}>
-                        {busyCheckout ? "Opening Stripe…" : "Upgrade"}
-                      </button>
-                    ) : joined ? (
-                      <button
-                        className="ghostBtn"
-                        type="button"
-                        onClick={() => handleLeaveCampaign(campaign)}
-                        disabled={campaignActionBusy === `leave-${campaign.id}` || !campaignMembershipsEnabled}
-                      >
-                        {campaignActionBusy === `leave-${campaign.id}` ? "Leaving…" : isResearch ? "Leave assignment" : "Leave campaign"}
-                      </button>
-                    ) : (
-                      <button
-                        className="primaryBtn"
-                        type="button"
-                        onClick={() => handleJoinCampaign(campaign)}
-                        disabled={campaignActionBusy === `join-${campaign.id}` || !campaignMembershipsEnabled || isFull}
-                      >
-                        {campaignActionBusy === `join-${campaign.id}` ? "Joining…" : isResearch ? (isFull ? "Campaign Full" : "Join Research") : "Join campaign"}
-                      </button>
-                    )}
-
-                    {(!locked && teamsEnabled && teams.length > 0 && isResearch && isPro) ? (
-                      <select
-                        className="campaignAssignSelect"
-                        defaultValue=""
-                        onChange={(e) => {
-                          const teamId = e.target.value;
-                          if (teamId) {
-                            handleJoinCampaign(campaign, teamId);
-                            e.currentTarget.value = "";
-                          }
-                        }}
-                        disabled={isFull && !joined}
-                      >
-                        <option value="">Assign team…</option>
-                        {teams.map((team) => (
-                          <option key={`${campaign.id}-${team.id}`} value={team.id}>{team.name}</option>
-                        ))}
-                      </select>
-                    ) : null}
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
       </section>
     </div>
   );
