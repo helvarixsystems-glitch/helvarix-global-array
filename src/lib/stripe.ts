@@ -47,10 +47,27 @@ export async function startCheckout(priceId: string) {
 }
 
 export async function openCustomerPortal() {
-  const res = await fetch("/api/stripe/portal", { method: "POST" });
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session?.user) {
+    throw new Error("You must be signed in before opening the billing portal.");
+  }
+
+  const res = await fetch("/api/stripe/portal", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      email: session.user.email,
+      userId: session.user.id,
+    }),
+  });
+
   if (!res.ok) {
     throw new Error(await res.text());
   }
+
   const { url } = await res.json();
   if (!url) throw new Error("Portal URL was not returned.");
   window.location.href = url;
