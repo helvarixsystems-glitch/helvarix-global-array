@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
+import { useDeviceProfile } from "../hooks/useDeviceProfile";
 
 type CampaignCadence = "DAILY" | "WEEKLY" | "GLOBAL" | "RESEARCH";
 
@@ -391,6 +392,7 @@ function isResearchCampaign(campaign: HomeCampaignCard) {
 
 export default function Home() {
   const navigate = useNavigate();
+  const device = useDeviceProfile("home");
 
   const [loading, setLoading] = useState(true);
   const [sessionUserId, setSessionUserId] = useState<string | null>(null);
@@ -605,8 +607,8 @@ export default function Home() {
     [campaignCards]
   );
 
-  return (
-    <div className="homePage">
+    return (
+    <div className={`homePage device-${device.deviceClass}`}>
       <style>{`
         :root{--home-bg:#070b14;--home-panel:rgba(10,14,26,.76);--home-panel-2:rgba(8,12,22,.52);--home-stroke:rgba(255,255,255,.08);--home-text:rgba(255,255,255,.94);--home-muted:rgba(255,255,255,.64);--home-dim:rgba(255,255,255,.42);--home-cyan:#38f2ff;--home-violet:#9d7cff;--home-amber:#ffcd57;--home-red:#ff6b7d;}
         .homePage{min-height:100vh;color:var(--home-text);background:radial-gradient(900px 540px at 8% -10%, rgba(56,242,255,.12), transparent 55%),radial-gradient(900px 540px at 100% 0%, rgba(157,124,255,.16), transparent 50%),linear-gradient(180deg, #040711 0%, #070b14 40%, #050812 100%);padding:26px 18px 110px;box-sizing:border-box;}
