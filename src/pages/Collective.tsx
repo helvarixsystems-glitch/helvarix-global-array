@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { openCustomerPortal } from "../lib/stripe";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
-
+import { useDeviceProfile } from "../hooks/useDeviceProfile";
 type SessionUser = {
   id: string;
   email: string | null;
@@ -518,6 +518,8 @@ async function fetchWeather(coords: Coordinates): Promise<WeatherSnapshot> {
 }
 
 export default function Collective() {
+  const navigate = useNavigate();
+  const device = useDeviceProfile("collective");
   const [loading, setLoading] = useState(true);
   const [busyCheckout, setBusyCheckout] = useState(false);
   const [busyPortal, setBusyPortal] = useState(false);
@@ -1801,9 +1803,9 @@ export default function Collective() {
     })),
   ];
 
-  if (loading) {
+   if (loading) {
     return (
-      <div className="pageStack collectivePage">
+      <div className={`pageStack collectivePage device-${device.deviceClass}`}>
         <style>{styles}</style>
         <div className="panel loadingPanel">
           <div className="sectionKicker">HELVARIX RESEARCH COLLECTIVE</div>
@@ -1814,8 +1816,8 @@ export default function Collective() {
     );
   }
 
-  return (
-    <div className="pageStack collectivePage">
+   return (
+    <div className={`pageStack collectivePage device-${device.deviceClass}`}>
       <style>{styles}</style>
 
       <section className="panel heroPanel collectiveHero">
