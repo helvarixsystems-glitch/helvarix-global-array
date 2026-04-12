@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
-
+import { useDeviceProfile } from "../hooks/useDeviceProfile";
 type ObservationRecord = {
   id: string;
   user_id: string;
@@ -286,6 +286,7 @@ function looksLikeMissingRelation(error: any) {
 }
 
 export default function Telemetry() {
+  const device = useDeviceProfile("telemetry");
   const [items, setItems] = useState<FeedItem[]>([]);
   const [sessionUserId, setSessionUserId] = useState<string | null>(null);
   const [filter, setFilter] = useState<FeedFilter>("all");
@@ -696,8 +697,8 @@ export default function Telemetry() {
     };
   }, [items, sessionUserId]);
 
-  return (
-    <div className="pageStack">
+    return (
+    <div className={`pageStack device-${device.deviceClass}`}>
       <section className="heroPanel telemetryHero">
         <div className="telemetryHeroTop">
           <div>
