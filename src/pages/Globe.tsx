@@ -1,7 +1,6 @@
-
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
-
+import { useDeviceProfile } from "../hooks/useDeviceProfile";
 declare global {
   interface Window {
     THREE?: any;
@@ -190,6 +189,7 @@ async function geocodePlace(query: string): Promise<Coordinates | null> {
 
 export default function Globe() {
   const mountRef = useRef<HTMLDivElement | null>(null);
+  const device = useDeviceProfile("globe");
 
   const [nodes, setNodes] = useState<SafeNode[]>([]);
   const [focusNode, setFocusNode] = useState<FocusNode>(null);
@@ -679,7 +679,7 @@ export default function Globe() {
   }, [nodes, focusNode]);
 
   return (
-    <div className="pageStack">
+   <div className={`pageStack device-${device.deviceClass}`}>
       <style>{`
         .arrayGlobeShell{
           width:100%;
