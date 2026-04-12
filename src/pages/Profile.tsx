@@ -1,7 +1,7 @@
-
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { openCustomerPortal } from "../lib/stripe";
 import { supabase } from "../lib/supabaseClient";
+import { useDeviceProfile } from "../hooks/useDeviceProfile";
 
 type ProfileRow = {
   id?: string;
@@ -407,6 +407,7 @@ function getReadableError(err: unknown) {
 }
 
 export default function Profile() {
+  const device = useDeviceProfile("profile");
   const [form, setForm] = useState<FormState>(INITIAL_FORM);
   const [stats, setStats] = useState<ProfileStats>({
     observations: 0,
@@ -895,7 +896,7 @@ export default function Profile() {
   }, [form.city, geoStatus, geoLabel]);
 
   return (
-    <div className={`pageStack profilePage ${accentClass} ${isPro ? "profilePro" : ""}`}>
+    div className={`pageStack profilePage ${accentClass} ${isPro ? "profilePro" : ""} device-${device.deviceClass}`}>
       <section className="heroPanel profileHero">
         <div
           className="profileHeroBanner"
