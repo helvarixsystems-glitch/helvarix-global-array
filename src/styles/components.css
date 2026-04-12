@@ -408,42 +408,43 @@ body[data-device="mobile"] .navWrap {
     rgba(4, 8, 19, 0.82) 30%,
     rgba(4, 8, 19, 0.96)
   );
-  pointer-events: none;
 }
 
 body[data-device="mobile"] .navBar {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
-  overflow-x: auto;
-  overflow-y: hidden;
   padding: 4px;
   border: 1px solid rgba(255,255,255,0.08);
   border-radius: 18px;
   background: rgba(10, 16, 31, 0.82);
   backdrop-filter: blur(14px);
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-  pointer-events: auto;
-}
-
-body[data-device="mobile"] .navBar::-webkit-scrollbar {
-  display: none;
+  max-width: 100%;
+  margin: 0 auto;
 }
 
 body[data-device="mobile"] .navItem {
-  flex: 0 0 auto;
-  min-width: 78px;
-  min-height: 58px;
-  padding: 8px 10px;
+  min-width: 0;
+  min-height: 56px;
+  padding: 8px 4px;
   display: grid;
   justify-items: center;
   align-content: center;
   gap: 4px;
   font-size: 10px;
+  text-align: center;
+}
+
+body[data-device="mobile"] .navItem span:last-child {
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 body[data-device="mobile"] .navIcon {
-  font-size: 15px;
+  font-size: 14px;
   line-height: 1;
 }
 
