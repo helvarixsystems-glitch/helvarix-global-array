@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
+import { useDeviceProfile } from "../hooks/useDeviceProfile";
 
 type LeaderboardTab = "oi" | "ci" | "ranks";
 type CampaignCadence = "DAILY" | "WEEKLY" | "GLOBAL" | "RESEARCH" | "COLLECTIVE" | "UNKNOWN";
@@ -317,6 +318,7 @@ function rankUsers(
 }
 
 export default function Leaderboard() {
+  const device = useDeviceProfile("leaderboard");
   const [tab, setTab] = useState<LeaderboardTab>("oi");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -489,7 +491,7 @@ export default function Leaderboard() {
   const myCiRank = ciRanked.find((row) => row.userId === sessionUserId)?.rank ?? null;
 
   return (
-    <div className="pageStack">
+    <div className={`pageStack device-${device.deviceClass}`}>
       <section className="heroPanel leaderboardHero">
         <div className="leaderboardHeroTop">
           <div>
