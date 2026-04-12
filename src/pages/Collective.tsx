@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { useDeviceProfile } from "../hooks/useDeviceProfile";
+import { openCustomerPortal } from "../lib/stripe";
 type SessionUser = {
   id: string;
   email: string | null;
