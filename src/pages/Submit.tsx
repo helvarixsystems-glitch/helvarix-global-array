@@ -2,6 +2,7 @@ import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { canUserSeeCampaign } from "../lib/campaignAccess";
+import { useDeviceProfile } from "../hooks/useDeviceProfile";
 
 type SubmissionMode = "visual" | "radio";
 type CampaignCadence = "DAILY" | "WEEKLY" | "GLOBAL" | "RESEARCH" | "COLLECTIVE" | "UNKNOWN";
@@ -201,6 +202,7 @@ async function insertObservationWithFallback(payload: Record<string, unknown>) {
 
 export default function Submit() {
   const navigate = useNavigate();
+  const device = useDeviceProfile("submit");
 
   const [mode, setMode] = useState<SubmissionMode>("visual");
   const [form, setForm] = useState<FormState>(INITIAL_FORM);
@@ -431,7 +433,7 @@ export default function Submit() {
   }
 
   return (
-    <div className="pageStack">
+     <div className={`pageStack device-${device.deviceClass}`}>
       <section className="heroPanel submitHero">
         <div className="submitHeroTop">
           <div>
