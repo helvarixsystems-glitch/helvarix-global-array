@@ -331,3 +331,167 @@ textarea.input:focus {
   .dataRow { flex-direction: column; }
   .navBar { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
+@media (max-width: 640px) {
+  .shell { padding: 18px 14px 124px; }
+  .topbar,
+  .sectionHeader,
+  .buttonRow,
+  .inputWithAction { grid-template-columns: 1fr; display: grid; }
+  .dataRow { flex-direction: column; }
+  .navBar { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+/* Device-aware responsive layer */
+body[data-device="mobile"] {
+  overflow-x: hidden;
+}
+
+body[data-device="mobile"] .shell,
+body[data-device="tablet"] .shell {
+  padding: 16px 12px 104px;
+}
+
+body[data-device="mobile"] .topbar,
+body[data-device="tablet"] .topbar {
+  flex-direction: column;
+  align-items: stretch;
+  margin-bottom: 18px;
+}
+
+body[data-device="mobile"] .topbarActions,
+body[data-device="tablet"] .topbarActions {
+  width: 100%;
+  justify-content: stretch;
+}
+
+body[data-device="mobile"] .topbarActions > *,
+body[data-device="tablet"] .topbarActions > * {
+  flex: 1 1 auto;
+}
+
+body[data-device="mobile"] .brandSub {
+  max-width: none;
+  font-size: 13px;
+}
+
+body[data-device="mobile"] .navWrap {
+  padding: 8px 8px calc(12px + env(safe-area-inset-bottom));
+}
+
+body[data-device="mobile"] .navBar {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+body[data-device="mobile"] .navItem {
+  min-height: 58px;
+  padding: 8px 4px;
+  font-size: 10px;
+}
+
+body[data-device="mobile"] .heroPanel,
+body[data-device="mobile"] .panel,
+body[data-device="mobile"] .stateCard {
+  padding: 16px;
+}
+
+body[data-device="mobile"] .pageTitle {
+  font-size: clamp(24px, 7vw, 32px);
+}
+
+body[data-device="mobile"] .sectionTitle {
+  font-size: 20px;
+}
+
+body[data-device="mobile"] .gridTwo,
+body[data-device="mobile"] .gridFour,
+body[data-device="mobile"] .threeUp,
+body[data-device="mobile"] .formGrid,
+body[data-device="mobile"] .tabRow,
+body[data-device="mobile"] .threeTabs,
+body[data-device="mobile"] .inputWithAction,
+body[data-device="mobile"] .authPage {
+  grid-template-columns: 1fr !important;
+}
+
+body[data-device="mobile"] .spanTwo {
+  grid-column: span 1;
+}
+
+body[data-device="mobile"] .buttonRow,
+body[data-device="mobile"] .sectionHeader {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+body[data-device="mobile"] .buttonRow > *,
+body[data-device="mobile"] .sectionHeader > .ghostBtn,
+body[data-device="mobile"] .sectionHeader > .primaryBtn {
+  width: 100%;
+}
+
+body[data-device="mobile"] .profilePage .profileHeroContent,
+body[data-device="mobile"] .profilePage .profileHeroStats,
+body[data-device="mobile"] .profilePage .profileMainGrid,
+body[data-device="mobile"] .profilePage .previewMetaGrid,
+body[data-device="mobile"] .profilePage .profileStatsGrid {
+  grid-template-columns: 1fr !important;
+}
+
+body[data-device="mobile"] .profilePage .profileIdentity,
+body[data-device="mobile"] .profilePage .profileTitleRow,
+body[data-device="mobile"] .profilePage .profileMetaRow {
+  flex-direction: column !important;
+  align-items: stretch !important;
+}
+
+body[data-device="mobile"] .profilePage .profileAvatar {
+  width: 88px;
+  height: 88px;
+}
+
+body[data-device="mobile"] .profilePage .profilePreviewTop {
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+body[data-device="mobile"] .profilePage .profilePreviewAvatar {
+  width: 64px;
+  height: 64px;
+}
+
+body[data-device="mobile"] .profilePage .profileActionCard {
+  padding: 16px;
+}
+
+body[data-device="mobile"] .profilePage .profileActionTitle {
+  font-size: 20px;
+}
+
+body[data-device="mobile"] .profilePage .smallMetric {
+  font-size: 16px;
+}
+
+body[data-device="mobile"] .authPageV3,
+body[data-device="mobile"] .authPage {
+  grid-template-columns: 1fr !important;
+}
+
+body[data-device="mobile"] .authCard {
+  justify-self: stretch;
+  max-width: none;
+}
+
+body[data-device="mobile"] .homePage,
+body[data-device="mobile"] .collectivePage,
+body[data-device="mobile"] .pageStack {
+  min-width: 0;
+}
+
+body[data-touch="true"] button,
+body[data-touch="true"] a,
+body[data-touch="true"] select,
+body[data-touch="true"] input[type="button"],
+body[data-touch="true"] input[type="submit"] {
+  touch-action: manipulation;
+}
