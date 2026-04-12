@@ -354,9 +354,22 @@ function buildLocalConditions(lat: number | null, lon: number | null, weather: W
 }
 
 function normalizeCampaign(row: CampaignRow): HomeCampaignCard {
+  const cadenceRaw = String(row.cadence ?? "GLOBAL").trim().toUpperCase();
+
+  const cadence: CampaignCadence =
+    cadenceRaw === "DAILY"
+      ? "DAILY"
+      : cadenceRaw === "WEEKLY"
+      ? "WEEKLY"
+      : cadenceRaw === "GLOBAL"
+      ? "GLOBAL"
+      : cadenceRaw === "RESEARCH"
+      ? "RESEARCH"
+      : "GLOBAL";
+
   return {
     id: row.id,
-    cadence: (row.cadence ?? "GLOBAL") as CampaignCadence,
+    cadence,
     title: row.title?.trim() || "Untitled Campaign",
     description: row.description?.trim() || "Active campaign.",
     startAt: row.start_at ?? null,
@@ -364,9 +377,9 @@ function normalizeCampaign(row: CampaignRow): HomeCampaignCard {
     progress: 0,
     participantCount: 0,
     targetType: row.target_type ?? null,
-    tags: row.tags ?? [],
-    accessTier: String(row.access_tier ?? "free").toLowerCase(),
-    campaignClass: String(row.campaign_class ?? "public").toLowerCase(),
+    tags: Array.isArray(row.tags) ? row.tags : [],
+    accessTier: String(row.access_tier ?? "free").trim().toLowerCase(),
+    campaignClass: String(row.campaign_class ?? "public").trim().toLowerCase(),
   };
 }
 
@@ -496,10 +509,10 @@ export default function Home() {
     setCampaignError(null);
     try {
       const { data, error } = await supabase
-        .from("campaigns")
-        .select("id,cadence,title,description,start_at,end_at,goal_user,goal_global,tags,is_active,target_type,access_tier,campaign_class")
-        .eq("is_active", true)
-        .order("start_at", { ascending: false });
+  .from("campaigns")
+  .select("id,cadence,title,description,start_at,end_at,tags,is_active,target_type,access_tier,campaign_class")
+  .eq("is_active", true)
+  .order("start_at", { ascending: false });
 
       if (error) {
         console.warn("Campaign table query failed:", error.message);
