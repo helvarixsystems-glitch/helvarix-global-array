@@ -896,7 +896,7 @@ export default function Profile() {
   }, [form.city, geoStatus, geoLabel]);
 
   return (
-    div className={`pageStack profilePage ${accentClass} ${isPro ? "profilePro" : ""} device-${device.deviceClass}`}>
+    <div className={`pageStack profilePage ${accentClass} ${isPro ? "profilePro" : ""} device-${device.deviceClass}`}>
       <section className="heroPanel profileHero">
         <div
           className="profileHeroBanner"
