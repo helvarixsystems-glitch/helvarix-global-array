@@ -348,45 +348,103 @@ body[data-device="mobile"] {
 
 body[data-device="mobile"] .shell,
 body[data-device="tablet"] .shell {
-  padding: 16px 12px 104px;
+  padding: 14px 12px 92px;
 }
 
 body[data-device="mobile"] .topbar,
 body[data-device="tablet"] .topbar {
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
   align-items: stretch;
-  margin-bottom: 18px;
+  margin-bottom: 14px;
 }
 
 body[data-device="mobile"] .topbarActions,
 body[data-device="tablet"] .topbarActions {
   width: 100%;
-  justify-content: stretch;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: stretch;
 }
 
 body[data-device="mobile"] .topbarActions > *,
 body[data-device="tablet"] .topbarActions > * {
-  flex: 1 1 auto;
+  min-width: 0;
 }
 
 body[data-device="mobile"] .brandSub {
   max-width: none;
-  font-size: 13px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+body[data-device="mobile"] .statusPill,
+body[data-device="tablet"] .statusPill {
+  min-width: 0;
+  padding: 10px 12px;
+  overflow: hidden;
+}
+
+body[data-device="mobile"] .statusPill span:last-child,
+body[data-device="tablet"] .statusPill span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body[data-device="mobile"] .compactBtn,
+body[data-device="tablet"] .compactBtn {
+  padding: 10px 12px;
+  white-space: nowrap;
 }
 
 body[data-device="mobile"] .navWrap {
-  padding: 8px 8px calc(12px + env(safe-area-inset-bottom));
+  padding: 8px 8px calc(10px + env(safe-area-inset-bottom));
+  background: linear-gradient(
+    180deg,
+    rgba(4, 8, 19, 0),
+    rgba(4, 8, 19, 0.82) 30%,
+    rgba(4, 8, 19, 0.96)
+  );
+  pointer-events: none;
 }
 
 body[data-device="mobile"] .navBar {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  display: flex;
   gap: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 4px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 18px;
+  background: rgba(10, 16, 31, 0.82);
+  backdrop-filter: blur(14px);
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  pointer-events: auto;
+}
+
+body[data-device="mobile"] .navBar::-webkit-scrollbar {
+  display: none;
 }
 
 body[data-device="mobile"] .navItem {
+  flex: 0 0 auto;
+  min-width: 78px;
   min-height: 58px;
-  padding: 8px 4px;
+  padding: 8px 10px;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 4px;
   font-size: 10px;
+}
+
+body[data-device="mobile"] .navIcon {
+  font-size: 15px;
+  line-height: 1;
 }
 
 body[data-device="mobile"] .heroPanel,
