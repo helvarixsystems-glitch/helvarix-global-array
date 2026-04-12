@@ -1,10 +1,12 @@
 import { useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { signIn, signUp } from "../lib/auth";
+import { useDeviceProfile } from "../hooks/useDeviceProfile";
 
 export function Auth() {
   const navigate = useNavigate();
   const location = useLocation() as { state?: { from?: string } };
+  const device = useDeviceProfile("auth");
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -48,7 +50,7 @@ export function Auth() {
   }
 
   return (
-    <div className="authPageV3">
+    <div className={`authPageV3 device-${device.deviceClass}`}>
       <style>{`
         :root{
           --auth-bg:#050914;
