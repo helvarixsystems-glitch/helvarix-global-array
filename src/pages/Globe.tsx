@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useDeviceProfile } from "../hooks/useDeviceProfile";
+
 declare global {
   interface Window {
     THREE?: any;
@@ -190,6 +191,7 @@ async function geocodePlace(query: string): Promise<Coordinates | null> {
 export default function Globe() {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const device = useDeviceProfile("globe");
+  const isMobile = device.deviceClass === "mobile";
 
   const [nodes, setNodes] = useState<SafeNode[]>([]);
   const [focusNode, setFocusNode] = useState<FocusNode>(null);
@@ -241,7 +243,7 @@ export default function Globe() {
                     source = "geocoded";
                   }
                 } catch {
-                  // Skip geocoding failures. The node just will not render.
+                  // Ignore geocoding failures.
                 }
               }
             }
@@ -270,6 +272,7 @@ export default function Globe() {
         const currentNode =
           safeNodes.find((node) => node.isCurrentUser) ??
           (safeNodes.length > 0 ? safeNodes[0] : null);
+
         setNodes(safeNodes);
         setFocusNode(currentNode ? { lat: currentNode.lat, lon: currentNode.lon } : null);
       } catch (loadError: any) {
@@ -328,7 +331,7 @@ export default function Globe() {
         scene.fog = new THREE.FogExp2(0x020814, 0.013);
 
         const width = container.clientWidth || 1000;
-        const height = container.clientHeight || 520;
+        const height = container.clientHeight || (isMobile ? 620 : 640);
 
         camera = new THREE.PerspectiveCamera(34, width / height, 0.1, 1000);
         camera.position.set(0, 0.18, 11.5);
@@ -352,8 +355,8 @@ export default function Globe() {
         controls.enableZoom = true;
         controls.enableRotate = true;
         controls.autoRotate = false;
-        controls.rotateSpeed = 0.62;
-        controls.zoomSpeed = 0.82;
+        controls.rotateSpeed = isMobile ? 0.52 : 0.62;
+        controls.zoomSpeed = isMobile ? 0.72 : 0.82;
         controls.minDistance = 7.2;
         controls.maxDistance = 17;
         controls.target.set(0, 0, 0);
@@ -434,7 +437,7 @@ export default function Globe() {
         const globeGroup = new THREE.Group();
         scene.add(globeGroup);
 
-        const radius = 3.48;
+        const radius = isMobile ? 3.72 : 3.48;
 
         const textureLoader = new THREE.TextureLoader();
         textureLoader.setCrossOrigin("anonymous");
@@ -575,7 +578,7 @@ export default function Globe() {
 
         if (focusNode) {
           globeGroup.rotation.y = ((-focusNode.lon + 90) * Math.PI) / 180;
-          globeGroup.rotation.x = ((focusNode.lat || 0) * Math.PI) / 180 * 0.16;
+          globeGroup.rotation.x = (((focusNode.lat || 0) * Math.PI) / 180) * 0.16;
         } else {
           globeGroup.rotation.y = 0.72;
           globeGroup.rotation.x = 0.08;
@@ -599,7 +602,7 @@ export default function Globe() {
         resizeHandler = () => {
           if (!container || !camera || !renderer) return;
           const nextWidth = container.clientWidth || 1000;
-          const nextHeight = container.clientHeight || 520;
+          const nextHeight = container.clientHeight || (isMobile ? 620 : 640);
           camera.aspect = nextWidth / nextHeight;
           camera.updateProjectionMatrix();
           renderer.setSize(nextWidth, nextHeight);
@@ -635,10 +638,7 @@ export default function Globe() {
                 if (material?.normalMap && typeof material.normalMap.dispose === "function") {
                   material.normalMap.dispose();
                 }
-                if (
-                  material?.specularMap &&
-                  typeof material.specularMap.dispose === "function"
-                ) {
+                if (material?.specularMap && typeof material.specularMap.dispose === "function") {
                   material.specularMap.dispose();
                 }
                 if (typeof material.dispose === "function") {
@@ -676,15 +676,19 @@ export default function Globe() {
         }
       }
     };
-  }, [nodes, focusNode]);
+  }, [nodes, focusNode, isMobile]);
 
   return (
-   <div className={`pageStack device-${device.deviceClass}`}>
+    <div className={`pageStack device-${device.deviceClass}`}>
       <style>{`
+        .arrayPageIntro{
+          margin-bottom: 10px;
+        }
+
         .arrayGlobeShell{
           width:100%;
-          min-height:520px;
-          border-radius:30px;
+          min-height:620px;
+          border-radius:28px;
           position:relative;
           overflow:hidden;
           background:
@@ -702,8 +706,8 @@ export default function Globe() {
 
         .arrayGlobeInner{
           position:absolute;
-          inset:28px;
-          border-radius:26px;
+          inset:22px;
+          border-radius:24px;
           overflow:hidden;
           background:
             radial-gradient(ellipse at 38% 24%, rgba(255,255,255,.06), transparent 16%),
@@ -728,39 +732,42 @@ export default function Globe() {
 
         .arrayGlobeHud{
           position:absolute;
-          left:22px;
-          top:22px;
+          left:16px;
+          top:16px;
           z-index:2;
           display:flex;
-          gap:10px;
+          gap:8px;
           flex-wrap:wrap;
           pointer-events:none;
+          max-width:calc(100% - 32px);
         }
 
         .arrayGlobeLegend{
           display:inline-flex;
           align-items:center;
-          gap:10px;
-          min-height:38px;
-          padding:0 14px;
+          gap:8px;
+          min-height:34px;
+          padding:0 12px;
           border-radius:999px;
-          background:rgba(7,14,28,.66);
+          background:rgba(7,14,28,.60);
           border:1px solid rgba(255,255,255,.06);
           color:rgba(255,255,255,.86);
-          font-size:12px;
-          font-weight:600;
+          font-size:11px;
+          font-weight:700;
           letter-spacing:.08em;
           text-transform:uppercase;
-          backdrop-filter: blur(12px);
+          backdrop-filter: blur(10px);
           box-shadow: inset 0 0 24px rgba(255,255,255,.02);
+          white-space:nowrap;
         }
 
         .arrayLegendDot{
-          width:11px;
-          height:11px;
+          width:10px;
+          height:10px;
           border-radius:50%;
           display:inline-block;
           box-shadow:0 0 18px currentColor;
+          flex:0 0 auto;
         }
 
         .arrayLegendDot.blue{
@@ -775,24 +782,24 @@ export default function Globe() {
 
         .arrayGlobeFooter{
           position:absolute;
-          right:20px;
-          bottom:20px;
+          right:16px;
+          bottom:16px;
           z-index:2;
-          padding:14px 16px;
-          border-radius:18px;
-          background:rgba(7,14,28,.72);
+          padding:12px 14px;
+          border-radius:16px;
+          background:rgba(7,14,28,.64);
           border:1px solid rgba(255,255,255,.06);
           color:rgba(255,255,255,.76);
-          font-size:12px;
-          line-height:1.5;
-          max-width:440px;
-          backdrop-filter: blur(12px);
+          font-size:11px;
+          line-height:1.45;
+          max-width:360px;
+          backdrop-filter: blur(10px);
           pointer-events:none;
           box-shadow: inset 0 0 26px rgba(255,255,255,.02);
         }
 
         .pageTitle{
-          margin:0 0 8px 0;
+          margin:0 0 6px 0;
         }
 
         .pageText{
@@ -800,7 +807,7 @@ export default function Globe() {
         }
 
         .heroPanel{
-          margin-bottom:14px;
+          margin-bottom:12px;
         }
 
         .eyebrow{
@@ -808,43 +815,165 @@ export default function Globe() {
           letter-spacing:.3em;
           text-transform:uppercase;
           color:rgba(83, 221, 255, .88);
-          margin-bottom:10px;
+          margin-bottom:8px;
         }
 
-        @media (max-width: 1000px){
+        .arrayMetaRow{
+          display:flex;
+          gap:10px;
+          flex-wrap:wrap;
+          margin-top:10px;
+        }
+
+        .arrayMetaChip{
+          display:inline-flex;
+          align-items:center;
+          min-height:28px;
+          padding:0 10px;
+          border-radius:999px;
+          font-size:11px;
+          letter-spacing:.08em;
+          text-transform:uppercase;
+          color:rgba(255,255,255,.84);
+          background:rgba(255,255,255,.04);
+          border:1px solid rgba(255,255,255,.06);
+        }
+
+        @media (max-width: 960px){
+          .arrayGlobeShell{
+            min-height:560px;
+          }
         }
 
         @media (max-width: 720px){
+          .heroPanel{
+            padding:16px;
+            margin-bottom:10px;
+          }
+
+          .eyebrow{
+            margin-bottom:6px;
+          }
+
+          .pageTitle{
+            font-size:clamp(26px, 8vw, 42px);
+            line-height:1.02;
+            margin-bottom:6px;
+          }
+
+          .pageText{
+            font-size:13px;
+            line-height:1.45;
+          }
+
+          .arrayMetaRow{
+            margin-top:8px;
+            gap:8px;
+          }
+
+          .arrayMetaChip{
+            min-height:26px;
+            padding:0 9px;
+            font-size:10px;
+          }
+
           .arrayGlobeShell{
-            min-height:430px;
+            min-height:620px;
+            border-radius:24px;
           }
 
           .arrayGlobeInner{
-            inset:16px;
+            inset:12px;
+            border-radius:20px;
+          }
+
+          .arrayGlobeHud{
+            left:12px;
+            top:12px;
+            gap:6px;
+            max-width:calc(100% - 24px);
+          }
+
+          .arrayGlobeLegend{
+            min-height:30px;
+            padding:0 10px;
+            font-size:10px;
+            gap:7px;
+          }
+
+          .arrayLegendDot{
+            width:9px;
+            height:9px;
           }
 
           .arrayGlobeFooter{
-            left:16px;
-            right:16px;
+            left:12px;
+            right:12px;
+            bottom:12px;
             max-width:none;
+            padding:10px 12px;
+            font-size:10px;
+            line-height:1.4;
+            border-radius:14px;
           }
         }
 
-        @media (max-width: 640px){
+        @media (max-width: 520px){
+          .heroPanel{
+            padding:14px;
+          }
+
+          .pageTitle{
+            font-size:clamp(22px, 9vw, 30px);
+          }
+
+          .pageText{
+            font-size:12px;
+          }
 
           .arrayGlobeShell{
-            min-height:390px;
+            min-height:640px;
+          }
+
+          .arrayGlobeInner{
+            inset:10px;
+          }
+
+          .arrayGlobeHud{
+            flex-direction:column;
+            align-items:flex-start;
+          }
+
+          .arrayGlobeLegend{
+            min-height:28px;
+            padding:0 9px;
+            font-size:9px;
+          }
+
+          .arrayGlobeFooter{
+            font-size:10px;
           }
         }
       `}</style>
 
-      <section className="heroPanel">
+      <section className="heroPanel arrayPageIntro">
         <div className="eyebrow">Network View</div>
-        <h1 className="pageTitle">Live nodes from actual profile data.</h1>
+        <h1 className="pageTitle">
+          {isMobile ? "Live nodes from profile data." : "Live nodes from actual profile data."}
+        </h1>
         <p className="pageText">
-          The globe now renders only real operator records from your Supabase profiles table, with
-          a denser deep-space background and a softer Milky Way-style star field behind the Earth.
+          {isMobile
+            ? "Real operator records from your profiles table, centered on your node when available."
+            : "The globe now renders only real operator records from your Supabase profiles table, with a denser deep-space background and a softer Milky Way-style star field behind the Earth."}
         </p>
+        <div className="arrayMetaRow">
+          <span className="arrayMetaChip">
+            {loadingNodes ? "Syncing nodes" : `${nodes.length} visible nodes`}
+          </span>
+          <span className="arrayMetaChip">
+            {sessionUserId ? "Centered on your node" : "Network overview"}
+          </span>
+        </div>
       </section>
 
       {error ? <div className="alert error">{error}</div> : null}
@@ -866,9 +995,8 @@ export default function Globe() {
             <div ref={mountRef} className="arrayGlobeCanvas" />
 
             <div className="arrayGlobeFooter">
-              Drag to rotate. Scroll to zoom. The globe still opens centered on your node when a
-              renderable location exists. Locations remain rounded and slightly offset so exact
-              addresses cannot be inferred from the map.
+              Drag to rotate. Scroll to zoom. Locations remain rounded and slightly offset so exact
+              addresses cannot be inferred.
             </div>
           </div>
         </div>
