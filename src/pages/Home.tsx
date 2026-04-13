@@ -242,11 +242,17 @@ function getWeatherSummary(code: number | null) {
   return "Variable";
 }
 
-function Chip({ children, tone = "neutral" }: { children: React.ReactNode; tone?: "cyan" | "violet" | "amber" | "neutral"; }) {
+function Chip({
+  children,
+  tone = "neutral",
+}: {
+  children: React.ReactNode;
+  tone?: "cyan" | "violet" | "amber" | "neutral";
+}) {
   return <span className={`chip ${tone}`}>{children}</span>;
 }
 
-function Progress({ value, tone = "cyan" }: { value: number; tone?: "cyan" | "violet" | "amber"; }) {
+function Progress({ value, tone = "cyan" }: { value: number; tone?: "cyan" | "violet" | "amber" }) {
   return (
     <div className="progressTrack">
       <div className={`progressFill ${tone}`} style={{ width: `${Math.round(clamp(value) * 100)}%` }} />
@@ -264,7 +270,17 @@ function StatCard({ label, value, hint }: { label: string; value: string; hint?:
   );
 }
 
-function TelemetryCard({ label, value, hint, compact = false }: { label: string; value: string; hint: string; compact?: boolean; }) {
+function TelemetryCard({
+  label,
+  value,
+  hint,
+  compact = false,
+}: {
+  label: string;
+  value: string;
+  hint: string;
+  compact?: boolean;
+}) {
   return (
     <div className={`telemetryCard ${compact ? "compact" : ""}`}>
       <div className="eyebrow">{label}</div>
@@ -334,9 +350,10 @@ function buildLocalConditions(lat: number | null, lon: number | null, weather: W
 
   const sunrise = weather?.sunriseIso ? new Date(weather.sunriseIso) : null;
   const sunset = weather?.sunsetIso ? new Date(weather.sunsetIso) : null;
-  const sunWindowLabel = sunrise && sunset
-    ? `${sunset.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} sunset • ${sunrise.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} sunrise`
-    : "Unavailable";
+  const sunWindowLabel =
+    sunrise && sunset
+      ? `${sunset.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} sunset • ${sunrise.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} sunrise`
+      : "Unavailable";
 
   return {
     localTime: now.toLocaleString(),
@@ -361,12 +378,12 @@ function normalizeCampaign(row: CampaignRow): HomeCampaignCard {
     cadenceRaw === "DAILY"
       ? "DAILY"
       : cadenceRaw === "WEEKLY"
-      ? "WEEKLY"
-      : cadenceRaw === "GLOBAL"
-      ? "GLOBAL"
-      : cadenceRaw === "RESEARCH"
-      ? "RESEARCH"
-      : "GLOBAL";
+        ? "WEEKLY"
+        : cadenceRaw === "GLOBAL"
+          ? "GLOBAL"
+          : cadenceRaw === "RESEARCH"
+            ? "RESEARCH"
+            : "GLOBAL";
 
   return {
     id: row.id,
@@ -385,9 +402,11 @@ function normalizeCampaign(row: CampaignRow): HomeCampaignCard {
 }
 
 function isResearchCampaign(campaign: HomeCampaignCard) {
-  return campaign.cadence === "RESEARCH" ||
+  return (
+    campaign.cadence === "RESEARCH" ||
     campaign.accessTier === "research_collective" ||
-    campaign.campaignClass === "research_collective";
+    campaign.campaignClass === "research_collective"
+  );
 }
 
 export default function Home() {
@@ -511,10 +530,10 @@ export default function Home() {
     setCampaignError(null);
     try {
       const { data, error } = await supabase
-  .from("campaigns")
-  .select("id,cadence,title,description,start_at,end_at,tags,is_active,target_type,access_tier,campaign_class")
-  .eq("is_active", true)
-  .order("start_at", { ascending: false });
+        .from("campaigns")
+        .select("id,cadence,title,description,start_at,end_at,tags,is_active,target_type,access_tier,campaign_class")
+        .eq("is_active", true)
+        .order("start_at", { ascending: false });
 
       if (error) {
         console.warn("Campaign table query failed:", error.message);
@@ -534,6 +553,7 @@ export default function Home() {
 
       const participantCounts: Record<string, number> = {};
       const uniqueEntries = new Set<string>();
+
       for (const row of ((membershipData as CampaignMembershipRow[] | null) ?? [])) {
         if (String(row.status ?? "active").toLowerCase() !== "active") continue;
         const dedupe = `${row.campaign_id}:${row.team_id ?? row.user_id ?? "unknown"}`;
@@ -542,10 +562,12 @@ export default function Home() {
         participantCounts[row.campaign_id] = (participantCounts[row.campaign_id] ?? 0) + 1;
       }
 
-      setCampaignCards(cards.map((card) => ({
-        ...card,
-        participantCount: participantCounts[card.id] ?? 0,
-      })));
+      setCampaignCards(
+        cards.map((card) => ({
+          ...card,
+          participantCount: participantCounts[card.id] ?? 0,
+        }))
+      );
     } catch (error) {
       console.warn("Campaign table query threw:", error);
       setCampaignCards([]);
@@ -607,46 +629,130 @@ export default function Home() {
     [campaignCards]
   );
 
-    return (
+  const isMobile = device.deviceClass === "mobile";
+
+  return (
     <div className={`homePage device-${device.deviceClass}`}>
       <style>{`
         :root{--home-bg:#070b14;--home-panel:rgba(10,14,26,.76);--home-panel-2:rgba(8,12,22,.52);--home-stroke:rgba(255,255,255,.08);--home-text:rgba(255,255,255,.94);--home-muted:rgba(255,255,255,.64);--home-dim:rgba(255,255,255,.42);--home-cyan:#38f2ff;--home-violet:#9d7cff;--home-amber:#ffcd57;--home-red:#ff6b7d;}
         .homePage{min-height:100vh;color:var(--home-text);background:radial-gradient(900px 540px at 8% -10%, rgba(56,242,255,.12), transparent 55%),radial-gradient(900px 540px at 100% 0%, rgba(157,124,255,.16), transparent 50%),linear-gradient(180deg, #040711 0%, #070b14 40%, #050812 100%);padding:26px 18px 110px;box-sizing:border-box;}
         .homeContainer{max-width:1180px;margin:0 auto;width:100%;}
         .eyebrow{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--home-dim);}
-        .hero{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,.9fr);gap:16px;margin-bottom:18px;}
+
+        .hero{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,.75fr);gap:14px;margin-bottom:14px;}
         @media (max-width:980px){.hero{grid-template-columns:1fr;}}
-        .panel{min-width:0;overflow:hidden;border:1px solid var(--home-stroke);background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));border-radius:24px;box-shadow:0 18px 50px rgba(0,0,0,.26);backdrop-filter:blur(16px);}
-        .heroMain{padding:24px;position:relative;overflow:hidden;}
-        .heroMain:before{content:"";position:absolute;inset:auto -120px -120px auto;width:280px;height:280px;border-radius:50%;background:radial-gradient(circle, rgba(56,242,255,.12), transparent 68%);pointer-events:none;}
-        .heroTop{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;flex-wrap:wrap;min-width:0;}
-        .brandWrap{display:flex;gap:14px;align-items:flex-start;min-width:0;}
-        .brandMark{width:48px;height:48px;border-radius:16px;border:1px solid rgba(255,255,255,.08);background:radial-gradient(circle at 28% 28%, rgba(56,242,255,.4), transparent 46%),radial-gradient(circle at 72% 74%, rgba(157,124,255,.34), transparent 50%),rgba(255,255,255,.03);flex-shrink:0;}
-        .heroTitle{font-size:clamp(28px, 4vw, 42px);line-height:1.02;font-weight:900;margin:8px 0 8px;letter-spacing:-.03em;overflow-wrap:anywhere;}
-        .heroText{max-width:640px;color:var(--home-muted);line-height:1.55;font-size:14px;overflow-wrap:anywhere;}
-        .actionRow{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px;}
-        .btn{border:1px solid var(--home-stroke);color:var(--home-text);background:rgba(255,255,255,.04);border-radius:14px;padding:12px 15px;font-weight:800;cursor:pointer;transition:transform .12s ease, border-color .12s ease, background .12s ease;flex-shrink:0;}
+        .panel{min-width:0;overflow:hidden;border:1px solid var(--home-stroke);background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));border-radius:22px;box-shadow:0 16px 42px rgba(0,0,0,.24);backdrop-filter:blur(16px);}
+        .heroMain{padding:20px;position:relative;overflow:hidden;}
+        .heroMain:before{content:"";position:absolute;inset:auto -120px -120px auto;width:240px;height:240px;border-radius:50%;background:radial-gradient(circle, rgba(56,242,255,.10), transparent 68%);pointer-events:none;}
+        .heroTop{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;min-width:0;}
+        .brandWrap{display:flex;gap:12px;align-items:flex-start;min-width:0;}
+        .brandMark{width:42px;height:42px;border-radius:14px;border:1px solid rgba(255,255,255,.08);background:radial-gradient(circle at 28% 28%, rgba(56,242,255,.4), transparent 46%),radial-gradient(circle at 72% 74%, rgba(157,124,255,.34), transparent 50%),rgba(255,255,255,.03);flex-shrink:0;}
+        .heroTitle{font-size:clamp(24px, 4vw, 38px);line-height:1.02;font-weight:900;margin:6px 0 6px;letter-spacing:-.03em;overflow-wrap:anywhere;}
+        .heroText{max-width:620px;color:var(--home-muted);line-height:1.45;font-size:13px;overflow-wrap:anywhere;}
+        .actionRow{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;}
+
+        .btn{border:1px solid var(--home-stroke);color:var(--home-text);background:rgba(255,255,255,.04);border-radius:14px;padding:11px 14px;font-weight:800;cursor:pointer;transition:transform .12s ease, border-color .12s ease, background .12s ease;flex-shrink:0;}
         .btn:hover{transform:translateY(-1px);border-color:rgba(255,255,255,.16);background:rgba(255,255,255,.07);}
         .btn.primary{background:linear-gradient(90deg, rgba(56,242,255,.16), rgba(157,124,255,.16));border-color:rgba(56,242,255,.28);}
-        .heroAside{padding:20px;display:flex;flex-direction:column;gap:14px;min-width:0;}
-        .statusCard{padding:16px;border-radius:18px;background:var(--home-panel-2);border:1px solid rgba(255,255,255,.06);min-width:0;}
-        .statusValue{margin-top:8px;font-size:24px;font-weight:900;overflow-wrap:anywhere;}
-        .statusSub{margin-top:6px;color:var(--home-muted);font-size:13px;overflow-wrap:anywhere;}
-        .chip{display:inline-flex;align-items:center;justify-content:center;min-height:28px;padding:6px 10px;border-radius:999px;font-size:11px;letter-spacing:.12em;text-transform:uppercase;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.04);color:var(--home-text);flex-shrink:0;}
-        .chip.cyan{border-color:rgba(56,242,255,.28);color:var(--home-cyan);} .chip.violet{border-color:rgba(157,124,255,.26);color:#c3b0ff;} .chip.amber{border-color:rgba(255,205,87,.26);color:var(--home-amber);} .chip.neutral{color:var(--home-muted);}
-        .statsGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:18px;} @media (max-width:980px){.statsGrid{grid-template-columns:repeat(2,minmax(0,1fr));}} @media (max-width:600px){.statsGrid{grid-template-columns:1fr;}}
-        .statCard{padding:18px;border-radius:22px;border:1px solid var(--home-stroke);background:var(--home-panel);min-width:0;}.statValue{margin-top:10px;font-size:28px;font-weight:900;letter-spacing:-.02em;overflow-wrap:anywhere;}.statHint{margin-top:8px;color:var(--home-muted);font-size:13px;overflow-wrap:anywhere;}
-        .mainGrid{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,.8fr);gap:16px;margin-bottom:16px;align-items:start;} .mainGrid > *{min-width:0;} @media (max-width:980px){.mainGrid{grid-template-columns:1fr;}}
-        .section{padding:20px;min-width:0;}.sectionHeader{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:16px;min-width:0;} @media (max-width:640px){.sectionHeader{flex-direction:column;align-items:stretch;}.sectionHeader .btn{width:100%;}}
-        .sectionTitle{margin-top:6px;font-size:24px;line-height:1.08;font-weight:900;letter-spacing:-.02em;overflow-wrap:anywhere;}.sectionText{margin-top:6px;color:var(--home-muted);line-height:1.5;font-size:14px;max-width:620px;overflow-wrap:anywhere;}
-        .campaignStack{display:grid;gap:22px;}.campaignGroup{display:grid;gap:12px;}.campaignGroupTitle{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--home-dim);} .campaignListCompact{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;} @media (max-width:900px){.campaignListCompact{grid-template-columns:1fr;}}
-        .campaignCompact{padding:14px;border-radius:18px;border:1px solid rgba(255,255,255,.06);background:rgba(255,255,255,.03);display:grid;gap:10px;min-width:0;} .campaignCompactTop{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;min-width:0;} .campaignCompactTitle{font-size:16px;font-weight:800;line-height:1.2;overflow-wrap:anywhere;} .campaignCompactDesc{color:var(--home-muted);font-size:13px;line-height:1.45;} .campaignCompactMeta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;color:var(--home-muted);font-size:12px;}
-        .emptyState{padding:18px;border-radius:18px;border:1px dashed rgba(255,255,255,.12);background:rgba(255,255,255,.02);min-width:0;}.emptyStateTitle{font-size:18px;font-weight:800;overflow-wrap:anywhere;word-break:break-word;}.emptyStateText{margin-top:8px;color:var(--home-muted);line-height:1.5;font-size:14px;overflow-wrap:anywhere;word-break:break-word;}
-        .sideStack{display:grid;gap:16px;min-width:0;width:100%;}.obsList{display:grid;gap:12px;min-width:0;}.obsCard{padding:14px;border-radius:16px;border:1px solid rgba(255,255,255,.06);background:rgba(255,255,255,.03);min-width:0;} .obsTop{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap;min-width:0;} .obsTitle{margin-top:8px;font-size:16px;font-weight:800;overflow-wrap:anywhere;word-break:break-word;} .obsMeta{margin-top:8px;color:var(--home-muted);font-size:13px;overflow-wrap:anywhere;word-break:break-word;} .tagRow{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;}
-        .telemetryGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;min-width:0;} @media (max-width:560px){.telemetryGrid{grid-template-columns:1fr;}}
-        .telemetryCard{padding:16px;border-radius:18px;border:1px solid var(--home-stroke);background:var(--home-panel);min-width:0;min-height:148px;display:flex;flex-direction:column;justify-content:flex-start;} .telemetryCard.compact{min-height:132px;} .telemetryValue{margin-top:10px;font-size:clamp(18px,2.2vw,22px);line-height:1.08;font-weight:900;overflow-wrap:anywhere;word-break:break-word;} .telemetrySub{margin-top:8px;font-size:13px;line-height:1.4;color:var(--home-muted);overflow-wrap:anywhere;word-break:break-word;}
-        @media (max-width:820px){.telemetryCard{min-height:132px;padding:14px;} .telemetryValue{font-size:clamp(16px,4.6vw,20px);} .telemetrySub{font-size:12px;}}
-        .footerAction{margin-top:16px;display:flex;gap:10px;flex-wrap:wrap;}.loadingText{color:var(--home-muted);font-size:14px;}.warning{margin-top:10px;color:var(--home-red);font-size:13px;}
+
+        .heroAside{padding:16px;display:flex;flex-direction:column;gap:10px;min-width:0;}
+        .statusCard{padding:12px 14px;border-radius:16px;background:var(--home-panel-2);border:1px solid rgba(255,255,255,.06);min-width:0;}
+        .statusValue{margin-top:6px;font-size:21px;font-weight:900;overflow-wrap:anywhere;line-height:1.08;}
+        .statusSub{margin-top:4px;color:var(--home-muted);font-size:12px;overflow-wrap:anywhere;line-height:1.35;}
+
+        .chip{display:inline-flex;align-items:center;justify-content:center;min-height:26px;padding:5px 9px;border-radius:999px;font-size:10px;letter-spacing:.12em;text-transform:uppercase;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.04);color:var(--home-text);flex-shrink:0;}
+        .chip.cyan{border-color:rgba(56,242,255,.28);color:var(--home-cyan);}
+        .chip.violet{border-color:rgba(157,124,255,.26);color:#c3b0ff;}
+        .chip.amber{border-color:rgba(255,205,87,.26);color:var(--home-amber);}
+        .chip.neutral{color:var(--home-muted);}
+
+        .statsGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:14px;}
+        @media (max-width:980px){.statsGrid{grid-template-columns:repeat(2,minmax(0,1fr));}}
+        @media (max-width:600px){.statsGrid{grid-template-columns:repeat(2,minmax(0,1fr));}}
+        .statCard{padding:12px 14px;border-radius:18px;border:1px solid var(--home-stroke);background:var(--home-panel);min-width:0;}
+        .statValue{margin-top:6px;font-size:24px;font-weight:900;letter-spacing:-.02em;overflow-wrap:anywhere;line-height:1.05;}
+        .statHint{margin-top:4px;color:var(--home-muted);font-size:11px;line-height:1.35;overflow-wrap:anywhere;}
+
+        .mainGrid{display:grid;grid-template-columns:minmax(0,1.22fr) minmax(0,.78fr);gap:14px;margin-bottom:14px;align-items:start;}
+        .mainGrid > *{min-width:0;}
+        @media (max-width:980px){.mainGrid{grid-template-columns:1fr;}}
+
+        .section{padding:16px;min-width:0;}
+        .sectionHeader{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:12px;min-width:0;}
+        @media (max-width:640px){
+          .sectionHeader{flex-direction:column;align-items:stretch;}
+          .sectionHeader .btn{width:100%;}
+        }
+        .sectionTitle{margin-top:4px;font-size:22px;line-height:1.08;font-weight:900;letter-spacing:-.02em;overflow-wrap:anywhere;}
+        .sectionText{margin-top:4px;color:var(--home-muted);line-height:1.42;font-size:13px;max-width:620px;overflow-wrap:anywhere;}
+
+        .campaignStack{display:grid;gap:18px;}
+        .campaignGroup{display:grid;gap:10px;}
+        .campaignGroupTitle{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--home-dim);}
+        .campaignListCompact{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
+        @media (max-width:900px){.campaignListCompact{grid-template-columns:1fr;}}
+        .campaignCompact{padding:13px;border-radius:18px;border:1px solid rgba(255,255,255,.06);background:rgba(255,255,255,.03);display:grid;gap:9px;min-width:0;}
+        .campaignCompactTop{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;min-width:0;}
+        .campaignCompactTitle{font-size:15px;font-weight:800;line-height:1.18;overflow-wrap:anywhere;}
+        .campaignCompactDesc{color:var(--home-muted);font-size:12px;line-height:1.4;}
+        .campaignCompactMeta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;color:var(--home-muted);font-size:11px;}
+
+        .progressTrack{height:7px;border-radius:999px;background:rgba(255,255,255,.06);overflow:hidden;}
+        .progressFill{height:100%;border-radius:999px;}
+        .progressFill.cyan{background:linear-gradient(90deg, rgba(56,242,255,.8), rgba(56,242,255,.35));}
+        .progressFill.violet{background:linear-gradient(90deg, rgba(157,124,255,.85), rgba(157,124,255,.35));}
+        .progressFill.amber{background:linear-gradient(90deg, rgba(255,205,87,.85), rgba(255,205,87,.35));}
+
+        .emptyState{padding:16px;border-radius:16px;border:1px dashed rgba(255,255,255,.12);background:rgba(255,255,255,.02);min-width:0;}
+        .emptyStateTitle{font-size:17px;font-weight:800;overflow-wrap:anywhere;word-break:break-word;}
+        .emptyStateText{margin-top:6px;color:var(--home-muted);line-height:1.42;font-size:13px;overflow-wrap:anywhere;word-break:break-word;}
+
+        .sideStack{display:grid;gap:14px;min-width:0;width:100%;}
+        .obsList{display:grid;gap:10px;min-width:0;}
+        .obsCard{padding:12px;border-radius:15px;border:1px solid rgba(255,255,255,.06);background:rgba(255,255,255,.03);min-width:0;}
+        .obsTop{display:flex;justify-content:space-between;gap:8px;align-items:flex-start;flex-wrap:wrap;min-width:0;}
+        .obsTitle{margin-top:6px;font-size:15px;font-weight:800;overflow-wrap:anywhere;word-break:break-word;}
+        .obsMeta{margin-top:6px;color:var(--home-muted);font-size:12px;overflow-wrap:anywhere;word-break:break-word;}
+        .tagRow{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
+
+        .telemetryGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;min-width:0;}
+        .telemetryCard{padding:12px 13px;border-radius:16px;border:1px solid var(--home-stroke);background:var(--home-panel);min-width:0;min-height:108px;display:flex;flex-direction:column;justify-content:flex-start;}
+        .telemetryCard.compact{min-height:96px;}
+        .telemetryValue{margin-top:6px;font-size:clamp(17px,2vw,20px);line-height:1.08;font-weight:900;overflow-wrap:anywhere;word-break:break-word;}
+        .telemetrySub{margin-top:5px;font-size:11px;line-height:1.35;color:var(--home-muted);overflow-wrap:anywhere;word-break:break-word;}
+
+        @media (max-width:820px){
+          .homePage{padding:18px 12px 88px;}
+          .hero{gap:12px;margin-bottom:12px;}
+          .heroMain{padding:16px;}
+          .heroTitle{font-size:clamp(22px,7vw,30px);}
+          .heroText{font-size:12px;max-width:none;}
+          .brandMark{width:38px;height:38px;border-radius:12px;}
+          .actionRow{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+          .actionRow .btn:first-child{grid-column:1 / -1;}
+          .heroAside{padding:12px;gap:8px;}
+          .statusCard{padding:10px 12px;}
+          .statusValue{font-size:18px;}
+          .statusSub{font-size:11px;}
+          .statsGrid{grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:12px;}
+          .statCard{padding:10px 10px;border-radius:16px;}
+          .statValue{font-size:20px;margin-top:4px;}
+          .statHint{font-size:10px;margin-top:3px;}
+          .section{padding:14px;}
+          .sectionTitle{font-size:20px;}
+          .sectionText{font-size:12px;}
+          .campaignStack{gap:14px;}
+          .campaignCompactMeta{gap:6px;font-size:10px;}
+          .telemetryGrid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
+          .telemetryCard{padding:10px 11px;min-height:90px;border-radius:14px;}
+          .telemetryCard.compact{min-height:84px;}
+          .telemetryValue{font-size:15px;margin-top:4px;}
+          .telemetrySub{font-size:10px;margin-top:4px;}
+        }
+
+        .footerAction{margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;}
+        .loadingText{color:var(--home-muted);font-size:13px;}
+        .warning{margin-top:10px;color:var(--home-red);font-size:12px;}
       `}</style>
 
       <div className="homeContainer">
@@ -669,9 +775,15 @@ export default function Home() {
             </div>
 
             <div className="actionRow">
-              <button className="btn primary" onClick={() => navigate("/submit")}>Submit Observation</button>
-              <button className="btn" onClick={() => navigate("/collective")}>Open Collective</button>
-              <button className="btn" onClick={() => navigate("/array")}>Open Array</button>
+              <button className="btn primary" onClick={() => navigate("/submit")}>
+                Submit Observation
+              </button>
+              <button className="btn" onClick={() => navigate("/collective")}>
+                Open Collective
+              </button>
+              <button className="btn" onClick={() => navigate("/array")}>
+                Open Array
+              </button>
             </div>
           </div>
 
@@ -689,16 +801,34 @@ export default function Home() {
             <div className="statusCard">
               <div className="eyebrow">Network Status</div>
               <div className="statusValue">{loading ? "Syncing…" : "Operational"}</div>
-              <div className="statusSub">Campaigns, submissions, and local conditions loaded from live data sources.</div>
+              <div className="statusSub">
+                Campaigns, submissions, and local conditions loaded from live data sources.
+              </div>
             </div>
           </div>
         </section>
 
         <section className="statsGrid">
-          <StatCard label="Observation Index" value={String(profile?.observation_index ?? observationCount ?? 0)} hint="Profile score currently stored for your account." />
-          <StatCard label="Campaign Impact" value={String(profile?.campaign_impact ?? 0)} hint="Campaign-weighted contribution across the array." />
-          <StatCard label="Active Streak" value={`${profile?.streak_days ?? 0}d`} hint="Consecutive days with submitted activity." />
-          <StatCard label="Network Feed" value={`${recentObservations.length}`} hint="Most recent observations surfaced on this page." />
+          <StatCard
+            label="Observation Index"
+            value={String(profile?.observation_index ?? observationCount ?? 0)}
+            hint="Profile score currently stored for your account."
+          />
+          <StatCard
+            label="Campaign Impact"
+            value={String(profile?.campaign_impact ?? 0)}
+            hint="Campaign-weighted contribution across the array."
+          />
+          <StatCard
+            label="Active Streak"
+            value={`${profile?.streak_days ?? 0}d`}
+            hint="Consecutive days with submitted activity."
+          />
+          <StatCard
+            label="Network Feed"
+            value={`${recentObservations.length}`}
+            hint="Most recent observations surfaced on this page."
+          />
         </section>
 
         <section className="mainGrid">
@@ -707,9 +837,13 @@ export default function Home() {
               <div>
                 <div className="eyebrow">Campaigns</div>
                 <div className="sectionTitle">All active campaigns</div>
-                <div className="sectionText">Public objectives and Research Collective assignments are listed here from the live campaigns table.</div>
+                <div className="sectionText">
+                  Public objectives and Research Collective assignments are listed here from the live campaigns table.
+                </div>
               </div>
-              <button className="btn" onClick={() => navigate("/collective")}>Open Collective</button>
+              <button className="btn" onClick={() => navigate("/collective")}>
+                Open Collective
+              </button>
             </div>
 
             <div className="campaignStack">
@@ -718,7 +852,9 @@ export default function Home() {
                 {publicCampaigns.length === 0 ? (
                   <div className="emptyState">
                     <div className="emptyStateTitle">No active public campaigns</div>
-                    <div className="emptyStateText">The home page is not receiving any campaigns classified as daily, weekly, or global.</div>
+                    <div className="emptyStateText">
+                      The home page is not receiving any campaigns classified as daily, weekly, or global.
+                    </div>
                   </div>
                 ) : (
                   <div className="campaignListCompact">
@@ -730,10 +866,22 @@ export default function Home() {
                         </div>
                         <div className="campaignCompactDesc">{campaign.description}</div>
                         <div className="campaignCompactMeta">
-                          <div><div className="eyebrow">Window</div><div>{formatDateRange(campaign.startAt, campaign.endAt)}</div></div>
-                          <div><div className="eyebrow">Ends</div><div>{formatEndsIn(campaign.endAt)}</div></div>
-                          <div><div className="eyebrow">Target</div><div>{campaign.targetType ?? "General"}</div></div>
-                          <div><div className="eyebrow">Participants</div><div>{campaign.participantCount}</div></div>
+                          <div>
+                            <div className="eyebrow">Window</div>
+                            <div>{formatDateRange(campaign.startAt, campaign.endAt)}</div>
+                          </div>
+                          <div>
+                            <div className="eyebrow">Ends</div>
+                            <div>{formatEndsIn(campaign.endAt)}</div>
+                          </div>
+                          <div>
+                            <div className="eyebrow">Target</div>
+                            <div>{campaign.targetType ?? "General"}</div>
+                          </div>
+                          <div>
+                            <div className="eyebrow">Participants</div>
+                            <div>{campaign.participantCount}</div>
+                          </div>
                         </div>
                         <Progress value={campaign.progress} tone={cadenceTone(campaign.cadence)} />
                       </div>
@@ -747,7 +895,9 @@ export default function Home() {
                 {researchCampaigns.length === 0 ? (
                   <div className="emptyState">
                     <div className="emptyStateTitle">No active research campaigns</div>
-                    <div className="emptyStateText">Subscriber-only campaigns will appear here when active.</div>
+                    <div className="emptyStateText">
+                      Subscriber-only campaigns will appear here when active.
+                    </div>
                   </div>
                 ) : (
                   <div className="campaignListCompact">
@@ -759,10 +909,22 @@ export default function Home() {
                         </div>
                         <div className="campaignCompactDesc">{campaign.description}</div>
                         <div className="campaignCompactMeta">
-                          <div><div className="eyebrow">Window</div><div>{formatDateRange(campaign.startAt, campaign.endAt)}</div></div>
-                          <div><div className="eyebrow">Ends</div><div>{formatEndsIn(campaign.endAt)}</div></div>
-                          <div><div className="eyebrow">Target</div><div>{campaign.targetType ?? "Research"}</div></div>
-                          <div><div className="eyebrow">Participants</div><div>{campaign.participantCount}</div></div>
+                          <div>
+                            <div className="eyebrow">Window</div>
+                            <div>{formatDateRange(campaign.startAt, campaign.endAt)}</div>
+                          </div>
+                          <div>
+                            <div className="eyebrow">Ends</div>
+                            <div>{formatEndsIn(campaign.endAt)}</div>
+                          </div>
+                          <div>
+                            <div className="eyebrow">Target</div>
+                            <div>{campaign.targetType ?? "Research"}</div>
+                          </div>
+                          <div>
+                            <div className="eyebrow">Participants</div>
+                            <div>{campaign.participantCount}</div>
+                          </div>
                         </div>
                         <Progress value={campaign.progress} tone="amber" />
                       </div>
@@ -776,63 +938,107 @@ export default function Home() {
           </div>
 
           <div className="sideStack">
-            <div className="panel section">
-              <div className="sectionHeader">
-                <div>
-                  <div className="eyebrow">Recent Observations</div>
-                  <div className="sectionTitle">Latest network activity</div>
+            {!isMobile ? (
+              <div className="panel section">
+                <div className="sectionHeader">
+                  <div>
+                    <div className="eyebrow">Recent Observations</div>
+                    <div className="sectionTitle">Latest network activity</div>
+                  </div>
+                  <button className="btn" onClick={() => navigate("/submit")}>
+                    Add New
+                  </button>
                 </div>
-                <button className="btn" onClick={() => navigate("/submit")}>Add New</button>
-              </div>
 
-              {loading ? (
-                <div className="loadingText">Loading recent observations…</div>
-              ) : recentObservations.length > 0 ? (
-                <div className="obsList">
-                  {recentObservations.map((observation) => (
-                    <div className="obsCard" key={observation.id}>
-                      <div className="obsTop">
-                        <Chip tone="cyan">{(observation.mode ?? "Unknown").toUpperCase()}</Chip>
-                        <div className="eyebrow">{new Date(observation.created_at).toLocaleString()}</div>
-                      </div>
-                      <div className="obsTitle">{observation.target ?? "Unspecified Target"}</div>
-                      <div className="obsMeta">Contributor: {observation.user_id === sessionUserId ? "You" : "Network Member"}</div>
-                      {(observation.tags ?? []).length > 0 ? (
-                        <div className="tagRow">
-                          {(observation.tags ?? []).slice(0, 4).map((tag) => (
-                            <Chip key={tag}>{tag}</Chip>
-                          ))}
+                {loading ? (
+                  <div className="loadingText">Loading recent observations…</div>
+                ) : recentObservations.length > 0 ? (
+                  <div className="obsList">
+                    {recentObservations.map((observation) => (
+                      <div className="obsCard" key={observation.id}>
+                        <div className="obsTop">
+                          <Chip tone="cyan">{(observation.mode ?? "Unknown").toUpperCase()}</Chip>
+                          <div className="eyebrow">{new Date(observation.created_at).toLocaleString()}</div>
                         </div>
-                      ) : null}
+                        <div className="obsTitle">{observation.target ?? "Unspecified Target"}</div>
+                        <div className="obsMeta">
+                          Contributor: {observation.user_id === sessionUserId ? "You" : "Network Member"}
+                        </div>
+                        {(observation.tags ?? []).length > 0 ? (
+                          <div className="tagRow">
+                            {(observation.tags ?? []).slice(0, 4).map((tag) => (
+                              <Chip key={tag}>{tag}</Chip>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="emptyState">
+                    <div className="emptyStateTitle">No recent observations</div>
+                    <div className="emptyStateText">
+                      Once observations are submitted, they will appear here.
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="emptyState">
-                  <div className="emptyStateTitle">No recent observations</div>
-                  <div className="emptyStateText">Once observations are submitted, they will appear here.</div>
-                </div>
-              )}
-            </div>
+                  </div>
+                )}
+              </div>
+            ) : null}
 
             <div className="panel section">
               <div className="sectionHeader">
                 <div>
                   <div className="eyebrow">Sector Readiness</div>
-                  <div className="sectionTitle">Localized sky conditions</div>
+                  <div className="sectionTitle">{isMobile ? "Sky conditions" : "Localized sky conditions"}</div>
                 </div>
-                <button className="btn" onClick={() => navigate("/telemetry")}>Open Telemetry</button>
+                <button className="btn" onClick={() => navigate("/telemetry")}>
+                  Open Telemetry
+                </button>
               </div>
 
               <div className="telemetryGrid">
-                <TelemetryCard label="Sky State" value={telemetryLoading ? "Loading…" : telemetry?.skyState ?? "UNKNOWN"} hint="Computed from current solar altitude." />
-                <TelemetryCard label="Weather" value={telemetryLoading ? "Loading…" : telemetry?.weatherSummary ?? "Unavailable"} hint={telemetryLoading ? "Loading current conditions." : telemetry?.temperatureLabel ?? "Temperature unavailable"} />
-                <TelemetryCard label="Cloud Cover" value={telemetryLoading ? "Loading…" : telemetry?.cloudCoverLabel ?? "Unavailable"} hint="Current cloud cover from forecast data." />
-                <TelemetryCard label="Visibility" value={telemetryLoading ? "Loading…" : telemetry?.visibilityLabel ?? "Unavailable"} hint="Hourly visibility estimate for your location." />
-                <TelemetryCard label="Wind" value={telemetryLoading ? "Loading…" : telemetry?.windLabel ?? "Unavailable"} hint="Current surface wind speed." compact />
-                <TelemetryCard label="Precipitation" value={telemetryLoading ? "Loading…" : telemetry?.precipitationLabel ?? "Unavailable"} hint="Hourly precipitation probability." compact />
-                <TelemetryCard label="Sun Window" value={telemetryLoading ? "Loading…" : telemetry?.sunWindowLabel ?? "Unavailable"} hint="Sunset / sunrise at your saved location." />
-                <TelemetryCard label="Moon" value={telemetryLoading ? "Loading…" : telemetry?.moonLabel ?? "Unavailable"} hint="Current phase and illumination." />
+                <TelemetryCard
+                  label="Sky State"
+                  value={telemetryLoading ? "Loading…" : telemetry?.skyState ?? "UNKNOWN"}
+                  hint="Computed from current solar altitude."
+                />
+                <TelemetryCard
+                  label="Weather"
+                  value={telemetryLoading ? "Loading…" : telemetry?.weatherSummary ?? "Unavailable"}
+                  hint={telemetryLoading ? "Loading current conditions." : telemetry?.temperatureLabel ?? "Temperature unavailable"}
+                />
+                <TelemetryCard
+                  label="Cloud Cover"
+                  value={telemetryLoading ? "Loading…" : telemetry?.cloudCoverLabel ?? "Unavailable"}
+                  hint="Current cloud cover from forecast data."
+                />
+                <TelemetryCard
+                  label="Visibility"
+                  value={telemetryLoading ? "Loading…" : telemetry?.visibilityLabel ?? "Unavailable"}
+                  hint="Hourly visibility estimate for your location."
+                />
+                <TelemetryCard
+                  label="Wind"
+                  value={telemetryLoading ? "Loading…" : telemetry?.windLabel ?? "Unavailable"}
+                  hint="Current surface wind speed."
+                  compact
+                />
+                <TelemetryCard
+                  label="Precipitation"
+                  value={telemetryLoading ? "Loading…" : telemetry?.precipitationLabel ?? "Unavailable"}
+                  hint="Hourly precipitation probability."
+                  compact
+                />
+                <TelemetryCard
+                  label="Sun Window"
+                  value={telemetryLoading ? "Loading…" : telemetry?.sunWindowLabel ?? "Unavailable"}
+                  hint="Sunset / sunrise at your saved location."
+                />
+                <TelemetryCard
+                  label="Moon"
+                  value={telemetryLoading ? "Loading…" : telemetry?.moonLabel ?? "Unavailable"}
+                  hint="Current phase and illumination."
+                />
               </div>
             </div>
           </div>
