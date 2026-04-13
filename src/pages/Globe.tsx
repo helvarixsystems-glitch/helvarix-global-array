@@ -961,11 +961,7 @@ export default function Globe() {
         <h1 className="pageTitle">
           {isMobile ? "Live nodes from profile data." : "Live nodes from actual profile data."}
         </h1>
-        <p className="pageText">
-          {isMobile
-            ? "Real operator records from your profiles table, centered on your node when available."
-            : "The globe now renders only real operator records from your Supabase profiles table, with a denser deep-space background and a softer Milky Way-style star field behind the Earth."}
-        </p>
+       
         <div className="arrayMetaRow">
           <span className="arrayMetaChip">
             {loadingNodes ? "Syncing nodes" : `${nodes.length} visible nodes`}
