@@ -721,7 +721,7 @@ export default function Home() {
         .telemetryValue{margin-top:6px;font-size:clamp(17px,2vw,20px);line-height:1.08;font-weight:900;overflow-wrap:anywhere;word-break:break-word;}
         .telemetrySub{margin-top:5px;font-size:11px;line-height:1.35;color:var(--home-muted);overflow-wrap:anywhere;word-break:break-word;}
 
-        @media (max-width:820px){
+               @media (max-width:820px){
           .homePage{padding:18px 12px 88px;}
           .hero{gap:12px;margin-bottom:12px;}
           .heroMain{padding:16px;}
@@ -734,10 +734,10 @@ export default function Home() {
           .statusCard{padding:10px 12px;}
           .statusValue{font-size:18px;}
           .statusSub{font-size:11px;}
-          .statsGrid{grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:12px;}
-          .statCard{padding:10px 10px;border-radius:16px;}
+          .statsGrid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:12px;}
+          .statCard{padding:10px 10px;border-radius:16px;min-width:0;}
           .statValue{font-size:20px;margin-top:4px;}
-          .statHint{font-size:10px;margin-top:3px;}
+          .statHint{font-size:10px;margin-top:3px;line-height:1.3;overflow-wrap:anywhere;word-break:break-word;}
           .section{padding:14px;}
           .sectionTitle{font-size:20px;}
           .sectionText{font-size:12px;}
