@@ -959,7 +959,7 @@ export default function Globe() {
       <section className="heroPanel arrayPageIntro">
         <div className="eyebrow">Network View</div>
         <h1 className="pageTitle">
-          {isMobile ? "Live nodes from profile data." : "Live nodes from actual profile data."}
+          {isMobile ? "Live Nodes." : "Live nodes from actual profile data."}
         </h1>
        
         <div className="arrayMetaRow">
