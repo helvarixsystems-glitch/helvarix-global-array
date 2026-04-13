@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { useDeviceProfile } from "../hooks/useDeviceProfile";
+
 type ObservationRecord = {
   id: string;
   user_id: string;
@@ -244,7 +245,12 @@ function isResearchCampaign(campaign: CampaignRecord | null | undefined, row: Ob
     .join(" ")
     .toLowerCase();
 
-  return text.includes("research_collective") || text.includes("research collective") || text.includes("collective") || text.includes("research");
+  return (
+    text.includes("research_collective") ||
+    text.includes("research collective") ||
+    text.includes("collective") ||
+    text.includes("research")
+  );
 }
 
 function campaignLabel(campaign: CampaignRecord | null | undefined, isResearch: boolean) {
@@ -287,6 +293,8 @@ function looksLikeMissingRelation(error: any) {
 
 export default function Telemetry() {
   const device = useDeviceProfile("telemetry");
+  const isMobile = device.deviceClass === "mobile";
+
   const [items, setItems] = useState<FeedItem[]>([]);
   const [sessionUserId, setSessionUserId] = useState<string | null>(null);
   const [filter, setFilter] = useState<FeedFilter>("all");
@@ -343,8 +351,8 @@ export default function Telemetry() {
             typeof row.notes === "string"
               ? row.notes
               : typeof row.description === "string"
-              ? row.description
-              : null;
+                ? row.description
+                : null;
           const campaign = row.campaign_id ? campaignMap.get(row.campaign_id) ?? null : null;
           const research = isResearchCampaign(campaign, row);
 
@@ -697,17 +705,19 @@ export default function Telemetry() {
     };
   }, [items, sessionUserId]);
 
-    return (
+  return (
     <div className={`pageStack device-${device.deviceClass}`}>
       <section className="heroPanel telemetryHero">
         <div className="telemetryHeroTop">
           <div>
             <div className="eyebrow">COMMUNITY FEED</div>
             <h1 className="pageTitle">Live telemetry from the network.</h1>
-            <p className="telemetryIntro">
-              Public uploads, Research Collective submissions, and community interaction now live in
-              one feed layer with likes and threaded comments.
-            </p>
+            {!isMobile ? (
+              <p className="telemetryIntro">
+                Public uploads, Research Collective submissions, and community interaction now live in
+                one feed layer with likes and threaded comments.
+              </p>
+            ) : null}
           </div>
 
           <Link className="primaryBtn compactAction" to="/submit">
@@ -762,22 +772,22 @@ export default function Telemetry() {
         </div>
 
         <div className="gridFour telemetryStats">
-          <div className="metricCard">
+          <div className="metricCard telemetryMetricCard compactMetricCard">
             <div className="metricLabel">Feed items</div>
             <div className="metricValue">{stats.total}</div>
           </div>
 
-          <div className="metricCard">
+          <div className="metricCard telemetryMetricCard compactMetricCard">
             <div className="metricLabel">Research posts</div>
             <div className="metricValue">{stats.research}</div>
           </div>
 
-          <div className="metricCard">
+          <div className="metricCard telemetryMetricCard compactMetricCard">
             <div className="metricLabel">Verified</div>
             <div className="metricValue">{stats.verified}</div>
           </div>
 
-          <div className="metricCard">
+          <div className="metricCard telemetryMetricCard compactMetricCard">
             <div className="metricLabel">Solar gold</div>
             <div className="metricValue">{stats.proPosts}</div>
           </div>
@@ -796,7 +806,7 @@ export default function Telemetry() {
       ) : filteredItems.length === 0 ? (
         <section className="panel emptyTelemetryState">
           <div className="sectionKicker">NO OBSERVATIONS YET</div>
-          <h2 className="sectionTitle">Your feed is ready for real data.</h2>
+          {!isMobile ? <h2 className="sectionTitle">Your feed is ready for real data.</h2> : null}
         </section>
       ) : (
         <div className="telemetryFeedGrid">
@@ -1040,6 +1050,10 @@ export default function Telemetry() {
 
         .telemetryStats{
           margin-top:4px;
+        }
+
+        .telemetryMetricCard{
+          min-width:0;
         }
 
         .inputShell{
@@ -1512,7 +1526,63 @@ export default function Telemetry() {
         }
 
         @media (max-width: 640px){
-          .telemetryStats,
+          .telemetryHero{
+            gap:14px;
+          }
+
+          .telemetryHeroTop{
+            gap:12px;
+          }
+
+          .telemetryHeroTop .pageTitle{
+            margin:0;
+            font-size:clamp(24px, 9vw, 34px);
+            line-height:1.02;
+          }
+
+          .compactAction{
+            width:100%;
+            padding-top:12px;
+            padding-bottom:12px;
+          }
+
+          .telemetryControls{
+            gap:10px;
+          }
+
+          .telemetrySearch .telemetryInput{
+            min-height:48px;
+          }
+
+          .telemetryFilters{
+            gap:8px;
+          }
+
+          .telemetryFilters .tabBtn{
+            padding:10px 12px;
+          }
+
+          .telemetryStats{
+            grid-template-columns:repeat(2, minmax(0, 1fr));
+            gap:10px;
+          }
+
+          .compactMetricCard{
+            padding:12px 14px;
+            min-height:96px;
+          }
+
+          .compactMetricCard .metricLabel{
+            font-size:12px;
+            line-height:1.2;
+          }
+
+          .compactMetricCard .metricValue{
+            margin-top:6px;
+            font-size:24px;
+            line-height:1;
+          }
+
           .feedDetailsGrid{
             grid-template-columns:1fr;
           }
