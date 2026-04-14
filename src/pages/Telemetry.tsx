@@ -800,13 +800,13 @@ export default function Telemetry() {
         <section className="panel">
           <div className="stateTitle">Loading live observations…</div>
           <div className="stateText">
-            Pulling network submissions, campaign context, likes, and comments from Supabase.
+            Loading observations, comments, and reactions.
           </div>
         </section>
       ) : filteredItems.length === 0 ? (
         <section className="panel emptyTelemetryState">
           <div className="sectionKicker">NO OBSERVATIONS YET</div>
-          {!isMobile ? <h2 className="sectionTitle">Your feed is ready for real data.</h2> : null}
+          {!isMobile ? <h2 className="sectionTitle">No observations yet</h2> : null}
         </section>
       ) : (
         <div className="telemetryFeedGrid">
