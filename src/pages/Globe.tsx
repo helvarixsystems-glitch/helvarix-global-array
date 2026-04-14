@@ -991,8 +991,7 @@ export default function Globe() {
             <div ref={mountRef} className="arrayGlobeCanvas" />
 
             <div className="arrayGlobeFooter">
-              Drag to rotate. Scroll to zoom. Locations remain rounded and slightly offset so exact
-              addresses cannot be inferred.
+              Drag to rotate. Scroll to zoom.
             </div>
           </div>
         </div>
