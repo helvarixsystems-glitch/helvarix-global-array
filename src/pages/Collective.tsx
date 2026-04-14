@@ -1809,7 +1809,7 @@ export default function Collective() {
 
    if (loading) {
     return (
-      <div className={`pageStack collectivePage device-${device.deviceClass}`}>
+      <div className={`pageStack collectivePage device-${device.deviceClass} ${isMobileCollective && !isPro ? "paywalledMobile" : ""}`}>
         <style>{styles}</style>
         <div className="panel loadingPanel">
           <div className="sectionKicker">HELVARIX RESEARCH COLLECTIVE</div>
@@ -1821,67 +1821,91 @@ export default function Collective() {
   }
 
    return (
-    <div className={`pageStack collectivePage device-${device.deviceClass}`}>
+    <div className={`pageStack collectivePage device-${device.deviceClass} ${isMobileCollective && !isPro ? "paywalledMobile" : ""}`}>
       <style>{styles}</style>
 
-      <section className="panel heroPanel collectiveHero">
-        <div className="collectiveHeroGrid">
-          <div>
-            <div className="collectiveKicker">HELVARIX RESEARCH COLLECTIVE</div>
-            <h1 className="heroTitle">Subscriber campaigns, team ownership, and observatory support</h1>
-            <p className="collectiveLead">
-              Public campaigns remain the heartbeat of the Array: one daily, one weekly, and one global.
-              The Research Collective adds the private limited-entry campaign layer without flooding the page
-              with duplicate public listings.
-            </p>
+      {!isMobileCollective ? (
+        <section className="panel heroPanel collectiveHero">
+          <div className="collectiveHeroGrid">
+            <div>
+              <div className="collectiveKicker">HELVARIX RESEARCH COLLECTIVE</div>
+              <h1 className="heroTitle">Subscriber campaigns, team ownership, and observatory support</h1>
+              <p className="collectiveLead">
+                Public campaigns remain the heartbeat of the Array: one daily, one weekly, and one global.
+                The Research Collective adds the private limited-entry campaign layer without flooding the page
+                with duplicate public listings.
+              </p>
 
-            <div className="collectiveHeroMeta">
-              <span className="goldBadge">Operator · {displayName}</span>
-              <span className="goldBadge">Location · {locationLabel}</span>
-              <span className="goldBadge">Membership · {isPro ? "ACTIVE" : "STANDARD"}</span>
+              <div className="collectiveHeroMeta">
+                <span className="goldBadge">Operator · {displayName}</span>
+                <span className="goldBadge">Location · {locationLabel}</span>
+                <span className="goldBadge">Membership · {isPro ? "ACTIVE" : "STANDARD"}</span>
+              </div>
             </div>
-          </div>
 
-          <div className="collectiveStatusCard">
-            <div className="collectiveStatusTop">
-              <div>
-                <div className="sectionKicker">RESEARCH COLLECTIVE</div>
-                <div className="collectivePrice">
-                  {MONTHLY_PRICE_LABEL}
-                  <small>subscriber tier</small>
+            <div className="collectiveStatusCard">
+              <div className="collectiveStatusTop">
+                <div>
+                  <div className="sectionKicker">RESEARCH COLLECTIVE</div>
+                  <div className="collectivePrice">
+                    {MONTHLY_PRICE_LABEL}
+                    <small>subscriber tier</small>
+                  </div>
+                </div>
+                <span className={`statusBadge ${isPro ? "statusLive" : "statusLocked"}`}>
+                  {isPro ? "Membership active" : "Upgrade available"}
+                </span>
+              </div>
+
+              <div className="collectiveMiniList">
+                <div className="collectiveMiniRow"><span>Public campaign layer</span><strong>Daily / Weekly / Global</strong></div>
+                <div className="collectiveMiniRow">
+                  <span>Private campaign layer</span>
+                  <strong>{isPro ? "Limited-entry collective" : "Subscriber only"}</strong>
+                </div>
+                <div className="collectiveMiniRow">
+                  <span>Team controls</span>
+                  <strong>{isPro ? "Create / edit / own" : "Subscriber only"}</strong>
                 </div>
               </div>
-              <span className={`statusBadge ${isPro ? "statusLive" : "statusLocked"}`}>
-                {isPro ? "Membership active" : "Upgrade available"}
-              </span>
-            </div>
 
-            <div className="collectiveMiniList">
-              <div className="collectiveMiniRow"><span>Public campaign layer</span><strong>Daily / Weekly / Global</strong></div>
-              <div className="collectiveMiniRow">
-                <span>Private campaign layer</span>
-                <strong>{isPro ? "Limited-entry collective" : "Subscriber only"}</strong>
+              <div className="buttonRow">
+                {!isPro ? (
+                  <button className="primaryBtn" type="button" onClick={handleUpgrade} disabled={busyCheckout}>
+                    {busyCheckout ? "Opening Stripe…" : "Upgrade to Research Collective"}
+                  </button>
+                ) : (
+                  <button className="primaryBtn" type="button" onClick={handlePortal} disabled={busyPortal}>
+                    {busyPortal ? "Opening billing…" : "Manage membership"}
+                  </button>
+                )}
               </div>
-              <div className="collectiveMiniRow">
-                <span>Team controls</span>
-                <strong>{isPro ? "Create / edit / own" : "Subscriber only"}</strong>
-              </div>
-            </div>
-
-            <div className="buttonRow">
-              {!isPro ? (
-                <button className="primaryBtn" type="button" onClick={handleUpgrade} disabled={busyCheckout}>
-                  {busyCheckout ? "Opening Stripe…" : "Upgrade to Research Collective"}
-                </button>
-              ) : (
-                <button className="primaryBtn" type="button" onClick={handlePortal} disabled={busyPortal}>
-                  {busyPortal ? "Opening billing…" : "Manage membership"}
-                </button>
-              )}
             </div>
           </div>
-        </div>
-      </section>
+        </section>
+      ) : (
+        <section className="panel collectiveMobileHeader">
+          <div className="collectiveMobileHeaderTop">
+            <div>
+              <div className="collectiveKicker">HELVARIX RESEARCH COLLECTIVE</div>
+              <h1 className="collectiveMobileHeaderTitle">{isPro ? "Manage Subscription" : "Research Collective"}</h1>
+            </div>
+
+            {isPro ? (
+              <button
+                className="primaryBtn collectiveMobileManageBtn"
+                type="button"
+                onClick={handlePortal}
+                disabled={busyPortal}
+              >
+                {busyPortal ? "Opening billing…" : "Manage subscription"}
+              </button>
+            ) : (
+              <span className="statusBadge statusLocked">Upgrade required</span>
+            )}
+          </div>
+        </section>
+      )}
 
       {error ? <div className="alert error">{error}</div> : null}
       {notice ? <div className="alert success">{notice}</div> : null}
@@ -1912,6 +1936,31 @@ export default function Collective() {
             </button>
           </div>
         </section>
+      ) : null}
+
+      {isMobileCollective && !isPro ? (
+        <div className="collectivePaywallOverlay" role="dialog" aria-modal="true" aria-label="Research Collective upgrade required">
+          <div className="collectivePaywallScrim" />
+          <div className="collectivePaywallCard panel">
+            <div className="collectiveKicker">HELVARIX RESEARCH COLLECTIVE</div>
+            <h2 className="collectivePaywallTitle">Subscriber campaigns, team ownership, and observatory support</h2>
+            <p className="collectivePaywallText">
+              Upgrade to unlock the private campaign layer, team controls, and subscriber-only research tools on mobile.
+            </p>
+
+            <div className="collectiveMiniList">
+              <div className="collectiveMiniRow"><span>Public campaign layer</span><strong>Daily / Weekly / Global</strong></div>
+              <div className="collectiveMiniRow"><span>Private campaign layer</span><strong>Subscriber only</strong></div>
+              <div className="collectiveMiniRow"><span>Team controls</span><strong>Subscriber only</strong></div>
+            </div>
+
+            <div className="collectivePaywallActions">
+              <button className="primaryBtn" type="button" onClick={handleUpgrade} disabled={busyCheckout}>
+                {busyCheckout ? "Opening Stripe…" : "Upgrade to Research Collective"}
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
 
       {(!isMobileCollective || mobileTab === "toolbox") ? (
@@ -2485,6 +2534,16 @@ const styles = `
 .collectiveHeroMeta{ display:flex; flex-wrap:wrap; gap:12px; margin-top:18px; }
 .goldBadge{ display:inline-flex; align-items:center; gap:8px; padding:10px 14px; border-radius:999px; border:1px solid rgba(242,191,87,.30); background:rgba(242,191,87,.10); color:#ffe4a5; font-weight:700; }
 .collectiveStatusCard{ min-height:100%; min-width:0; width:100%; display:grid; gap:16px; padding:22px; border-radius:24px; border:1px solid rgba(242,191,87,.16); background:linear-gradient(180deg, rgba(15,24,46,.88), rgba(9,14,28,.94)); overflow:hidden; }
+.collectiveMobileHeader{ display:none; }
+.collectiveMobileHeaderTop{ display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.collectiveMobileHeaderTitle{ margin:8px 0 0; font-size:24px; line-height:1.08; }
+.collectiveMobileManageBtn{ white-space:nowrap; }
+.collectivePaywallOverlay{ display:none; }
+.collectivePaywallScrim{ position:absolute; inset:0; background:rgba(2,6,16,.72); backdrop-filter:blur(8px); }
+.collectivePaywallCard{ position:relative; z-index:1; width:min(100%, 420px); border-color:rgba(242,191,87,.22); background:linear-gradient(180deg, rgba(15,24,46,.96), rgba(9,14,28,.98)); box-shadow:0 24px 70px rgba(0,0,0,.45); }
+.collectivePaywallTitle{ margin:10px 0 0; font-size:28px; line-height:1.04; }
+.collectivePaywallText{ margin-top:12px; color:rgba(255,255,255,.72); line-height:1.65; }
+.collectivePaywallActions{ margin-top:18px; display:grid; }
 .collectiveStatusTop{ display:flex; justify-content:space-between; gap:16px; align-items:flex-start; flex-wrap:wrap; min-width:0; }
 .collectivePrice{ font-size:34px; font-weight:800; line-height:1; }
 .collectivePrice small{ font-size:14px; color:rgba(255,255,255,.64); font-weight:600; margin-left:4px; }
@@ -2613,11 +2672,20 @@ textarea{ resize:vertical; min-height:96px; }
   .collectiveMiniRow{ grid-template-columns:1fr; }
   .collectiveMiniRow strong{ text-align:left; }
   select.campaignAssignSelect{ max-width:none; }
-  .collectiveMobileTabsPanel{ display:block; padding:14px; }
+  .collectiveMobileTabsPanel{ display:block; padding:14px; position:relative; z-index:4; }
   .collectiveMetricGrid{ grid-template-columns:repeat(2, minmax(0,1fr)); gap:10px; }
   .collectiveMetricCard{ padding:14px; }
   .collectiveMetricValue{ font-size:22px; }
   .panel{ padding:18px; border-radius:20px; }
   .campaignCard,.teamCard,.teamCreateCard,.collectiveToolCard{ padding:14px; border-radius:16px; }
+}
+@media (max-width: 640px){
+  .collectiveHero{ display:none; }
+  .collectiveMobileHeader{ display:block; position:relative; z-index:4; }
+  .collectiveMobileHeaderTop{ flex-direction:column; align-items:stretch; }
+  .collectiveMobileHeaderTitle{ font-size:22px; }
+  .collectiveMobileManageBtn{ width:100%; }
+  .collectivePaywallOverlay{ display:grid; place-items:center; position:fixed; inset:0; padding:86px 16px 24px; z-index:30; }
+  .collectivePage.paywalledMobile{ overflow:hidden; }
 }
 `;
