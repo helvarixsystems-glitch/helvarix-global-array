@@ -438,10 +438,9 @@ export default function Submit() {
         <div className="submitHeroTop">
           <div>
             <div className="eyebrow">OBSERVATION INTAKE</div>
-            <h1 className="pageTitle">Field-ready submission flow.</h1>
+            <h1 className="pageTitle">Submit an observation</h1>
             <p className="pageText submitHeroText">
-              Visual and radio observations submit directly into the live network feed, with photos,
-              support files, and campaign attachment for deterministic leaderboard scoring.
+              Submit visual or radio observations with media, files, and optional campaign assignment.
             </p>
           </div>
 
@@ -705,8 +704,7 @@ export default function Submit() {
                   <div className="sectionKicker">FINALIZE</div>
                   <h3 className="submitActionTitle">Publish to telemetry</h3>
                   <p className="submitActionText">
-                    This submission writes to observations, attaches uploads, stores campaign context,
-                    and appears in the live feed under your profile.
+                    This submission will appear in the telemetry feed and be linked to your profile.
                   </p>
                 </div>
 
