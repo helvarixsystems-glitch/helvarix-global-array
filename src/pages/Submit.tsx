@@ -450,25 +450,6 @@ export default function Submit() {
             {mode === "visual" ? "VISUAL MODE" : "RADIO MODE"}
           </div>
         </div>
-
-        <div className="gridFour compactStats">
-          <div className="metricCard">
-            <div className="metricLabel">Mode</div>
-            <div className="metricValue">{mode === "visual" ? "Visual" : "Radio"}</div>
-          </div>
-          <div className="metricCard">
-            <div className="metricLabel">Images queued</div>
-            <div className="metricValue">{imageAssets.length}</div>
-          </div>
-          <div className="metricCard">
-            <div className="metricLabel">Files queued</div>
-            <div className="metricValue">{dataAssets.length}</div>
-          </div>
-          <div className="metricCard">
-            <div className="metricLabel">Operator</div>
-            <div className="metricValue">{profile?.callsign?.trim() || "Array Operator"}</div>
-          </div>
-        </div>
       </section>
 
       <form onSubmit={handleSubmit} className="pageStack">
