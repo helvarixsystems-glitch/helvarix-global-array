@@ -174,26 +174,7 @@ function formatDate(value: string | null) {
 }
 
 function formatDateRange(startAt: string | null, endAt: string | null) {
-  return `${formatDate(startAt)} — ${formatDate(endAt)}@media (max-width: 640px){
-  .collectivePage{ padding:16px 12px 96px; }
-  .collectiveHero{ padding:20px; }
-  .heroTitle{ font-size:28px; }
-  .collectiveLead{ margin-top:12px; line-height:1.6; }
-  .collectiveHeroMeta{ gap:8px; }
-  .goldBadge{ width:100%; justify-content:flex-start; padding:9px 12px; }
-  .collectiveStatusCard{ padding:18px; border-radius:20px; }
-  .collectiveStatusTop{ gap:12px; }
-  .collectivePrice{ font-size:28px; }
-  .sectionTitle{ font-size:22px; }
-  .campaignTitle{ font-size:18px; }
-  .campaignBoardCard{ padding:14px; }
-  .campaignBoardStats{ grid-template-columns:1fr; }
-  .campaignMiniStat{ padding:10px 11px; }
-  .campaignActionRow,.buttonRow{ flex-direction:column; align-items:stretch; }
-  .campaignActionRow > *, .buttonRow > *{ width:100%; }
-  .teamRosterRow,.messageCardTop{ flex-direction:column; align-items:flex-start; }
-}
-`;
+  return `${formatDate(startAt)} — ${formatDate(endAt)}`;
 }
 
 function formatEndsIn(endAt: string | null) {
@@ -2596,15 +2577,21 @@ textarea{ resize:vertical; min-height:96px; }
 .collectiveMobileTabsPanel{ display:none; }
 .collectiveMobileTabs{ display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:8px; }
 .collectiveMobileTab{
+  min-width:0;
   min-height:44px;
-  padding:11px 10px;
+  padding:11px 8px;
   border-radius:14px;
   border:1px solid rgba(255,255,255,.10);
   background:rgba(255,255,255,.03);
   color:rgba(255,255,255,.92);
   font:inherit;
   font-weight:800;
-  letter-spacing:.02em;
+  font-size:13px;
+  line-height:1.15;
+  letter-spacing:0;
+  white-space:normal;
+  overflow-wrap:anywhere;
+  text-align:center;
   cursor:pointer;
 }
 .collectiveMobileTab.active{
@@ -2612,6 +2599,10 @@ textarea{ resize:vertical; min-height:96px; }
   background:rgba(242,191,87,.12);
   color:#ffe4a5;
   box-shadow:0 0 0 1px rgba(242,191,87,.12) inset;
+}
+@media (max-width: 640px){
+  .collectiveMobileTabs{ gap:6px; }
+  .collectiveMobileTab{ padding:10px 6px; font-size:12px; }
 }
 @media (max-width: 1180px){
   .collectiveHeroGrid{ grid-template-columns:1fr; }
