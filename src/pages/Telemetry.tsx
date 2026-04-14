@@ -1562,25 +1562,34 @@ export default function Telemetry() {
             padding:10px 12px;
           }
 
-          .telemetryStats{
+                  .telemetryStats{
             grid-template-columns:repeat(2, minmax(0, 1fr));
-            gap:10px;
+            gap:8px;
           }
 
           .compactMetricCard{
-            padding:12px 14px;
-            min-height:96px;
+            padding:10px 12px;
+            min-height:auto;
+            height:auto;
+            display:grid;
+            align-content:start;
+            gap:4px;
           }
 
           .compactMetricCard .metricLabel{
             font-size:12px;
-            line-height:1.2;
+            line-height:1.15;
+            margin:0;
           }
 
           .compactMetricCard .metricValue{
-            margin-top:6px;
-            font-size:24px;
+            margin-top:0;
+            font-size:22px;
             line-height:1;
+          }
+
+                    .telemetryStats .metricCard{
+            min-height:auto;
           }
 
           .feedDetailsGrid{
