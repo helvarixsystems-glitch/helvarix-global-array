@@ -44,17 +44,22 @@ export function AppShell({ children }: { children: ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [email, setEmail] = useState<string | null>(null);
+
   const isAuthPage = location.pathname === "/auth";
+  const isProfilePage = location.pathname === "/profile";
   const meta = metaMap[location.pathname] ?? metaMap["/"];
 
   useEffect(() => {
     let mounted = true;
+
     supabase.auth.getSession().then(({ data }) => {
       if (mounted) setEmail(data.session?.user.email ?? null);
     });
+
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
       if (mounted) setEmail(session?.user.email ?? null);
     });
+
     return () => {
       mounted = false;
       sub.subscription.unsubscribe();
@@ -76,23 +81,25 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
 
           <div className="topbarActions">
-            {email ? (
-              <>
-                <div className="statusPill">
-                  <span className="statusDot" />
-                  <span>{email}</span>
-                </div>
-                {!isAuthPage && (
-                  <button className="ghostBtn compactBtn" type="button" onClick={handleSignOut}>
-                    Sign out
-                  </button>
-                )}
-              </>
-            ) : (
-              <Link to="/auth" className="ghostBtn compactBtn">
-                Sign in
-              </Link>
-            )}
+            {isProfilePage ? (
+              email ? (
+                <>
+                  <div className="statusPill">
+                    <span className="statusDot" />
+                    <span>{email}</span>
+                  </div>
+                  {!isAuthPage && (
+                    <button className="ghostBtn compactBtn" type="button" onClick={handleSignOut}>
+                      Sign out
+                    </button>
+                  )}
+                </>
+              ) : (
+                <Link to="/auth" className="ghostBtn compactBtn">
+                  Sign in
+                </Link>
+              )
+            ) : null}
           </div>
         </header>
 
