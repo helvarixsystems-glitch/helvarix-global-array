@@ -2150,9 +2150,7 @@ export default function Collective() {
               );
             })
           )}
-        </div>
-      </section>
-
+              </div>
       </section>
       ) : null}
 
