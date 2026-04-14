@@ -556,7 +556,7 @@ export default function Globe() {
         const nodeGlowGeometry = new THREE.SphereGeometry(0.046, 10, 10);
 
         nodes.forEach((node) => {
-          const pos = latLonToVector3(THREE, node.lat, node.lon, radius * 1.014);
+          const pos = latLonToVector3(THREE, node.lat, node.lon, radius * 1.0015);
 
           const glow = new THREE.Mesh(
             nodeGlowGeometry,
