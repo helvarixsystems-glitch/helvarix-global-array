@@ -174,7 +174,26 @@ function formatDate(value: string | null) {
 }
 
 function formatDateRange(startAt: string | null, endAt: string | null) {
-  return `${formatDate(startAt)} — ${formatDate(endAt)}`;
+  return `${formatDate(startAt)} — ${formatDate(endAt)}@media (max-width: 640px){
+  .collectivePage{ padding:16px 12px 96px; }
+  .collectiveHero{ padding:20px; }
+  .heroTitle{ font-size:28px; }
+  .collectiveLead{ margin-top:12px; line-height:1.6; }
+  .collectiveHeroMeta{ gap:8px; }
+  .goldBadge{ width:100%; justify-content:flex-start; padding:9px 12px; }
+  .collectiveStatusCard{ padding:18px; border-radius:20px; }
+  .collectiveStatusTop{ gap:12px; }
+  .collectivePrice{ font-size:28px; }
+  .sectionTitle{ font-size:22px; }
+  .campaignTitle{ font-size:18px; }
+  .campaignBoardCard{ padding:14px; }
+  .campaignBoardStats{ grid-template-columns:1fr; }
+  .campaignMiniStat{ padding:10px 11px; }
+  .campaignActionRow,.buttonRow{ flex-direction:column; align-items:stretch; }
+  .campaignActionRow > *, .buttonRow > *{ width:100%; }
+  .teamRosterRow,.messageCardTop{ flex-direction:column; align-items:flex-start; }
+}
+`;
 }
 
 function formatEndsIn(endAt: string | null) {
@@ -561,6 +580,7 @@ export default function Collective() {
   const [createDescription, setCreateDescription] = useState("");
   const [createMaxMembers, setCreateMaxMembers] = useState("5");
   const [createPrivate, setCreatePrivate] = useState(true);
+  const [mobileTab, setMobileTab] = useState<"toolbox" | "campaigns" | "teams">("toolbox");
 
   const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
@@ -1704,6 +1724,8 @@ export default function Collective() {
       })[0] ?? null;
   }, [campaignBoard]);
 
+  const isMobileCollective = device.isMobile;
+
   const premiumToolCards = [
     {
       title: "Priority campaign stack",
@@ -1883,6 +1905,36 @@ export default function Collective() {
       {error ? <div className="alert error">{error}</div> : null}
       {notice ? <div className="alert success">{notice}</div> : null}
 
+      {isMobileCollective ? (
+        <section className="panel collectiveMobileTabsPanel">
+          <div className="collectiveMobileTabs">
+            <button
+              type="button"
+              className={`collectiveMobileTab ${mobileTab === "toolbox" ? "active" : ""}`}
+              onClick={() => setMobileTab("toolbox")}
+            >
+              Toolbox
+            </button>
+            <button
+              type="button"
+              className={`collectiveMobileTab ${mobileTab === "campaigns" ? "active" : ""}`}
+              onClick={() => setMobileTab("campaigns")}
+            >
+              Campaigns
+            </button>
+            <button
+              type="button"
+              className={`collectiveMobileTab ${mobileTab === "teams" ? "active" : ""}`}
+              onClick={() => setMobileTab("teams")}
+            >
+              Teams
+            </button>
+          </div>
+        </section>
+      ) : null}
+
+      {(!isMobileCollective || mobileTab === "toolbox") ? (
+        <>
       <section className="collectiveMetricGrid">
         <div className="collectiveMetricCard">
           <div className="metricLabel">Observation index</div>
@@ -1924,8 +1976,10 @@ export default function Collective() {
           ))}
         </div>
       </section>
+        </>
+      ) : null}
 
-
+      {(!isMobileCollective || mobileTab === "campaigns") ? (
       <section className="panel">
         <div className="campaignSectionHeader">
           <div>
@@ -2099,6 +2153,10 @@ export default function Collective() {
         </div>
       </section>
 
+      </section>
+      ) : null}
+
+      {(!isMobileCollective || mobileTab === "teams") ? (
       <section className="panel">
         <div className="campaignSectionHeader">
           <div>
@@ -2402,6 +2460,7 @@ export default function Collective() {
           </>
         )}
       </section>
+      ) : null}
     </div>
   );
 }
@@ -2536,14 +2595,40 @@ textarea{ resize:vertical; min-height:96px; }
 .teamGrid,.ownerEditGrid{ display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:14px; }
 .ownerFullWidth{ grid-column:1 / -1; }
 .emptyState{ padding:18px; border-radius:16px; background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.06); color:rgba(255,255,255,.70); }
+.collectiveMobileTabsPanel{ display:none; }
+.collectiveMobileTabs{ display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:8px; }
+.collectiveMobileTab{
+  min-height:44px;
+  padding:11px 10px;
+  border-radius:14px;
+  border:1px solid rgba(255,255,255,.10);
+  background:rgba(255,255,255,.03);
+  color:rgba(255,255,255,.92);
+  font:inherit;
+  font-weight:800;
+  letter-spacing:.02em;
+  cursor:pointer;
+}
+.collectiveMobileTab.active{
+  border-color:rgba(242,191,87,.30);
+  background:rgba(242,191,87,.12);
+  color:#ffe4a5;
+  box-shadow:0 0 0 1px rgba(242,191,87,.12) inset;
+}
 @media (max-width: 1180px){
   .collectiveHeroGrid{ grid-template-columns:1fr; }
   .premiumToolGrid,.campaignBoardGrid,.teamOpsGrid,.teamModuleGrid{ grid-template-columns:repeat(2, minmax(0,1fr)); }
 }
 @media (max-width: 980px){
-  .collectiveHeroGrid,.collectiveMetricGrid,.campaignStatRow,.teamGrid,.ownerEditGrid,.collectiveToolsGrid,.campaignBoardGrid,.campaignBoardStats,.teamOpsGrid,.teamModuleGrid{ grid-template-columns:1fr; }
+  .collectiveHeroGrid,.campaignStatRow,.teamGrid,.ownerEditGrid,.collectiveToolsGrid,.campaignBoardGrid,.campaignBoardStats,.teamOpsGrid,.teamModuleGrid{ grid-template-columns:1fr; }
   .collectiveMiniRow{ grid-template-columns:1fr; }
   .collectiveMiniRow strong{ text-align:left; }
   select.campaignAssignSelect{ max-width:none; }
+  .collectiveMobileTabsPanel{ display:block; padding:14px; }
+  .collectiveMetricGrid{ grid-template-columns:repeat(2, minmax(0,1fr)); gap:10px; }
+  .collectiveMetricCard{ padding:14px; }
+  .collectiveMetricValue{ font-size:22px; }
+  .panel{ padding:18px; border-radius:20px; }
+  .campaignCard,.teamCard,.teamCreateCard,.collectiveToolCard{ padding:14px; border-radius:16px; }
 }
 `;
