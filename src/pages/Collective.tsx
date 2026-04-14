@@ -1813,7 +1813,7 @@ export default function Collective() {
         <style>{styles}</style>
         <div className="panel loadingPanel">
           <div className="sectionKicker">HELVARIX RESEARCH COLLECTIVE</div>
-          <h2 className="sectionTitle">Syncing operator layer</h2>
+          <h2 className="sectionTitle">Loading Collective</h2>
           <div className="stateText">Syncing membership, campaigns, teams, and observatory context.</div>
         </div>
       </div>
@@ -1829,11 +1829,9 @@ export default function Collective() {
           <div className="collectiveHeroGrid">
             <div>
               <div className="collectiveKicker">HELVARIX RESEARCH COLLECTIVE</div>
-              <h1 className="heroTitle">Subscriber campaigns, team ownership, and observatory support</h1>
+              <h1 className="heroTitle">Private campaigns, team coordination, and observatory tools</h1>
               <p className="collectiveLead">
-                Public campaigns remain the heartbeat of the Array: one daily, one weekly, and one global.
-                The Research Collective adds the private limited-entry campaign layer without flooding the page
-                with duplicate public listings.
+                Public campaigns remain available to all operators: daily, weekly, and global.
               </p>
 
               <div className="collectiveHeroMeta">
@@ -1990,8 +1988,7 @@ export default function Collective() {
             <div className="sectionKicker">COLLECTIVE TOOLS</div>
             <h2 className="sectionTitle">Subscriber toolbox</h2>
             <p className="sectionHint">
-              The Collective now sells a clearer premium workflow: private assignments, slot awareness, team deployment,
-              and richer target context alongside the public observing layer.
+              Subscriber tools for private campaigns, slot visibility, team coordination, and target context.
             </p>
           </div>
         </div>
@@ -2027,7 +2024,7 @@ export default function Collective() {
           {campaignBoard.length === 0 ? (
             <div className="campaignCard campaignBoardCard emptyCampaignCard">
               <div className="campaignTitle">No campaigns available</div>
-              <div className="campaignDesc">No active daily, weekly, global, or research campaigns were returned from the database.</div>
+              <div className="campaignDesc">No active campaigns are available right now.</div>
             </div>
           ) : (
             campaignBoard.map((campaign) => {
