@@ -7,16 +7,32 @@ async function getSignedInSession() {
     data: { session },
   } = await supabase.auth.getSession();
 
-  if (!session?.user || !session.access_token) {
-    throw new Error("You must be signed in before using billing.");
+  if (session?.user && session?.access_token) {
+    return session;
   }
 
-  return session;
+  const { data, error } = await supabase.auth.refreshSession();
+
+  if (error || !data?.session?.user || !data?.session?.access_token) {
+    throw new Error("Authentication not ready. Please refresh and try again.");
+  }
+
+  return data.session;
+}
+
+async function parseApiError(res: Response) {
+  const text = await res.text();
+  try {
+    const json = JSON.parse(text);
+    return json?.error || text || "Request failed.";
+  } catch {
+    return text || "Request failed.";
+  }
 }
 
 export async function startCheckout(priceId: string) {
   if (!hasStripeClientKey()) {
-    throw new Error("Stripe publishable key is missing. Set VITE_STRIPE_PK in Cloudflare Pages.");
+    throw new Error("Stripe publishable key is missing. Set VITE_STRIPE_PK or VITE_STRIPE_PUBLISHABLE_KEY in Cloudflare Pages.");
   }
 
   if (!priceId?.trim()) {
@@ -31,6 +47,7 @@ export async function startCheckout(priceId: string) {
       "Content-Type": "application/json",
       Authorization: `Bearer ${session.access_token}`,
     },
+    credentials: "same-origin",
     body: JSON.stringify({
       priceId: priceId.trim(),
       userId: session.user.id,
@@ -38,12 +55,11 @@ export async function startCheckout(priceId: string) {
     }),
   });
 
-  const data = await res.json().catch(() => null);
-
   if (!res.ok) {
-    throw new Error(data?.error || "Unable to start checkout.");
+    throw new Error(await parseApiError(res));
   }
 
+  const data = await res.json().catch(() => null);
   const sessionId = data?.sessionId as string | undefined;
   const url = data?.url as string | undefined;
 
@@ -72,17 +88,20 @@ export async function openCustomerPortal() {
       "Content-Type": "application/json",
       Authorization: `Bearer ${session.access_token}`,
     },
+    credentials: "same-origin",
     body: JSON.stringify({}),
   });
 
-  const data = await res.json().catch(() => null);
-
   if (!res.ok) {
-    throw new Error(data?.error || "Unable to open billing portal.");
+    throw new Error(await parseApiError(res));
   }
 
+  const data = await res.json().catch(() => null);
   const url = data?.url as string | undefined;
-  if (!url) throw new Error("Portal URL was not returned.");
+
+  if (!url) {
+    throw new Error("Portal URL was not returned.");
+  }
 
   window.location.href = url;
 }
