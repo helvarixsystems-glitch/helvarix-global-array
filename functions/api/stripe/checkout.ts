@@ -174,6 +174,9 @@ async function ensureStripeCustomer(
 export const onRequestPost: PagesFunction = async (context) => {
   try {
     const stripeSecretKey = String(context.env.STRIPE_SECRET_KEY || "").trim();
+    const defaultPriceId = String(
+      context.env.STRIPE_PRICE_ID || context.env.STRIPE_PRICE_MONTHLY || ""
+    ).trim();
     const appUrl = getAppUrl(context.env);
     const supabaseUrl = String(context.env.SUPABASE_URL || "").trim();
     const supabaseAnonKey = String(context.env.SUPABASE_ANON_KEY || "").trim();
@@ -196,7 +199,7 @@ export const onRequestPost: PagesFunction = async (context) => {
       email?: string;
     };
 
-    const priceId = String(body.priceId || "").trim();
+    const priceId = String(body.priceId || defaultPriceId || "").trim();
     if (!priceId) {
       return json({ error: "Missing priceId" }, 400);
     }
