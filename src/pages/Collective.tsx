@@ -1268,23 +1268,25 @@ export default function Collective() {
     }
   }
 
-  async function handleUpgrade() {
+    async function handleUpgrade() {
+    if (!sessionUser) {
+      setError("You must be signed in before starting checkout.");
+      return;
+    }
+
     setBusyCheckout(true);
     setError(null);
 
     try {
-      if (!sessionUser) {
-        throw new Error("You must be signed in before starting checkout.");
-      }
-
       const priceId =
         ((import.meta as any).env?.VITE_STRIPE_PRICE_MONTHLY as string | undefined)?.trim() ||
         ((import.meta as any).env?.VITE_STRIPE_PRICE_ID as string | undefined)?.trim() ||
+        ((import.meta as any).env?.STRIPE_PRICE_ID as string | undefined)?.trim() ||
         "";
 
       if (!priceId) {
         throw new Error(
-          "Missing Stripe client price ID. Set VITE_STRIPE_PRICE_MONTHLY or VITE_STRIPE_PRICE_ID in Cloudflare Pages."
+          "Missing Stripe client price ID. Set VITE_STRIPE_PRICE_MONTHLY, VITE_STRIPE_PRICE_ID, or STRIPE_PRICE_ID in Cloudflare Pages."
         );
       }
 
