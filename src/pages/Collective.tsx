@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { useDeviceProfile } from "../hooks/useDeviceProfile";
-import { openCustomerPortal } from "../lib/stripe";
+import { openCustomerPortal, startCheckout } from "../lib/stripe";
 type SessionUser = {
   id: string;
   email: string | null;
@@ -1273,30 +1273,22 @@ export default function Collective() {
     setError(null);
 
     try {
-      if (!sessionUser) throw new Error("You must be signed in before starting checkout.");
-
-      const res = await fetch("/api/create-checkout-session", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          userId: sessionUser.id,
-          email: sessionUser.email,
-        }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data?.error || "Unable to open checkout right now.");
+      if (!sessionUser) {
+        throw new Error("You must be signed in before starting checkout.");
       }
 
-      if (!data?.url) {
-        throw new Error("Checkout URL was not returned.");
+      const priceId =
+        ((import.meta as any).env?.VITE_STRIPE_PRICE_MONTHLY as string | undefined)?.trim() ||
+        ((import.meta as any).env?.VITE_STRIPE_PRICE_ID as string | undefined)?.trim() ||
+        "";
+
+      if (!priceId) {
+        throw new Error(
+          "Missing Stripe client price ID. Set VITE_STRIPE_PRICE_MONTHLY or VITE_STRIPE_PRICE_ID in Cloudflare Pages."
+        );
       }
 
-      window.location.href = data.url;
+      await startCheckout(priceId);
     } catch (err: any) {
       setError(err?.message ?? "Unable to start checkout.");
     } finally {
