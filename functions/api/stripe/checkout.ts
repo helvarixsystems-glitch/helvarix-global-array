@@ -235,6 +235,9 @@ export const onRequestPost: PagesFunction = async (context) => {
     form.set("cancel_url", `${appUrl}/collective?canceled=1`);
     form.set("client_reference_id", verifiedUser.id);
 
+    // Explicitly allow Stripe Checkout to present localized pricing where supported.
+    form.set("adaptive_pricing[enabled]", "true");
+
     form.set("line_items[0][price]", priceId);
     form.set("line_items[0][quantity]", "1");
 
