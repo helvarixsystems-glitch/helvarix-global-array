@@ -8,7 +8,7 @@ import { BottomNav } from "./BottomNav";
 const metaMap: Record<string, { title: string; subtitle: string }> = {
   "/": {
     title: "HELVARIX GLOBAL ARRAY",
-    subtitle: "Amateur astronomy collaboration, observation logging, and shared science.",
+    subtitle: "Astronomy collaboration, observation logging, and shared science.",
   },
   "/globe": {
     title: "NETWORK ARRAY",
